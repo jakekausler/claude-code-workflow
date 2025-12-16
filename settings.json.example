@@ -1,0 +1,27 @@
+{
+  // ============================================================================
+  // Claude Code Settings - Minimal Hook Configuration
+  // ============================================================================
+  // This example shows only the hook configuration needed for prompt enhancement.
+  // The UserPromptSubmit hook automatically injects your CLAUDE.md guidelines
+  // into every user prompt, ensuring consistent behavior across sessions.
+  //
+  // Copy this to ~/.claude/settings.json to enable prompt enhancement.
+  // ============================================================================
+
+  "hooks": {
+    // Runs when user submits a prompt
+    // Can be used to enhance or modify prompts before sending
+    "UserPromptSubmit": [
+      {
+        "matcher": "",  // Empty matcher applies to all prompts
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/claude_prompt_enhancer.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
