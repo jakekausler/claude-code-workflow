@@ -1,59 +1,24 @@
 ---
 name: next_task
-description: Find the next task to work on and display session context.
+description: Read the next task and begin working on it.
 ---
 
-# Next Task Command
+# Next Task - Epic/Stage/Phase Navigation
 
-Finds the next work item by scanning tracking documents.
-
-## Session Start Protocol
-
-Every session should begin with `/next_task` to:
-
-1. **Understand current state** - What's been done, what's in progress
-2. **Confirm context** - "We're working on [X] for [Y]"
-3. **State goal** - "This session's goal is to [specific outcome]"
-4. **Proceed or clarify** - Start work or ask questions
-
-## What This Command Does
-
-1. **Scans tracking documents** (epics/ directory) to find current work
-2. **Identifies the Epic and Stage** being worked on
-3. **Identifies the current phase** (Design, Build, Refinement, Finalize)
-4. **Returns specific instructions** for that phase
-
-Use the task-navigator subagent to perform the navigation:
-
-```
-Use the Task tool:
-- description: "Find next task"
-- prompt: "Scan tracking documents in epics/ directory to find the next work item.
-  Look for EPIC-XXX folders containing stage files (STAGE-XXX-YYY.md).
-  Find the first incomplete stage and return:
-  - Epic file path and name
-  - Stage file path and name
-  - Current phase
-  - Status
-  - Phase-specific instructions"
-- subagent_type: "task-navigator"
-```
-
-## Output Format
+Use the task-navigator subagent to find the next work. The subagent scans the epic/stage hierarchy and reports:
 
 ```
 ═══════════════════════════════════════════════════════════
 NEXT TASK
 ═══════════════════════════════════════════════════════════
-Epic:   [EPIC-XXX: Epic name]
-        epics/EPIC-XXX/EPIC-XXX.md
-Stage:  [STAGE-XXX-YYY: Stage name]
-        epics/EPIC-XXX/STAGE-XXX-YYY.md
+Epic:   EPIC-XXX [Name]
+Stage:  STAGE-XXX-YYY [Name]
 Phase:  [Design | Build | Refinement | Finalize]
-Status: [Current status from stage file]
 
 Instructions:
 [Phase-specific instructions]
+
+Seed data needed: [Yes - describe | No | Already agreed]
 
 When complete, run: /finish_phase
 ═══════════════════════════════════════════════════════════
@@ -63,47 +28,92 @@ When complete, run: /finish_phase
 
 ### Design Phase
 
-**Goal:** Present options, get user choice, document decisions
+**Goal**: Present options with mobile/desktop descriptions, get user choice, confirm seed data
 
-1. Read the task description
-2. Present 2-3 options/approaches
-3. User picks preferred approach
-4. Document the decision
-5. Run `/finish_phase`
+1. Read the stage file to understand what component/interaction this is
+2. Present **2-3 UI options** with explicit Desktop and Mobile descriptions:
+   ```
+   Option N: [Name]
+   - Desktop: [layout/behavior]
+   - Mobile: [layout/behavior]
+   ```
+3. Ask user to pick their preferred approach
+4. If this stage needs seed data, describe what will be added and ask for confirmation
+5. Check if stage has input forms → set `Has Input Forms: [x] Yes` flag
+6. Record decisions in stage tracking doc (via doc-updater subagent)
+7. Run `/finish_phase` when user has made their choice
 
 ### Build Phase
 
-**Goal:** Implement the chosen approach
+**Goal**: Implement the chosen approach
 
-1. Read design decisions
-2. Implement the feature
-3. Ensure it's working
-4. Document what was built
-5. Run `/finish_phase`
+1. Read the stage file for the user's design choice
+2. Implement the chosen UI + backend support
+3. Add agreed seed data (if any)
+4. Add placeholder stubs for related future features
+5. Ensure dev server shows working feature
+6. Update tracking doc (via doc-updater subagent)
+7. Run `/finish_phase` when feature is working
 
 ### Refinement Phase
 
-**Goal:** Iterate until user approves
+**Goal**: Dual sign-off — iterate until BOTH desktop and mobile are approved
 
-1. User tests the implementation
-2. Collect feedback
-3. Make changes based on feedback
-4. Repeat until approved
-5. Run `/finish_phase`
+1. Prompt user to test **Desktop view** on dev site
+2. Collect feedback, implement changes
+3. Repeat until user explicitly approves Desktop → mark `[x] Desktop Approved`
+4. Prompt user to test **Mobile view** on dev site
+5. Collect feedback, implement changes
+6. Repeat until user explicitly approves Mobile → mark `[x] Mobile Approved`
+7. **Important**: Any code change resets the other view's approval
+8. After both approved: prompt for regression checklist items
+9. Add items to `docs/REGRESSION-CHECKLIST.md` via doc-updater
+10. Mark `[x] Regression Items Added` in stage doc
+11. Run `/finish_phase` when all three checkboxes are complete
 
 ### Finalize Phase
 
-**Goal:** Review, test, document, commit
+**Goal**: Tests, review, docs, commit (ALL via subagents)
 
-1. Code review (use code-reviewer agent)
-2. Write tests (use typescript-tester agent)
-3. Update documentation (use doc-updater agent)
-4. Commit with clear message
-5. Run `/finish_phase`
+Execute these steps in order:
+
+1. **Code Review (pre-tests)**: Use code-reviewer subagent and address any concerns. If concerns are nitpicks, weigh whether these are worth addressing now. Otherwise address all substantive feedback.
+2. **Write Tests**: Use typescript-tester subagent to write unit, integration, e2e tests
+   - E2E tests must run at desktop + mobile viewports
+   - If stage has `Has Input Forms: [x] Yes`, also test mobileKeyboard viewport
+   - Use project's viewport definitions for consistency
+3. **Code Review (post-tests)**: Use code-reviewer subagent again. Address any new concerns in the same manner as before.
+4. **Update Documentation**: Use doc-updater subagent for:
+   - README links if needed
+   - Feature documentation
+   - Project guidelines if new patterns established
+5. **Commit**: Create detailed conventional commit message
+6. **CHANGELOG Entry**: Use doc-updater subagent to add entry with commit hash
+
+After all finalize tasks complete, run `/finish_phase`.
 
 ## Key Rules
 
-1. **Start every session with `/next_task`**
+1. **Start every session with `/next_task`** to understand current state
 2. **One phase per session** for full context
-3. **Update tracking docs** after each phase
-4. **Don't skip phases** - each serves a purpose
+3. **Update tracking docs via doc-updater subagent** - never edit directly
+4. **Prompt user before adding seed data**
+5. **Present 2-3 UI options in Design phase**
+6. **All Finalize phase tasks use subagents**
+
+## Session Start Protocol
+
+Every session MUST begin with:
+
+1. Run `/next_task` (this command)
+2. Confirm: "We're in [Phase] for [Stage] of [Epic]"
+3. State goal: "This session's goal is to [phase-specific goal]"
+4. Proceed or ask clarifying questions
+
+## Session End Protocol
+
+Before ending any session:
+
+1. Update tracking doc (via doc-updater subagent)
+2. State progress: "Completed [X], next session will [Y]"
+3. If phase complete: Run `/finish_phase`

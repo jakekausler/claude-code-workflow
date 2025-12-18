@@ -1,122 +1,105 @@
 ---
 name: finish_phase
-description: Mark current phase complete and advance to next phase.
+description: Mark current phase complete and advance to next phase/stage/epic.
 ---
 
-# Finish Phase Command
+# Finish Phase
 
 Marks the current phase as complete and advances to the next work item.
 
 ## What This Command Does
 
-1. **Validates phase completion** - Checks requirements are met
-2. **Updates tracking documents** - Marks phase complete
-3. **Advances to next phase** - Design → Build → Refinement → Finalize → Complete
-4. **Reports next steps** - What comes next
+1. **Updates stage tracking doc** (via doc-updater subagent):
+   - Marks current phase checkbox as complete
+   - Updates stage status field
+
+2. **Advances to next phase**:
+   - Design → Build
+   - Build → Refinement
+   - Refinement → Finalize
+   - Finalize → Stage Complete
+
+3. **If stage is complete**:
+   - Updates stage status to "Complete"
+   - Advances to next stage in the epic
+   - If this was the last stage, marks epic as complete
+
+4. **If Finalize phase just completed**:
+   - Adds CHANGELOG entry with timestamp and commit hash
+   - Format: `YYYY-MM-DD HH:MM [commit-hash] Epic/Stage: brief description`
 
 ## Usage
 
 Run this command when:
 
-- **Design Phase:** User has picked their preferred option and decisions are documented
-- **Build Phase:** Feature is implemented and working
-- **Refinement Phase:** User has explicitly approved the implementation
-- **Finalize Phase:** All finalize tasks are done (review, tests, docs, commit)
+- **Design Phase**: User has picked their preferred UI option and seed data is confirmed
+- **Build Phase**: Feature is working on dev site
+- **Refinement Phase**: User has explicitly approved the implementation
+- **Finalize Phase**: All finalize tasks are done (review, tests, docs, commit)
 
 ## Validation
 
-Before advancing, verify requirements are met:
+Before advancing, this command verifies:
 
-### Design Phase
+- **Design Phase**:
+  - UI choice is recorded with desktop + mobile descriptions
+  - Has Input Forms flag is set (Yes or left unchecked for No)
+  - Seed data is confirmed (or N/A)
 
-- [ ] Options were presented
-- [ ] User made a choice
-- [ ] Decision is documented
+- **Build Phase**:
+  - Components/endpoints are documented in tracking doc
 
-### Build Phase
+- **Refinement Phase** (Dual Sign-off Gate):
+  - `[x] Desktop Approved` — user explicitly approved desktop view
+  - `[x] Mobile Approved` — user explicitly approved mobile view
+  - `[x] Regression Items Added` — checklist updated in `docs/REGRESSION-CHECKLIST.md`
+  - **All three must be checked to advance**
 
-- [ ] Feature is implemented
-- [ ] It works as expected
-- [ ] Progress is documented
+- **Finalize Phase**:
+  - All checkboxes are complete
+  - E2E tests pass at all required viewports
+  - Commit hash is recorded
 
-### Refinement Phase
+## Approval Reset Detection
 
-- [ ] User has tested
-- [ ] User explicitly approved
-- [ ] Feedback is documented
+During Refinement, if code changes are made after an approval:
 
-### Finalize Phase
+1. Detect if change affects desktop/mobile rendering
+2. Reset the affected approval checkbox: `[x]` → `[ ]`
+3. Announce: "Change detected — [Desktop/Mobile] approval reset, re-test required"
 
-- [ ] Code review complete
-- [ ] Tests written and passing
-- [ ] Documentation updated
-- [ ] Changes committed
+**Reset triggers:**
 
-## Output Format
+- CSS/styling changes → reset both
+- Layout component changes → reset both
+- Mobile-specific logic → reset Mobile only
+- Desktop-specific logic → reset Desktop only
+- Backend-only changes → ask if re-test needed
+
+## Output
 
 ```
 ═══════════════════════════════════════════════════════════
 PHASE COMPLETE
 ═══════════════════════════════════════════════════════════
-Epic:      [EPIC-XXX: Epic name]
-           epics/EPIC-XXX/EPIC-XXX.md
-Stage:     [STAGE-XXX-YYY: Stage name]
-           epics/EPIC-XXX/STAGE-XXX-YYY.md
-Completed: [Phase]
-Next:      [Next Phase | Next Stage | All Complete]
+Completed: [Phase] for STAGE-XXX-YYY
+Next:      [Next Phase | Next Stage | Epic Complete]
 
-[If commit was made:]
-Commit: [hash] [message]
+[If CHANGELOG entry was added]:
+CHANGELOG: YYYY-MM-DD HH:MM [hash] Epic/Stage: description
 ═══════════════════════════════════════════════════════════
 ```
 
-## Phase Transitions
-
-```
-Design → Build
-  - User chose an approach
-  - Next: Implement the chosen design
-
-Build → Refinement
-  - Feature is working
-  - Next: User tests and provides feedback
-
-Refinement → Finalize
-  - User approved
-  - Next: Code review, tests, docs, commit
-
-Finalize → Complete
-  - All quality gates passed
-  - Next: Move to next task
-```
-
-## Implementation
-
-Use the doc-updater subagent to update the stage tracking file:
-
-```
-Use the Task tool:
-- description: "Update tracking - phase complete"
-- prompt: "Update the stage file at epics/EPIC-XXX/STAGE-XXX-YYY.md:
-  - Mark [Phase] phase as complete
-  - Update status to [Next Phase]
-  - Add timestamp
-  Preserve all existing content.
-  Return the Epic and Stage info in the output format."
-- subagent_type: "doc-updater"
-```
-
-## Session End Protocol
+## Next Steps
 
 After running `/finish_phase`:
 
-1. **State progress:** "Completed [X], next session will [Y]"
-2. **End session** if phase transition requires context reset
-3. **Run `/next_task`** in the next session to continue
+1. If advancing to a new phase: End current session
+2. Run `/next_task` in the next session to continue
+3. If epic is complete: Celebrate, then `/next_task` for next epic
 
 ## Important
 
-- **Don't skip validation** - Each phase has requirements
-- **Document before advancing** - Decisions, progress, feedback
-- **Commit working code** - Don't leave broken state
-- **One phase at a time** - Maintain focus and quality
+- This command uses doc-updater subagent for all file updates
+- Never manually edit tracking docs - always use this command
+- If validation fails, address the issues before running again
