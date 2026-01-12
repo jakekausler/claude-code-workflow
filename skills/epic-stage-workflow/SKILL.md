@@ -134,11 +134,13 @@ ERROR → DIAGNOSTIC AGENT → FIXER AGENT → RESOLUTION
 ```
 
 **NEVER:**
+
 - Skip diagnostic step for medium/high errors
 - Tell diagnostic agent to implement
 - Expect fixer to diagnose
 
 **ALWAYS:**
+
 - Route through appropriate diagnostic agent first
 - Get diagnostic instructions
 - Pass instructions to fixer for implementation
@@ -182,6 +184,20 @@ ERROR → DIAGNOSTIC AGENT → FIXER AGENT → RESOLUTION
    ELSE (obvious single solution OR trivial task):
      → Skip brainstormer, proceed with obvious approach
 
+   **⚠️ SELF-CHECK: Are you about to skip brainstormer?**
+
+   Read these thoughts. If you're thinking ANY of them, you're rationalizing:
+
+   | Thought | Why You're Wrong | Correct Action |
+   |---------|------------------|----------------|
+   | "I already have context from Explore" | Context gathering ≠ architecture brainstorming | Use brainstormer anyway |
+   | "I can present options myself" | Main agent = coordinator only, not architect | Use brainstormer (Opus) |
+   | "Faster to skip delegation" | Speed ≠ excuse to violate coordination boundaries | Use brainstormer anyway |
+   | "This seems straightforward" | Your gut feeling is unreliable under time pressure | Use brainstormer when unsure |
+   | "User wants it fast" | User wants it RIGHT, not fast-but-wrong | Use brainstormer anyway |
+
+   **When in doubt, use brainstormer.** Opus is specialized for architecture options. You (Sonnet) coordinate, don't architect.
+
 4. User selects approach (or confirms obvious one)
 5. Delegate to doc-updater (Haiku) to update tracking documents:
    - Record selected approach in STAGE-XXX-YYY.md
@@ -189,11 +205,21 @@ ERROR → DIAGNOSTIC AGENT → FIXER AGENT → RESOLUTION
    - Update epic progress in EPIC-XXX.md if needed
 ```
 
-**Skip brainstormer when:**
+**Skip brainstormer ONLY when ALL of these are true:**
 
-- Task is trivial (config change, typo fix)
-- Obvious single solution exists
-- User explicitly specified approach
+- [ ] Task is trivial (typo fix, config tweak, obvious bug fix with known solution)
+- [ ] Single obvious implementation exists
+- [ ] No architectural decisions needed
+- [ ] No UI/UX choices to make
+- [ ] User explicitly specified the complete approach
+
+**Use brainstormer when ANY of these apply:**
+
+- [ ] Multiple UI patterns could work
+- [ ] Integration between systems (GraphQL, WebSocket, state management)
+- [ ] User-facing feature with UX implications
+- [ ] Architectural decision needed
+- [ ] You're unsure whether to use brainstormer (meta-uncertainty = use it)
 
 ### Build Phase
 
@@ -420,6 +446,7 @@ Phase auto-completes when all steps done.
 ```
 
 **Key Points:**
+
 - Trivial/Low: Direct to fixer
 - Medium/High: Through diagnostic agent first
 - All paths converge at fixer for implementation
@@ -508,11 +535,13 @@ Main → fixer: "Implement fix: Add import statement at line 3 as specified."
 ### ❌ Calling Fixer Directly for Medium/High Errors
 
 **Wrong:**
+
 ```
 Medium error → fixer agent
 ```
 
 **Right:**
+
 ```
 Medium error → debugger-lite → fixer agent
 ```
@@ -520,11 +549,13 @@ Medium error → debugger-lite → fixer agent
 ### ❌ Telling Debugger to Implement
 
 **Wrong:**
+
 ```
 debugger-lite: "Diagnose and fix this error"
 ```
 
 **Right:**
+
 ```
 debugger-lite: "Diagnose and provide fix instructions"
 fixer: "Implement these instructions: [...]"
@@ -533,6 +564,7 @@ fixer: "Implement these instructions: [...]"
 ### ❌ Repeating Same Agent Without Strategy Change
 
 **Wrong:**
+
 ```
 fixer → fails
 fixer → fails
@@ -540,6 +572,7 @@ fixer → fails
 ```
 
 **Right:**
+
 ```
 fixer → fails
 debugger-lite → diagnose why it failed
@@ -698,12 +731,13 @@ Each epic has its own regression file: `epics/EPIC-XXX/regression.md`
 
 ## Common Rationalizations (Don't Fall For These)
 
-| Excuse                                  | Reality                                          | Correct Action                                       |
-| --------------------------------------- | ------------------------------------------------ | ---------------------------------------------------- |
-| "This is simple, skip Design"           | Simple tasks become complex; Design catches this | Present 2-3 options even for "simple" stages         |
-| "User wants to skip formality"          | Explicit skips must be documented                | Document in stage: "Skipped by user [reason] [date]" |
-| "Just want to see it working"           | Build already provides working implementation    | Refinement is for feedback, not skipping tests       |
-| "Documentation overhead isn't worth it" | Tracking docs enable session independence        | Update docs via doc-updater after every phase        |
+| Excuse                                     | Reality                                            | Correct Action                                       |
+| ------------------------------------------ | -------------------------------------------------- | ---------------------------------------------------- |
+| "This is simple, skip Design"              | Simple tasks become complex; Design catches this   | Present 2-3 options even for "simple" stages         |
+| "User wants to skip formality"             | Explicit skips must be documented                  | Document in stage: "Skipped by user [reason] [date]" |
+| "Just want to see it working"              | Build already provides working implementation      | Refinement is for feedback, not skipping tests       |
+| "Documentation overhead isn't worth it"    | Tracking docs enable session independence          | Update docs via doc-updater after every phase        |
+| "I already explored, can generate options" | Coordination ≠ architecture; use specialized agent | Delegate to brainstormer (Opus) for options          |
 
 ---
 
