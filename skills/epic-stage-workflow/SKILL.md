@@ -111,6 +111,40 @@ When everything works perfectly, agents often think "there's nothing to explain.
 
 ---
 
+## Agent Role Boundaries (CRITICAL)
+
+### Specialized Agents Are NOT General-Purpose
+
+Each specialized agent does EXACTLY ONE THING:
+
+| Agent         | Does                                               | Does NOT        |
+| ------------- | -------------------------------------------------- | --------------- |
+| debugger-lite | Diagnose medium errors → provide fix instructions  | Implement fixes |
+| debugger      | Diagnose complex errors → provide fix instructions | Implement fixes |
+| fixer         | Implement provided instructions                    | Diagnose issues |
+
+### The Pipeline Model
+
+Errors are resolved through a PIPELINE, not by choosing a single agent:
+
+```
+ERROR → DIAGNOSTIC AGENT → FIXER AGENT → RESOLUTION
+        [analyzes]         [implements]
+        [produces plan]    [executes plan]
+```
+
+**NEVER:**
+- Skip diagnostic step for medium/high errors
+- Tell diagnostic agent to implement
+- Expect fixer to diagnose
+
+**ALWAYS:**
+- Route through appropriate diagnostic agent first
+- Get diagnostic instructions
+- Pass instructions to fixer for implementation
+
+---
+
 ## Agent Roster Quick Reference
 
 | Agent           | Model  | Purpose                           |
@@ -346,6 +380,50 @@ Phase auto-completes when all steps done.
 
 ## Error Handling Flow
 
+## Error Resolution Decision Tree
+
+```
+                    ┌─────────────┐
+                    │ Error Occurs│
+                    └──────┬──────┘
+                           │
+                    ┌──────▼──────┐
+                    │   Severity?  │
+                    └──────┬──────┘
+                           │
+        ┌──────────────────┼──────────────────┐
+        │                  │                  │
+  ┌─────▼─────┐  ┌─────────▼─────────┐  ┌────▼─────┐
+  │ Trivial   │  │     Medium        │  │   High   │
+  │  Low      │  │                   │  │          │
+  └─────┬─────┘  └─────────┬─────────┘  └────┬─────┘
+        │                  │                  │
+        │         ┌────────▼────────┐  ┌──────▼──────┐
+        │         │  debugger-lite  │  │  debugger   │
+        │         │    (Sonnet)     │  │   (Opus)    │
+        │         └────────┬────────┘  └──────┬──────┘
+        │                  │                  │
+        │         ┌────────▼──────────────────┘
+        │         │   Get Instructions        │
+        │         └────────┬──────────────────┘
+        │                  │
+        └──────────────────┼────────────────────┐
+                           │                    │
+                    ┌──────▼──────┐             │
+                    │    fixer    │◄────────────┘
+                    │   (Haiku)   │
+                    └──────┬──────┘
+                           │
+                    ┌──────▼──────┐
+                    │  Resolved   │
+                    └─────────────┘
+```
+
+**Key Points:**
+- Trivial/Low: Direct to fixer
+- Medium/High: Through diagnostic agent first
+- All paths converge at fixer for implementation
+
 When tests fail or errors occur, route by severity:
 
 ```
@@ -369,12 +447,111 @@ When tests fail or errors occur, route by severity:
                      fixer (Haiku)
 ```
 
+### Error Severity Routing
+
+| Severity | First Agent            | Purpose           | Next Agent    | Purpose      |
+| -------- | ---------------------- | ----------------- | ------------- | ------------ |
+| Trivial  | fixer (Haiku)          | Direct fix        | -             | -            |
+| Low      | fixer (Haiku)          | Direct fix        | -             | -            |
+| Medium   | debugger-lite (Sonnet) | Diagnose + plan   | fixer (Haiku) | Execute plan |
+| High     | debugger (Opus)        | Complex diagnosis | fixer (Haiku) | Execute plan |
+
+**CRITICAL:**
+
+- Medium/High errors ALWAYS involve TWO agents in sequence
+- First agent provides instructions
+- Second agent implements instructions
+- NEVER tell first agent to implement
+- NEVER expect second agent to diagnose
+
 **Retry policy:**
 
 - scribe/fixer gets ONE retry with error output
 - If still failing → escalate to debugger-lite or debugger
 - After debugger → fixer implements
 - If STILL failing → surface to user
+
+---
+
+## Calling Debugger Agents (debugger-lite / debugger)
+
+### Correct Instructions Format
+
+When calling debugger-lite or debugger:
+
+✅ **CORRECT:**
+"Diagnose the root cause of [error]. Provide specific fix instructions that fixer agent can implement."
+
+❌ **INCORRECT:**
+"Diagnose and fix [error]"
+"Fix this error"
+"Resolve this issue"
+
+### After Receiving Diagnostic
+
+1. Review the diagnostic agent's instructions
+2. Call fixer agent with those instructions:
+   "Implement the following fix: [diagnostic agent's instructions]"
+
+### Example Flow
+
+```
+Main → debugger-lite: "Diagnose ESLint error in tool-registry. Provide fix instructions."
+debugger-lite → Main: "Error caused by missing import. Fix: Add import statement at line 3."
+Main → fixer: "Implement fix: Add import statement at line 3 as specified."
+```
+
+---
+
+## Common Mistakes (AVOID THESE)
+
+### ❌ Calling Fixer Directly for Medium/High Errors
+
+**Wrong:**
+```
+Medium error → fixer agent
+```
+
+**Right:**
+```
+Medium error → debugger-lite → fixer agent
+```
+
+### ❌ Telling Debugger to Implement
+
+**Wrong:**
+```
+debugger-lite: "Diagnose and fix this error"
+```
+
+**Right:**
+```
+debugger-lite: "Diagnose and provide fix instructions"
+fixer: "Implement these instructions: [...]"
+```
+
+### ❌ Repeating Same Agent Without Strategy Change
+
+**Wrong:**
+```
+fixer → fails
+fixer → fails
+fixer → fails
+```
+
+**Right:**
+```
+fixer → fails
+debugger-lite → diagnose why it failed
+fixer → implement diagnostic fix
+```
+
+### Why These Are Wrong
+
+1. **Skip diagnosis**: Leads to repeated failures
+2. **Mixed concerns**: Agents optimized for specific roles
+3. **Cost inefficiency**: Wrong agent for the task
+4. **Violated pipeline**: Each error severity has a defined flow
 
 ---
 
