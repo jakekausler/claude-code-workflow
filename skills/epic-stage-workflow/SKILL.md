@@ -149,7 +149,10 @@ When everything works perfectly, agents often think "there's nothing to explain.
      → Skip brainstormer, proceed with obvious approach
 
 4. User selects approach (or confirms obvious one)
-5. Delegate to doc-updater (Haiku) to record decision in stage file
+5. Delegate to doc-updater (Haiku) to update tracking documents:
+   - Record selected approach in STAGE-XXX-YYY.md
+   - Mark Design phase complete in STAGE-XXX-YYY.md
+   - Update epic progress in EPIC-XXX.md if needed
 ```
 
 **Skip brainstormer when:**
@@ -205,7 +208,9 @@ Use planner (Opus) when ANY of these apply:
 
 8. [LOOP steps 2-7 until green]
 
-9. Delegate to doc-updater (Haiku) to update stage status
+9. Delegate to doc-updater (Haiku) to update tracking documents:
+   - Mark Build phase complete in STAGE-XXX-YYY.md
+   - Update epic progress in EPIC-XXX.md if needed
 ```
 
 **Skip planner when:**
@@ -274,7 +279,10 @@ if (ANY_code_changed_during_refinement) {
 7. [IF issues] → Delegate to debugger-lite/debugger → Delegate to fixer → Delegate to verifier
 8. [LOOP until Mobile approved]
 
-9. Delegate to doc-updater (Haiku) to update epic's epics/EPIC-XXX/regression.md
+9. Delegate to doc-updater (Haiku) to update tracking documents:
+   - Mark Refinement phase complete in STAGE-XXX-YYY.md
+   - Update epic progress in EPIC-XXX.md if needed
+   - Add regression items to epic's epics/EPIC-XXX/regression.md
 ```
 
 **For Backend-Only Changes:**
@@ -283,7 +291,10 @@ if (ANY_code_changed_during_refinement) {
 1. Delegate to e2e-tester (Sonnet) to design and run API/integration tests
 2. [IF issues found] → Delegate to debugger-lite/debugger → Delegate to fixer → Delegate to verifier
 3. [LOOP until e2e-tester passes]
-4. Delegate to doc-updater (Haiku) to update epic's epics/EPIC-XXX/regression.md
+4. Delegate to doc-updater (Haiku) to update tracking documents:
+   - Mark Refinement phase complete in STAGE-XXX-YYY.md
+   - Update epic progress in EPIC-XXX.md if needed
+   - Add regression items to epic's epics/EPIC-XXX/regression.md
 ```
 
 **Determine frontend vs backend:**
@@ -323,6 +334,10 @@ if (ANY_code_changed_during_refinement) {
 7. Delegate to doc-updater (Haiku) to write to changelog/<date>.changelog.md
 8. Main agent creates commit (include commit hash)
 9. Delegate to doc-updater (Haiku) to add commit hash to changelog entry
+10. Delegate to doc-updater (Haiku) to update tracking documents:
+    - Mark Finalize phase complete in STAGE-XXX-YYY.md
+    - Update stage status to "Done" in STAGE-XXX-YYY.md
+    - Update epic progress in EPIC-XXX.md (stage now complete)
 
 Phase auto-completes when all steps done.
 ```
@@ -464,7 +479,7 @@ Each epic has its own regression file: `epics/EPIC-XXX/regression.md`
 - [ ] IF multiple approaches: brainstormer presented 2-3 options, user selected one
 - [ ] IF obvious solution: Confirmed approach with user
 - [ ] Seed data requirements confirmed (if applicable)
-- [ ] Decisions recorded in stage doc via doc-updater
+- [ ] Tracking documents updated via doc-updater: - Selected approach recorded in stage file - Design phase marked complete - Epic progress updated if needed
 
 ### Build Phase
 
@@ -474,19 +489,20 @@ Each epic has its own regression file: `epics/EPIC-XXX/regression.md`
 - [ ] Placeholder stubs added for related future features
 - [ ] Dev server verified working
 - [ ] Verification passed (verifier + tester in parallel)
+- [ ] Tracking documents updated via doc-updater: - Build phase marked complete in stage file - Epic progress updated if needed
 
 ### Refinement Phase (Frontend)
 
 - [ ] Desktop tested and approved by user
 - [ ] Mobile tested and approved by user
 - [ ] **Remember**: Code changes reset OTHER viewport's approval
-- [ ] Regression items added to epic's regression.md
+- [ ] Tracking documents updated via doc-updater: - Refinement phase marked complete in stage file - Epic progress updated if needed - Regression items added to epic's regression.md
 
 ### Refinement Phase (Backend-Only)
 
 - [ ] e2e-tester designed and ran API/integration tests
 - [ ] All scenarios passed (or issues fixed via debugger → fixer)
-- [ ] Regression items added to epic's regression.md
+- [ ] Tracking documents updated via doc-updater: - Refinement phase marked complete in stage file - Epic progress updated if needed - Regression items added to epic's regression.md
 
 ### Finalize Phase
 
@@ -499,6 +515,7 @@ Each epic has its own regression file: `epics/EPIC-XXX/regression.md`
 - [ ] Changelog entry added via doc-updater
 - [ ] Commit created with hash
 - [ ] Commit hash added to changelog entry
+- [ ] Tracking documents updated via doc-updater: - Finalize phase marked complete in stage file - Stage status set to "Done" - Epic progress updated (stage complete)
 
 ---
 
