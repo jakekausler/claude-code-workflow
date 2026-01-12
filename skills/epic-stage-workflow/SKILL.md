@@ -109,6 +109,34 @@ When everything works perfectly, agents often think "there's nothing to explain.
 
 "Context even for simple operations" means ESPECIALLY for simple operations - those are the ones agents skip.
 
+### After Fixer Returns
+
+**Mandatory flow**:
+
+1. **Report what fixer changed**:
+   - File paths modified
+   - Lines changed
+   - Summary of edits applied
+
+2. **Immediately verify the fix**:
+   - Call verifier (for build/type-check/lint)
+   - Call tester (for test failures)
+   - **NEVER assume fix worked without verification**
+
+3. **Handle verification result**:
+   - ✅ Success → Continue with next task
+   - ❌ Failure → Escalate to debugger (NOT back to fixer)
+
+4. **Document the cycle**:
+   - Note: "Fixer applied changes, verifier confirmed fix"
+   - OR: "Fixer applied changes, still failing, escalating to debugger"
+
+**Never**:
+
+- Skip the verification step
+- Call fixer again without new debugger diagnosis
+- Assume fixer's changes worked based on its report
+
 ---
 
 ## Agent Role Boundaries (CRITICAL)
@@ -170,7 +198,264 @@ ERROR → DIAGNOSTIC AGENT → FIXER AGENT → RESOLUTION
 
 ---
 
+## Fixer Agent Constraints (CRITICAL)
+
+**Fixer's ONLY job: Apply explicit line-by-line instructions**
+
+### What Fixer MUST NOT Do
+
+- ❌ Read files to "understand context" (debugger provides context)
+- ❌ Search for patterns using Grep/Glob (that's exploration)
+- ❌ Re-read files after editing to "verify" (trust Edit tool worked)
+- ❌ Run type-check, test, or build commands (verifier/tester's job)
+- ❌ Make multiple fix attempts (return after first attempt)
+- ❌ Diagnose why something failed (debugger's job)
+- ❌ Make design decisions about HOW to fix (coordinator's job)
+- ❌ Iterate based on verification results (coordinator escalates)
+
+### What Fixer MUST Do
+
+- ✅ Read ONLY files being edited (for Edit tool preparation)
+- ✅ Apply EXACTLY the changes specified
+- ✅ Return immediately after applying changes
+- ✅ Report what was changed (files, line numbers)
+
+### Retry Policy
+
+**Fixer gets ONE attempt per instruction set**
+
+```
+Error occurs → debugger diagnoses → fixer applies fix → return
+                                                          │
+                                                          ▼
+                                              verifier checks result
+                                                          │
+                                    ┌─────────────────────┼─────────────────────┐
+                                    │                                           │
+                              ✅ Fixed                                    ❌ Still failing
+                                    │                                           │
+                                    ▼                                           ▼
+                              Continue                        Escalate back to debugger
+                                                              (DO NOT call fixer again)
+```
+
+- If Edit fails → return error to main agent immediately
+- Main agent escalates to debugger for new diagnosis
+- **NO internal retry loops in fixer**
+
+### Why This Matters
+
+**Without constraints**: Fixer becomes a junior developer (8-12 tool calls)
+
+- Investigates files (4-5 calls)
+- Decides how to fix (design work)
+- Verifies and iterates (feedback loop)
+
+**With constraints**: Fixer is a code editor (2-3 tool calls)
+
+- Reads file to edit (1 call)
+- Applies exact changes (1-2 calls)
+- Returns immediately
+
+**Cost difference**: 75% reduction in tool calls when instructions are explicit.
+
+### Enforcement
+
+**If fixer violates these constraints**, the main agent must:
+
+1. **Stop the fixer immediately** (don't wait for completion)
+2. **Document the violation** (what fixer did vs. what was instructed)
+3. **Revise instructions** to be more explicit
+4. **Call fixer again** with corrected instructions
+
+**Fixer itself must check**:
+
+- Before reading a file: "Am I editing this file?" (No → STOP, report back)
+- Before running a command: "Am I a verifier/tester?" (No → STOP, report back)
+- Before searching for patterns: "Were these patterns in my instructions?" (No → STOP, report back)
+
+**Self-check template for fixer**:
+
+```
+I received instructions to edit <file>.
+I am about to <action>.
+Is this action "apply the exact edit specified"? [Yes/No]
+If No → STOP and report: "Instructions unclear, need explicit line-by-line changes"
+```
+
+### Red Flags for Fixer (Signs You're Exceeding Your Role)
+
+**If fixer is thinking ANY of these thoughts, STOP immediately**:
+
+| Thought                                                     | What's Wrong                    | What To Do                                           |
+| ----------------------------------------------------------- | ------------------------------- | ---------------------------------------------------- |
+| "Let me read this related file to understand the pattern"   | That's exploration              | STOP - Report: "Need context about pattern"          |
+| "Let me search for similar code"                            | That's research                 | STOP - Report: "Need example of correct pattern"     |
+| "Let me run type-check to see if this worked"               | That's verification             | STOP - Return, let main agent verify                 |
+| "This error is still here, let me try a different approach" | That's iteration                | STOP - Return, let main agent escalate               |
+| "I need to understand what this function does"              | That's analysis                 | STOP - Report: "Need explicit change instructions"   |
+| "The instructions say 'fix' but not how"                    | That's a goal, not instructions | STOP - Report: "Need line-by-line edit instructions" |
+
+**Remember**: You are a code editor, not a developer. Apply edits, don't solve problems.
+
+---
+
+## Instructions for Fixer Must Be Explicit
+
+**The main agent is responsible for instruction quality.**
+
+### ❌ WRONG - Vague Instructions (Goal-Based)
+
+```
+Fix the TypeScript errors in useValidation.ts:
+- Line 15: Property 'data' does not exist on type '{}'
+- Line 20: Cannot find module 'validation-utils'
+```
+
+**Why wrong**: This gives fixer a GOAL, not INSTRUCTIONS. Fixer will investigate, explore, and decide how to fix.
+
+### ✅ CORRECT - Explicit Instructions (Edit-Based)
+
+```
+Edit packages/frontend/src/hooks/useValidation.ts:
+
+Line 15: Change from:
+  const result = response;
+To:
+  const result = response.data as ValidationResult;
+
+Line 20: Change from:
+  import { validate } from 'validation-utils';
+To:
+  import { validate } from '@campaign/shared/utils/validation';
+```
+
+**Why correct**: Fixer knows EXACTLY what to change. No investigation, no decisions, just apply edits.
+
+### How to Write Good Instructions
+
+**Pattern**: `Edit <file>: Line <N>: Change from <old> to <new>`
+
+**Include**:
+
+1. **File path**: Full path from project root
+2. **Line number**: Exact line to edit
+3. **Old text**: What's currently there (for Edit tool matching)
+4. **New text**: What it should become
+
+**For multi-line changes**: Provide code blocks showing before/after
+
+### When Instructions Are Unclear
+
+**Fixer should return**: "Instructions unclear - need specific line numbers and exact text to change"
+
+**Main agent should**: Escalate to debugger for more detailed diagnosis, then call fixer with explicit instructions.
+
+### Self-Check for Main Agent
+
+Before calling fixer, ask:
+
+- [ ] Did I provide specific file paths?
+- [ ] Did I provide exact line numbers?
+- [ ] Did I provide old text → new text for each change?
+- [ ] Can fixer apply these changes WITHOUT reading other files?
+- [ ] Can fixer apply these changes WITHOUT making decisions?
+
+If ANY answer is "no" → instructions are too vague, refine them first.
+
+### Common Main Agent Rationalizations (STOP if you're thinking these)
+
+When preparing fixer instructions, watch for these thoughts:
+
+| Thought                                         | Why You're Wrong                          | Correct Action                                      |
+| ----------------------------------------------- | ----------------------------------------- | --------------------------------------------------- |
+| "Fixer can figure out the details"              | Fixer will explore and waste tokens       | Read files first, provide exact changes             |
+| "The error message is clear enough"             | Error messages don't specify HOW to fix   | Diagnose with debugger, then give explicit edits    |
+| "Fixer is smart, just describe the goal"        | Goal-based = fixer becomes problem-solver | Provide edit-based instructions (line X: old → new) |
+| "Let fixer verify its own work"                 | Fixer will run type-check and iterate     | Return immediately, main agent verifies             |
+| "Fixer can read the file to understand context" | Reading = investigation = wrong role      | Main agent provides file content in instructions    |
+| "It's faster to let fixer handle it"            | Vague instructions = 8-12 tool calls      | Explicit instructions = 2-3 tool calls (faster!)    |
+
+**If you're thinking ANY of these** → your instructions are too vague. Stop and refine them first.
+
+### Red Flags - STOP Before Calling Fixer
+
+Before calling fixer, check for these red flags in your instructions:
+
+**🚩 Red Flag 1**: Instructions use words like "fix", "resolve", "handle"
+
+- ❌ "Fix the TypeScript errors"
+- ✅ "Change line 15 from X to Y"
+
+**🚩 Red Flag 2**: No specific line numbers provided
+
+- ❌ "Update the import statement"
+- ✅ "Line 20: Change import from 'A' to 'B'"
+
+**🚩 Red Flag 3**: No old text → new text provided
+
+- ❌ "Add proper type annotation"
+- ✅ "Change `const x` to `const x: string`"
+
+**🚩 Red Flag 4**: File content not included in instructions
+
+- ❌ "Edit useValidation.ts to fix data property"
+- ✅ "Edit useValidation.ts - current content: [code block] - change line 15..."
+
+**🚩 Red Flag 5**: Instructions mention "investigate", "check", or "verify"
+
+- ❌ "Check if the import path is correct"
+- ✅ "Change import to '../utils/validation' (confirmed correct path)"
+
+**If ANY red flag is present** → instructions are goal-based, not edit-based. Refine before calling fixer.
+
+---
+
 ## Phase-Specific Behavior
+
+### Spec Handoff Protocol (CRITICAL)
+
+**Problem:** Planner output doesn't automatically transfer to implementer subagents. Main agent context is NOT inherited by subagents.
+
+**Required workflow:**
+
+1. **Planner/planner-lite agents MUST:**
+   - Save spec to `/tmp/spec-YYYY-MM-DD-HH-MM-SS.md` (timestamp format)
+   - Include "Spec saved to: [filepath]" at END of response
+   - Example: "Spec saved to: /tmp/spec-2026-01-12-15-30-45.md"
+
+2. **Main agent MUST:**
+   - Extract spec file path from planner response
+   - Pass file path explicitly to implementer agents
+   - NEVER say "use the spec above" or "from planner-lite above"
+   - Template: "Read and implement the spec from: /tmp/spec-2026-01-12-15-30-45.md"
+
+3. **Implementer agents (scribe/fixer) MUST:**
+   - Read spec file FIRST before any implementation
+   - Confirm spec contents in response
+   - Example: "Read spec from [filepath]. Spec defines [summary]. Implementing now..."
+
+**Common mistake to avoid:**
+
+❌ WRONG:
+
+```
+Main → Planner: "Create spec"
+Planner → Main: [500 lines of spec in response]
+Main → Scribe: "Implement using spec above"
+Scribe → [Can't see spec, invents own design]
+```
+
+✅ CORRECT:
+
+```
+Main → Planner: "Create spec and save to /tmp/spec-*.md"
+Planner → Main: [Spec saved to /tmp/spec-2026-01-12-15-30-45.md]
+Main → Scribe: "Read and implement: /tmp/spec-2026-01-12-15-30-45.md"
+Scribe → [Reads file, implements correctly]
+```
+
+**Why this matters:** Without file handoff, implementers can't see planner output and will invent their own design, wasting 30+ minutes fixing misalignment.
 
 ### Design Phase
 
@@ -227,10 +512,12 @@ ERROR → DIAGNOSTIC AGENT → FIXER AGENT → RESOLUTION
 1. [CONDITIONAL: Planning]
    IF complex multi-file feature OR architectural change:
      → Delegate to planner (Opus) for detailed implementation spec
+     → Planner MUST save spec to /tmp/spec-YYYY-MM-DD-HH-MM-SS.md
    ELSE IF simple single-file OR straightforward change:
      → Delegate to planner-lite (Sonnet) for simple spec
+     → Planner-lite MUST save spec to /tmp/spec-YYYY-MM-DD-HH-MM-SS.md
    ELSE (trivial change):
-     → Skip planner, main agent instructs scribe directly
+     → Skip planner, main agent instructs scribe directly (no spec file needed)
 
 **When to use planner (Opus) - DO NOT under-escalate:**
 
@@ -253,7 +540,8 @@ Use planner (Opus) when ANY of these apply:
 **Example of Sonnet-level simplicity:**
 - "Add loading spinner to existing button" is 1-2 files with no integration
 
-2. Delegate to scribe (Haiku) to write code from spec
+2. Delegate to scribe (Haiku) to write code from spec file
+   → Pass spec file path explicitly: "Read and implement: /tmp/spec-YYYY-MM-DD-HH-MM-SS.md"
 
 3. Add seed data if agreed in Design phase
 
@@ -491,11 +779,33 @@ When tests fail or errors occur, route by severity:
 - NEVER tell first agent to implement
 - NEVER expect second agent to diagnose
 
-**Retry policy:**
+### Fixer Retry Policy (ONE ATTEMPT ONLY)
 
-- scribe/fixer gets ONE retry with error output
+**Critical rule**: Fixer gets exactly ONE attempt per instruction set.
+
+**Flow**:
+
+```
+1. Main agent calls fixer with explicit instructions
+2. Fixer applies changes and returns
+3. Main agent calls verifier/tester to check result
+4. If still failing → main agent escalates to debugger for NEW diagnosis
+5. Debugger provides NEW instructions → back to step 1
+```
+
+**What NOT to do**:
+
+- ❌ Call fixer multiple times with same instructions
+- ❌ Call fixer with "try again" or "fix it differently"
+- ❌ Let fixer iterate internally on failures
+
+**Why this matters**: Prevents wasted tokens on repeated failed attempts. Forces proper diagnosis before each fix attempt.
+
+**Legacy retry policy (for scribe only)**:
+
+- scribe gets ONE retry with error output
 - If still failing → escalate to debugger-lite or debugger
-- After debugger → fixer implements
+- After debugger → fixer implements (not scribe)
 - If STILL failing → surface to user
 
 ---
