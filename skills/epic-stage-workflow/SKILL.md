@@ -487,7 +487,11 @@ Scribe → [Reads file, implements correctly]
 5. Delegate to doc-updater (Haiku) to update tracking documents:
    - Record selected approach in STAGE-XXX-YYY.md
    - Mark Design phase complete in STAGE-XXX-YYY.md
-   - Update epic progress in EPIC-XXX.md if needed
+   - Update stage status in epic's EPIC-XXX.md table (MANDATORY)
+6. Main agent commits tracking files immediately:
+   - ONLY commit specific files: `git add epics/EPIC-XXX/STAGE-XXX-YYY.md epics/EPIC-XXX/EPIC-XXX.md`
+   - Commit message: "chore: complete STAGE-XXX-YYY Design phase"
+   - **NEVER use `git add -A`** - it picks up unrelated uncommitted files
 ```
 
 **Skip brainstormer ONLY when ALL of these are true:**
@@ -558,7 +562,11 @@ Use planner (Opus) when ANY of these apply:
 
 9. Delegate to doc-updater (Haiku) to update tracking documents:
    - Mark Build phase complete in STAGE-XXX-YYY.md
-   - Update epic progress in EPIC-XXX.md if needed
+   - Update stage status in epic's EPIC-XXX.md table (MANDATORY)
+10. Main agent commits tracking files immediately:
+   - ONLY commit specific files: `git add epics/EPIC-XXX/STAGE-XXX-YYY.md epics/EPIC-XXX/EPIC-XXX.md`
+   - Commit message: "chore: complete STAGE-XXX-YYY Build phase"
+   - **NEVER use `git add -A`** - it picks up unrelated uncommitted files
 ```
 
 **Skip planner when:**
@@ -629,8 +637,12 @@ if (ANY_code_changed_during_refinement) {
 
 9. Delegate to doc-updater (Haiku) to update tracking documents:
    - Mark Refinement phase complete in STAGE-XXX-YYY.md
-   - Update epic progress in EPIC-XXX.md if needed
+   - Update stage status in epic's EPIC-XXX.md table (MANDATORY)
    - Add regression items to epic's epics/EPIC-XXX/regression.md
+10. Main agent commits tracking files immediately:
+   - ONLY commit specific files: `git add epics/EPIC-XXX/STAGE-XXX-YYY.md epics/EPIC-XXX/EPIC-XXX.md epics/EPIC-XXX/regression.md`
+   - Commit message: "chore: complete STAGE-XXX-YYY Refinement phase"
+   - **NEVER use `git add -A`** - it picks up unrelated uncommitted files
 ```
 
 **For Backend-Only Changes:**
@@ -641,8 +653,12 @@ if (ANY_code_changed_during_refinement) {
 3. [LOOP until e2e-tester passes]
 4. Delegate to doc-updater (Haiku) to update tracking documents:
    - Mark Refinement phase complete in STAGE-XXX-YYY.md
-   - Update epic progress in EPIC-XXX.md if needed
+   - Update stage status in epic's EPIC-XXX.md table (MANDATORY)
    - Add regression items to epic's epics/EPIC-XXX/regression.md
+5. Main agent commits tracking files immediately:
+   - ONLY commit specific files: `git add epics/EPIC-XXX/STAGE-XXX-YYY.md epics/EPIC-XXX/EPIC-XXX.md epics/EPIC-XXX/regression.md`
+   - Commit message: "chore: complete STAGE-XXX-YYY Refinement phase"
+   - **NEVER use `git add -A`** - it picks up unrelated uncommitted files
 ```
 
 **Determine frontend vs backend:**
@@ -680,12 +696,23 @@ if (ANY_code_changed_during_refinement) {
      → Delegate to doc-writer-lite (Sonnet) OR skip if minimal
 
 7. Delegate to doc-updater (Haiku) to write to changelog/<date>.changelog.md
-8. Main agent creates commit (include commit hash)
+8. Main agent creates implementation commit:
+   - ONLY add implementation files (code, tests, docs): `git add <specific files>`
+   - Include commit hash in message
+   - **NEVER use `git add -A`** - it picks up uncommitted tracking files
 9. Delegate to doc-updater (Haiku) to add commit hash to changelog entry
-10. Delegate to doc-updater (Haiku) to update tracking documents:
+10. Main agent commits changelog update:
+    - ONLY commit changelog: `git add changelog/<date>.changelog.md`
+    - Commit message: "chore: add commit hash to STAGE-XXX-YYY changelog"
+11. Delegate to doc-updater (Haiku) to update tracking documents:
     - Mark Finalize phase complete in STAGE-XXX-YYY.md
-    - Update stage status to "Done" in STAGE-XXX-YYY.md
-    - Update epic progress in EPIC-XXX.md (stage now complete)
+    - Update stage status to "Complete" in STAGE-XXX-YYY.md
+    - Update stage status in epic's EPIC-XXX.md table (MANDATORY - mark as Complete)
+    - Update epic "Current Stage" to next stage
+12. Main agent commits tracking files:
+    - ONLY commit tracking files: `git add epics/EPIC-XXX/STAGE-XXX-YYY.md epics/EPIC-XXX/EPIC-XXX.md`
+    - Commit message: "chore: mark STAGE-XXX-YYY Complete"
+    - **NEVER use `git add -A`** - it picks up unrelated uncommitted files
 
 Phase auto-completes when all steps done.
 ```
@@ -999,7 +1026,11 @@ Each epic has its own regression file: `epics/EPIC-XXX/regression.md`
 - [ ] IF multiple approaches: brainstormer presented 2-3 options, user selected one
 - [ ] IF obvious solution: Confirmed approach with user
 - [ ] Seed data requirements confirmed (if applicable)
-- [ ] Tracking documents updated via doc-updater: - Selected approach recorded in stage file - Design phase marked complete - Epic progress updated if needed
+- [ ] Tracking documents updated via doc-updater:
+  - Selected approach recorded in stage file
+  - Design phase marked complete
+  - Epic stage status updated (MANDATORY)
+- [ ] Tracking files committed immediately with specific git add (NO git add -A)
 
 ### Build Phase
 
@@ -1009,20 +1040,31 @@ Each epic has its own regression file: `epics/EPIC-XXX/regression.md`
 - [ ] Placeholder stubs added for related future features
 - [ ] Dev server verified working
 - [ ] Verification passed (verifier + tester in parallel)
-- [ ] Tracking documents updated via doc-updater: - Build phase marked complete in stage file - Epic progress updated if needed
+- [ ] Tracking documents updated via doc-updater:
+  - Build phase marked complete in stage file
+  - Epic stage status updated (MANDATORY)
+- [ ] Tracking files committed immediately with specific git add (NO git add -A)
 
 ### Refinement Phase (Frontend)
 
 - [ ] Desktop tested and approved by user
 - [ ] Mobile tested and approved by user
 - [ ] **Remember**: Code changes reset OTHER viewport's approval
-- [ ] Tracking documents updated via doc-updater: - Refinement phase marked complete in stage file - Epic progress updated if needed - Regression items added to epic's regression.md
+- [ ] Tracking documents updated via doc-updater:
+  - Refinement phase marked complete in stage file
+  - Epic stage status updated (MANDATORY)
+  - Regression items added to epic's regression.md
+- [ ] Tracking files committed immediately with specific git add (NO git add -A)
 
 ### Refinement Phase (Backend-Only)
 
 - [ ] e2e-tester designed and ran API/integration tests
 - [ ] All scenarios passed (or issues fixed via debugger → fixer)
-- [ ] Tracking documents updated via doc-updater: - Refinement phase marked complete in stage file - Epic progress updated if needed - Regression items added to epic's regression.md
+- [ ] Tracking documents updated via doc-updater:
+  - Refinement phase marked complete in stage file
+  - Epic stage status updated (MANDATORY)
+  - Regression items added to epic's regression.md
+- [ ] Tracking files committed immediately with specific git add (NO git add -A)
 
 ### Finalize Phase
 
@@ -1033,9 +1075,15 @@ Each epic has its own regression file: `epics/EPIC-XXX/regression.md`
 - [ ] IF impl code changed after first review: code-reviewer ran post-test review
 - [ ] Documentation created (doc-writer OR doc-writer-lite based on complexity)
 - [ ] Changelog entry added via doc-updater
-- [ ] Commit created with hash
-- [ ] Commit hash added to changelog entry
-- [ ] Tracking documents updated via doc-updater: - Finalize phase marked complete in stage file - Stage status set to "Done" - Epic progress updated (stage complete)
+- [ ] Implementation commit created with SPECIFIC file paths (NO git add -A)
+- [ ] Commit hash added to changelog via doc-updater
+- [ ] Changelog committed immediately (ONLY changelog file)
+- [ ] Tracking documents updated via doc-updater:
+  - Finalize phase marked complete in stage file
+  - Stage status set to "Complete"
+  - Epic stage status updated to "Complete" (MANDATORY)
+  - Epic "Current Stage" updated to next stage
+- [ ] Tracking files committed immediately with specific git add (NO git add -A)
 
 ---
 
@@ -1066,3 +1114,68 @@ Signs you're skipping the workflow:
 - Reading code files directly instead of using Explore or having subagent read
 - Running build/test commands directly instead of delegating to verifier/tester
 - Updating stage docs yourself instead of using doc-updater subagent
+- **Using `git add -A` or `git add .` instead of specific file paths**
+- **Forgetting to update epic file** when stage completes
+- **Not committing tracking files immediately** after doc-updater updates them
+
+---
+
+## The `git add -A` Problem (CRITICAL)
+
+**Never use `git add -A`, `git add .`, or `git commit -a`**
+
+### Why This Causes Bugs
+
+When doc-updater updates tracking files, it does NOT commit them. If tracking files remain uncommitted and a later stage uses `git add -A`, it picks up:
+
+- Changelog entries from previous stages
+- Stage files from previous stages
+- Epic files that should have been committed earlier
+- Any other uncommitted files in the repo
+
+**Example from STAGE-007-003:**
+- STAGE-007-001 and 002 left tracking files uncommitted
+- STAGE-007-003 used `git add -A` for its implementation commit
+- Result: STAGE-007-003 commit included EPIC-006 files and STAGE-007-001/002 tracking files
+
+### The Fix
+
+**ALWAYS use specific file paths:**
+
+```bash
+# ✅ CORRECT - Tracking files
+git add epics/EPIC-XXX/STAGE-XXX-YYY.md epics/EPIC-XXX/EPIC-XXX.md
+
+# ✅ CORRECT - Changelog
+git add changelog/2026-01-13.changelog.md
+
+# ✅ CORRECT - Implementation files (list each one)
+git add packages/llm/src/file1.ts packages/llm/src/file2.ts docs/guide.md
+
+# ❌ WRONG - Picks up everything
+git add -A
+git add .
+git commit -a
+```
+
+### Commit Immediately After doc-updater
+
+**Every doc-updater call must be followed by an immediate commit:**
+
+```
+1. Delegate to doc-updater
+2. Main agent commits ONLY those specific files
+3. Continue with next step
+```
+
+**Never batch commits.** Commit tracking files separately from implementation files.
+
+### Epic File Updates Are MANDATORY
+
+The epic file's stage table MUST be updated when a stage changes status. This is NOT optional ("if needed").
+
+**Every stage completion requires:**
+1. Update stage status in STAGE-XXX-YYY.md
+2. Update stage status in EPIC-XXX.md table (same status)
+3. Update epic "Current Stage" field
+4. Commit both files immediately
