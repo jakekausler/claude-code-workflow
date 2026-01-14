@@ -1031,6 +1031,7 @@ Each epic has its own regression file: `epics/EPIC-XXX/regression.md`
   - Design phase marked complete
   - Epic stage status updated (MANDATORY)
 - [ ] Tracking files committed immediately with specific git add (NO git add -A)
+- [ ] Invoke self-reflection skill
 
 ### Build Phase
 
@@ -1044,6 +1045,7 @@ Each epic has its own regression file: `epics/EPIC-XXX/regression.md`
   - Build phase marked complete in stage file
   - Epic stage status updated (MANDATORY)
 - [ ] Tracking files committed immediately with specific git add (NO git add -A)
+- [ ] Invoke self-reflection skill
 
 ### Refinement Phase (Frontend)
 
@@ -1055,6 +1057,7 @@ Each epic has its own regression file: `epics/EPIC-XXX/regression.md`
   - Epic stage status updated (MANDATORY)
   - Regression items added to epic's regression.md
 - [ ] Tracking files committed immediately with specific git add (NO git add -A)
+- [ ] Invoke self-reflection skill
 
 ### Refinement Phase (Backend-Only)
 
@@ -1065,6 +1068,7 @@ Each epic has its own regression file: `epics/EPIC-XXX/regression.md`
   - Epic stage status updated (MANDATORY)
   - Regression items added to epic's regression.md
 - [ ] Tracking files committed immediately with specific git add (NO git add -A)
+- [ ] Invoke self-reflection skill
 
 ### Finalize Phase
 
@@ -1084,6 +1088,7 @@ Each epic has its own regression file: `epics/EPIC-XXX/regression.md`
   - Epic stage status updated to "Complete" (MANDATORY)
   - Epic "Current Stage" updated to next stage
 - [ ] Tracking files committed immediately with specific git add (NO git add -A)
+- [ ] Invoke self-reflection skill
 
 ---
 
@@ -1134,6 +1139,7 @@ When doc-updater updates tracking files, it does NOT commit them. If tracking fi
 - Any other uncommitted files in the repo
 
 **Example from STAGE-007-003:**
+
 - STAGE-007-001 and 002 left tracking files uncommitted
 - STAGE-007-003 used `git add -A` for its implementation commit
 - Result: STAGE-007-003 commit included EPIC-006 files and STAGE-007-001/002 tracking files
@@ -1175,6 +1181,7 @@ git commit -a
 The epic file's stage table MUST be updated when a stage changes status. This is NOT optional ("if needed").
 
 **Every stage completion requires:**
+
 1. Update stage status in STAGE-XXX-YYY.md
 2. Update stage status in EPIC-XXX.md table (same status)
 3. Update epic "Current Stage" field
