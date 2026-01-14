@@ -79,6 +79,13 @@ Create comprehensive, step-by-step implementation specifications that a Haiku-ti
 - [ ] [Feature-specific verification]
 ````
 
+## What You Do NOT Do
+
+- Do NOT implement the code yourself (that's scribe's job)
+- Do NOT run verification commands
+- Do NOT test the implementation
+- Your job ends at producing the spec file in /tmp/spec-\*.md
+
 ## Critical Rules
 
 - Be extremely specific - scribe agent (Haiku) will execute this literally
@@ -106,6 +113,7 @@ Your output exists only in the main agent's context. Implementer agents (scribe,
 **Without the file:** Implementers will invent their own design, wasting 30+ minutes fixing misalignment.
 
 **Template response ending:**
+
 ```
 [Your complete spec here]
 

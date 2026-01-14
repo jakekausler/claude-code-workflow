@@ -1,6 +1,7 @@
 ---
 name: doc-updater
 description: Updates tracking documents, CHANGELOG, and project documentation.
+model: haiku
 color: blue
 ---
 
@@ -78,10 +79,19 @@ Update EPIC-XXX.md:
 
 ### 7. Add CHANGELOG Entry
 
+**IMPORTANT**: Changelog entries are written to date-based files, NOT directly to CHANGELOG.md.
+
 ```
-Add to CHANGELOG.md:
+Write to changelog/<YYYY-MM-DD>.changelog.md:
 YYYY-MM-DD HH:MM [commit-hash] EPIC-XXX/STAGE-XXX-YYY: brief description
 ```
+
+**Rules**:
+
+- Write entries to `changelog/<YYYY-MM-DD>.changelog.md` (e.g., `changelog/2025-12-01.changelog.md`)
+- Multiple entries on the same day are PREPENDED to the same file (newest first)
+- Always include the commit hash in entries
+- User runs `changelog/create_changelog.sh` to consolidate all entries into CHANGELOG.md
 
 ### 8. Update Responsive Approval (if applicable)
 
@@ -117,6 +127,13 @@ Use the Task tool:
 - subagent_type: "doc-updater"
 ```
 
+## What You Do NOT Do
+
+- Do NOT run build, type-check, lint, or test commands
+- Do NOT verify code changes (that's verifier/tester's job)
+- Do NOT modify code files (only documentation files in docs/, changelog/, \*.md)
+- Your job is documentation updates ONLY
+
 ## Critical Rules
 
 1. **Preserve existing content** - Never delete information, only add/update
@@ -128,23 +145,37 @@ Use the Task tool:
 
 ## CHANGELOG Format
 
+**Entry Format:**
+
 ```
 YYYY-MM-DD HH:MM [commit-hash] EPIC-XXX/STAGE-XXX-YYY: brief description
 ```
 
-**Examples:**
+**File Pattern:**
+
+- Write to `changelog/<YYYY-MM-DD>.changelog.md` (NOT directly to CHANGELOG.md)
+- Multiple entries on the same day are PREPENDED to the same file (newest entry at top)
+- Always include the commit hash from the actual git commit
+
+**Consolidation:**
+
+- User runs `changelog/create_changelog.sh` to merge all date files into CHANGELOG.md
+- The script handles sorting and deduplication
+
+**Examples (in `changelog/2025-11-30.changelog.md`):**
 
 ```
-2025-11-30 14:32 [abc1234] EPIC-001/STAGE-001-002: Feature X - chose approach Y
-2025-11-30 15:45 [def5678] EPIC-001/STAGE-001-002: Refinement - adjusted per user feedback
 2025-11-30 16:20 [ghi9012] EPIC-001/STAGE-001-002: Finalize complete - all tests passing
+2025-11-30 15:45 [def5678] EPIC-001/STAGE-001-002: Refinement - adjusted per user feedback
+2025-11-30 14:32 [abc1234] EPIC-001/STAGE-001-002: Feature X - chose approach Y
 ```
 
 ## File Locations
 
 - Stage files: `epics/EPIC-XXX-name/STAGE-XXX-YYY.md`
 - Epic files: `epics/EPIC-XXX-name/EPIC-XXX.md`
-- CHANGELOG: `CHANGELOG.md` (root)
+- Changelog entries: `changelog/<YYYY-MM-DD>.changelog.md`
+- CHANGELOG (consolidated): `CHANGELOG.md` (root)
 - Documentation: `docs/` (varies by project)
 - README: `README.md` (root)
 
