@@ -3,9 +3,11 @@ name: epic-stage-workflow
 description: Use when implementing or working on existing epics and stages, after running /next_task, during Design/Build/Refinement/Finalize phases, or when session protocols apply.
 ---
 
-# Epic/Stage Workflow - Cost-Optimized Multi-Model Agent Flow
+# Epic/Stage Workflow - Orchestrator
 
-This workflow uses tiered models to optimize cost while maintaining quality:
+This is the **orchestrator skill**. It contains shared rules that apply to ALL phases. Phase-specific guidance is in separate phase skills.
+
+## Model Tiering
 
 - **Opus**: Complex reasoning (brainstormer, planner, debugger, code-reviewer, doc-writer)
 - **Sonnet**: Medium reasoning (main agent, planner-lite, debugger-lite, doc-writer-lite, test-writer, e2e-tester)
@@ -35,6 +37,108 @@ This workflow uses tiered models to optimize cost while maintaining quality:
 - Initial project setup (use epic-stage-setup instead)
 - Creating new epics or stages
 - Tasks outside the epic/stage system
+
+## Protocol, Not Advice
+
+This workflow is a **protocol** (exact adherence required), not guidance (adaptable).
+
+**Letter AND Spirit Required:**
+
+- Letter: Follow exact steps, use specified agents, invoke specified skills
+- Spirit: Understand WHY each step exists, ensure quality
+
+**"I understand the spirit" is NOT permission to skip the letter.**
+
+## Workflow Authority Hierarchy
+
+**Level 1: User Authority (Highest for WHAT)**
+
+- Defines requirements, priorities, acceptance criteria
+- Approves/rejects features
+- Requests emergency or abbreviated workflows
+- Controls WHAT gets built
+
+**Level 2: Workflow Integrity (Non-Negotiable)**
+
+These steps CANNOT be skipped by user request:
+
+- code-reviewer invocation (can be abbreviated, not skipped)
+- Spec file for non-trivial changes (can be bullet-point, not skipped)
+- Formal approval workflow (can be batched, not skipped)
+- Exit gates (lessons-learned, journal)
+
+**Level 3: Workflow Flexibility (User-Overrideable)**
+
+These CAN be adjusted with explicit user consent:
+
+- Abbreviated formats (bullet-point specs, quick reviews)
+- Compressed timelines (smoke tests instead of full suite)
+- Reduced documentation scope
+
+**If user requests skipping Level 2 items:**
+
+1. Explain why workflow requires them (prevent regressions, maintain quality)
+2. Offer Level 3 alternatives (faster, not absent)
+3. If user insists after explanation, document objection in stage file and proceed with Level 3 alternative
+4. NEVER skip Level 2 entirely - only abbreviate
+
+**User owns the project. Agent has duty of care for quality. Make trade-offs explicit.**
+
+### Classification Authority
+
+**Level 2 is an EXHAUSTIVE list** - items are Level 2 if and only if they appear in the list above:
+
+1. code-reviewer invocation
+2. Spec file for non-trivial changes
+3. Formal approval workflow
+4. Exit gates (lessons-learned, journal)
+
+**Classification disputes:**
+
+If user claims something is Level 3 (not Level 2):
+
+1. **Check the list**: Is this item explicitly listed above?
+   - YES → Level 2 applies, follow Level 2 protocol
+   - NO → Level 3, user preference wins
+
+2. **Example resolution:**
+   - User: "Skip code-reviewer for this typo"
+   - Agent checks list → "code-reviewer invocation" is listed → Level 2
+   - Agent: "Code-reviewer is Level 2 (explicit list). I can abbreviate (30-second quick pass) but not skip."
+
+3. **If user still insists after explanation:**
+   - Document in stage file: "User overrode Level 2 requirement [item] despite agent objection"
+   - Log as workflow deviation in lessons-learned
+   - Proceed as directed (user has ultimate project authority)
+
+**KEY PRINCIPLE:** Level 2 classification is OBJECTIVE (explicit list), not subjective (agent judgment). If it's on the list, it's Level 2. Period.
+
+- ❌ "Spirit of exit gate is completeness, I can reorder steps" → Violates letter
+- ✅ "Spirit is completeness, I follow steps in order AND explain why each matters" → Follows both
+
+**Why exact adherence matters:**
+
+- Enables session independence (any agent can resume work)
+- Prevents compounding errors (shortcuts cause future mistakes)
+- Ensures tracking docs stay synchronized
+- Makes workflow auditable and improvable
+
+---
+
+## Phase Routing
+
+After loading this skill, determine the current phase and invoke the appropriate phase skill:
+
+| Phase      | Skill to Invoke    |
+| ---------- | ------------------ |
+| Design     | `phase-design`     |
+| Build      | `phase-build`      |
+| Refinement | `phase-refinement` |
+| Finalize   | `phase-finalize`   |
+
+**To invoke a phase skill:** Use the Skill tool with the skill name (e.g., `phase-design`).
+
+**Each phase skill ends with a mandatory exit gate that invokes `lessons-learned` and `journal` skills.**
 
 ---
 
@@ -69,22 +173,6 @@ User says "Go fast" or "I'm waiting"?
 → Transparency and context are non-negotiable
 → Clear communication prevents misunderstandings that cost more time
 
-**Example under speed pressure:**
-
-❌ WRONG (terse):
-"Fixed the error. Moving to next task."
-
-✅ CORRECT (full context):
-"**What was done**: Fixed TypeScript error in Button.tsx by adding missing 'key' prop type to ButtonProps interface.
-
-**Why it failed**: TypeScript requires all React props to be explicitly typed.
-
-**Outcome**: Tests passing, build ready to verify after test updates.
-
-**Next**: Updating test file now."
-
-Speed comes from efficient delegation, not abbreviated communication.
-
 **CRITICAL: "Success" or "All passed" does NOT mean skip details**
 
 When everything works perfectly, agents often think "there's nothing to explain."
@@ -94,20 +182,6 @@ When everything works perfectly, agents often think "there's nothing to explain.
 - What was verified
 - What passed
 - What this means for the next step
-
-❌ WRONG (abbreviated success):
-"Build passed. Moving to next phase."
-
-✅ CORRECT (full context for success):
-"**What was verified**: Build compiled all packages, type-check found no TypeScript errors, lint found no style issues.
-
-**Outcome**: All checks passed in 12.3s - code is production-ready.
-
-**Next**: Proceeding to Refinement phase for user testing."
-
-**Why this matters**: Users need to understand WHAT was verified, not just that "it passed." Success reports are documentation of what works, not just checkmarks.
-
-"Context even for simple operations" means ESPECIALLY for simple operations - those are the ones agents skip.
 
 ### After Fixer Returns
 
@@ -124,18 +198,12 @@ When everything works perfectly, agents often think "there's nothing to explain.
    - **NEVER assume fix worked without verification**
 
 3. **Handle verification result**:
-   - ✅ Success → Continue with next task
-   - ❌ Failure → Escalate to debugger (NOT back to fixer)
+   - Success → Continue with next task
+   - Failure → Escalate to debugger (NOT back to fixer)
 
 4. **Document the cycle**:
    - Note: "Fixer applied changes, verifier confirmed fix"
    - OR: "Fixer applied changes, still failing, escalating to debugger"
-
-**Never**:
-
-- Skip the verification step
-- Call fixer again without new debugger diagnosis
-- Assume fixer's changes worked based on its report
 
 ---
 
@@ -204,21 +272,21 @@ ERROR → DIAGNOSTIC AGENT → FIXER AGENT → RESOLUTION
 
 ### What Fixer MUST NOT Do
 
-- ❌ Read files to "understand context" (debugger provides context)
-- ❌ Search for patterns using Grep/Glob (that's exploration)
-- ❌ Re-read files after editing to "verify" (trust Edit tool worked)
-- ❌ Run type-check, test, or build commands (verifier/tester's job)
-- ❌ Make multiple fix attempts (return after first attempt)
-- ❌ Diagnose why something failed (debugger's job)
-- ❌ Make design decisions about HOW to fix (coordinator's job)
-- ❌ Iterate based on verification results (coordinator escalates)
+- Read files to "understand context" (debugger provides context)
+- Search for patterns using Grep/Glob (that's exploration)
+- Re-read files after editing to "verify" (trust Edit tool worked)
+- Run type-check, test, or build commands (verifier/tester's job)
+- Make multiple fix attempts (return after first attempt)
+- Diagnose why something failed (debugger's job)
+- Make design decisions about HOW to fix (coordinator's job)
+- Iterate based on verification results (coordinator escalates)
 
 ### What Fixer MUST Do
 
-- ✅ Read ONLY files being edited (for Edit tool preparation)
-- ✅ Apply EXACTLY the changes specified
-- ✅ Return immediately after applying changes
-- ✅ Report what was changed (files, line numbers)
+- Read ONLY files being edited (for Edit tool preparation)
+- Apply EXACTLY the changes specified
+- Return immediately after applying changes
+- Report what was changed (files, line numbers)
 
 ### Retry Policy
 
@@ -232,107 +300,14 @@ Error occurs → debugger diagnoses → fixer applies fix → return
                                                           │
                                     ┌─────────────────────┼─────────────────────┐
                                     │                                           │
-                              ✅ Fixed                                    ❌ Still failing
+                              Fixed                                    Still failing
                                     │                                           │
                                     ▼                                           ▼
                               Continue                        Escalate back to debugger
                                                               (DO NOT call fixer again)
 ```
 
-- If Edit fails → return error to main agent immediately
-- Main agent escalates to debugger for new diagnosis
-- **NO internal retry loops in fixer**
-
-### Why This Matters
-
-**Without constraints**: Fixer becomes a junior developer (8-12 tool calls)
-
-- Investigates files (4-5 calls)
-- Decides how to fix (design work)
-- Verifies and iterates (feedback loop)
-
-**With constraints**: Fixer is a code editor (2-3 tool calls)
-
-- Reads file to edit (1 call)
-- Applies exact changes (1-2 calls)
-- Returns immediately
-
-**Cost difference**: 75% reduction in tool calls when instructions are explicit.
-
-### Enforcement
-
-**If fixer violates these constraints**, the main agent must:
-
-1. **Stop the fixer immediately** (don't wait for completion)
-2. **Document the violation** (what fixer did vs. what was instructed)
-3. **Revise instructions** to be more explicit
-4. **Call fixer again** with corrected instructions
-
-**Fixer itself must check**:
-
-- Before reading a file: "Am I editing this file?" (No → STOP, report back)
-- Before running a command: "Am I a verifier/tester?" (No → STOP, report back)
-- Before searching for patterns: "Were these patterns in my instructions?" (No → STOP, report back)
-
-**Self-check template for fixer**:
-
-```
-I received instructions to edit <file>.
-I am about to <action>.
-Is this action "apply the exact edit specified"? [Yes/No]
-If No → STOP and report: "Instructions unclear, need explicit line-by-line changes"
-```
-
-### Red Flags for Fixer (Signs You're Exceeding Your Role)
-
-**If fixer is thinking ANY of these thoughts, STOP immediately**:
-
-| Thought                                                     | What's Wrong                    | What To Do                                           |
-| ----------------------------------------------------------- | ------------------------------- | ---------------------------------------------------- |
-| "Let me read this related file to understand the pattern"   | That's exploration              | STOP - Report: "Need context about pattern"          |
-| "Let me search for similar code"                            | That's research                 | STOP - Report: "Need example of correct pattern"     |
-| "Let me run type-check to see if this worked"               | That's verification             | STOP - Return, let main agent verify                 |
-| "This error is still here, let me try a different approach" | That's iteration                | STOP - Return, let main agent escalate               |
-| "I need to understand what this function does"              | That's analysis                 | STOP - Report: "Need explicit change instructions"   |
-| "The instructions say 'fix' but not how"                    | That's a goal, not instructions | STOP - Report: "Need line-by-line edit instructions" |
-
-**Remember**: You are a code editor, not a developer. Apply edits, don't solve problems.
-
----
-
-## Instructions for Fixer Must Be Explicit
-
-**The main agent is responsible for instruction quality.**
-
-### ❌ WRONG - Vague Instructions (Goal-Based)
-
-```
-Fix the TypeScript errors in useValidation.ts:
-- Line 15: Property 'data' does not exist on type '{}'
-- Line 20: Cannot find module 'validation-utils'
-```
-
-**Why wrong**: This gives fixer a GOAL, not INSTRUCTIONS. Fixer will investigate, explore, and decide how to fix.
-
-### ✅ CORRECT - Explicit Instructions (Edit-Based)
-
-```
-Edit packages/frontend/src/hooks/useValidation.ts:
-
-Line 15: Change from:
-  const result = response;
-To:
-  const result = response.data as ValidationResult;
-
-Line 20: Change from:
-  import { validate } from 'validation-utils';
-To:
-  import { validate } from '@campaign/shared/utils/validation';
-```
-
-**Why correct**: Fixer knows EXACTLY what to change. No investigation, no decisions, just apply edits.
-
-### How to Write Good Instructions
+### Instructions Must Be Explicit
 
 **Pattern**: `Edit <file>: Line <N>: Change from <old> to <new>`
 
@@ -343,451 +318,16 @@ To:
 3. **Old text**: What's currently there (for Edit tool matching)
 4. **New text**: What it should become
 
-**For multi-line changes**: Provide code blocks showing before/after
-
-### When Instructions Are Unclear
-
-**Fixer should return**: "Instructions unclear - need specific line numbers and exact text to change"
-
-**Main agent should**: Escalate to debugger for more detailed diagnosis, then call fixer with explicit instructions.
-
-### Self-Check for Main Agent
-
-Before calling fixer, ask:
-
-- [ ] Did I provide specific file paths?
-- [ ] Did I provide exact line numbers?
-- [ ] Did I provide old text → new text for each change?
-- [ ] Can fixer apply these changes WITHOUT reading other files?
-- [ ] Can fixer apply these changes WITHOUT making decisions?
-
-If ANY answer is "no" → instructions are too vague, refine them first.
-
-### Common Main Agent Rationalizations (STOP if you're thinking these)
-
-When preparing fixer instructions, watch for these thoughts:
-
-| Thought                                         | Why You're Wrong                          | Correct Action                                      |
-| ----------------------------------------------- | ----------------------------------------- | --------------------------------------------------- |
-| "Fixer can figure out the details"              | Fixer will explore and waste tokens       | Read files first, provide exact changes             |
-| "The error message is clear enough"             | Error messages don't specify HOW to fix   | Diagnose with debugger, then give explicit edits    |
-| "Fixer is smart, just describe the goal"        | Goal-based = fixer becomes problem-solver | Provide edit-based instructions (line X: old → new) |
-| "Let fixer verify its own work"                 | Fixer will run type-check and iterate     | Return immediately, main agent verifies             |
-| "Fixer can read the file to understand context" | Reading = investigation = wrong role      | Main agent provides file content in instructions    |
-| "It's faster to let fixer handle it"            | Vague instructions = 8-12 tool calls      | Explicit instructions = 2-3 tool calls (faster!)    |
-
-**If you're thinking ANY of these** → your instructions are too vague. Stop and refine them first.
-
-### Red Flags - STOP Before Calling Fixer
-
-Before calling fixer, check for these red flags in your instructions:
-
-**🚩 Red Flag 1**: Instructions use words like "fix", "resolve", "handle"
-
-- ❌ "Fix the TypeScript errors"
-- ✅ "Change line 15 from X to Y"
-
-**🚩 Red Flag 2**: No specific line numbers provided
-
-- ❌ "Update the import statement"
-- ✅ "Line 20: Change import from 'A' to 'B'"
-
-**🚩 Red Flag 3**: No old text → new text provided
-
-- ❌ "Add proper type annotation"
-- ✅ "Change `const x` to `const x: string`"
-
-**🚩 Red Flag 4**: File content not included in instructions
-
-- ❌ "Edit useValidation.ts to fix data property"
-- ✅ "Edit useValidation.ts - current content: [code block] - change line 15..."
-
-**🚩 Red Flag 5**: Instructions mention "investigate", "check", or "verify"
-
-- ❌ "Check if the import path is correct"
-- ✅ "Change import to '../utils/validation' (confirmed correct path)"
-
-**If ANY red flag is present** → instructions are goal-based, not edit-based. Refine before calling fixer.
-
----
-
-## Phase-Specific Behavior
-
-### Spec Handoff Protocol (CRITICAL)
-
-**Problem:** Planner output doesn't automatically transfer to implementer subagents. Main agent context is NOT inherited by subagents.
-
-**Required workflow:**
-
-1. **Planner/planner-lite agents MUST:**
-   - Save spec to `/tmp/spec-YYYY-MM-DD-HH-MM-SS.md` (timestamp format)
-   - Include "Spec saved to: [filepath]" at END of response
-   - Example: "Spec saved to: /tmp/spec-2026-01-12-15-30-45.md"
-
-2. **Main agent MUST:**
-   - Extract spec file path from planner response
-   - Pass file path explicitly to implementer agents
-   - NEVER say "use the spec above" or "from planner-lite above"
-   - Template: "Read and implement the spec from: /tmp/spec-2026-01-12-15-30-45.md"
-
-3. **Implementer agents (scribe/fixer) MUST:**
-   - Read spec file FIRST before any implementation
-   - Confirm spec contents in response
-   - Example: "Read spec from [filepath]. Spec defines [summary]. Implementing now..."
-
-**Common mistake to avoid:**
-
-❌ WRONG:
-
-```
-Main → Planner: "Create spec"
-Planner → Main: [500 lines of spec in response]
-Main → Scribe: "Implement using spec above"
-Scribe → [Can't see spec, invents own design]
-```
-
-✅ CORRECT:
-
-```
-Main → Planner: "Create spec and save to /tmp/spec-*.md"
-Planner → Main: [Spec saved to /tmp/spec-2026-01-12-15-30-45.md]
-Main → Scribe: "Read and implement: /tmp/spec-2026-01-12-15-30-45.md"
-Scribe → [Reads file, implements correctly]
-```
-
-**Why this matters:** Without file handoff, implementers can't see planner output and will invent their own design, wasting 30+ minutes fixing misalignment.
-
-### Design Phase
-
-```
-1. Delegate to task-navigator (Haiku) to get task card
-2. Delegate to Explore (built-in) to gather codebase context
-
-3. [CONDITIONAL: Brainstorming]
-   IF task has multiple valid approaches OR is architecturally complex:
-     → Delegate to brainstormer (Opus) to present 2-3 options to user
-   ELSE (obvious single solution OR trivial task):
-     → Skip brainstormer, proceed with obvious approach
-
-   **⚠️ SELF-CHECK: Are you about to skip brainstormer?**
-
-   Read these thoughts. If you're thinking ANY of them, you're rationalizing:
-
-   | Thought | Why You're Wrong | Correct Action |
-   |---------|------------------|----------------|
-   | "I already have context from Explore" | Context gathering ≠ architecture brainstorming | Use brainstormer anyway |
-   | "I can present options myself" | Main agent = coordinator only, not architect | Use brainstormer (Opus) |
-   | "Faster to skip delegation" | Speed ≠ excuse to violate coordination boundaries | Use brainstormer anyway |
-   | "This seems straightforward" | Your gut feeling is unreliable under time pressure | Use brainstormer when unsure |
-   | "User wants it fast" | User wants it RIGHT, not fast-but-wrong | Use brainstormer anyway |
-
-   **When in doubt, use brainstormer.** Opus is specialized for architecture options. You (Sonnet) coordinate, don't architect.
-
-4. User selects approach (or confirms obvious one)
-5. Delegate to doc-updater (Haiku) to update tracking documents:
-   - Record selected approach in STAGE-XXX-YYY.md
-   - Mark Design phase complete in STAGE-XXX-YYY.md
-   - Update stage status in epic's EPIC-XXX.md table (MANDATORY)
-6. Main agent commits tracking files immediately:
-   - ONLY commit specific files: `git add epics/EPIC-XXX/STAGE-XXX-YYY.md epics/EPIC-XXX/EPIC-XXX.md`
-   - Commit message: "chore: complete STAGE-XXX-YYY Design phase"
-   - **NEVER use `git add -A`** - it picks up unrelated uncommitted files
-```
-
-**Skip brainstormer ONLY when ALL of these are true:**
-
-- [ ] Task is trivial (typo fix, config tweak, obvious bug fix with known solution)
-- [ ] Single obvious implementation exists
-- [ ] No architectural decisions needed
-- [ ] No UI/UX choices to make
-- [ ] User explicitly specified the complete approach
-
-**Use brainstormer when ANY of these apply:**
-
-- [ ] Multiple UI patterns could work
-- [ ] Integration between systems (GraphQL, WebSocket, state management)
-- [ ] User-facing feature with UX implications
-- [ ] Architectural decision needed
-- [ ] You're unsure whether to use brainstormer (meta-uncertainty = use it)
-
-### Build Phase
-
-```
-1. [CONDITIONAL: Planning]
-   IF complex multi-file feature OR architectural change:
-     → Delegate to planner (Opus) for detailed implementation spec
-     → Planner MUST save spec to /tmp/spec-YYYY-MM-DD-HH-MM-SS.md
-   ELSE IF simple single-file OR straightforward change:
-     → Delegate to planner-lite (Sonnet) for simple spec
-     → Planner-lite MUST save spec to /tmp/spec-YYYY-MM-DD-HH-MM-SS.md
-   ELSE (trivial change):
-     → Skip planner, main agent instructs scribe directly (no spec file needed)
-
-**When to use planner (Opus) - DO NOT under-escalate:**
-
-Use planner (Opus) when ANY of these apply:
-- Changes span 3+ files across packages (backend + frontend)
-- Integration between systems (WebSocket, GraphQL, external APIs)
-- Real-time features (WebSocket, SSE, polling)
-- State management changes (Zustand stores, cache patterns)
-- Database schema changes + service layer + resolvers
-- New architectural patterns for the codebase
-
-**CRITICAL: "Requirements are clear" does NOT mean "use planner-lite"**
-- Requirements clarity is about WHAT to build
-- Planner tier is about HOW MANY moving parts coordinate
-
-**Example of Opus-level complexity:**
-- "Add WebSocket notifications" touches 7+ files across backend/frontend with real-time state sync
-- Even if requirements are crystal clear, the integration coordination requires Opus
-
-**Example of Sonnet-level simplicity:**
-- "Add loading spinner to existing button" is 1-2 files with no integration
-
-2. Delegate to scribe (Haiku) to write code from spec file
-   → Pass spec file path explicitly: "Read and implement: /tmp/spec-YYYY-MM-DD-HH-MM-SS.md"
-
-3. Add seed data if agreed in Design phase
-
-4. Add placeholder stubs for related future features
-
-5. Verify dev server works - feature must be testable
-
-6. [PARALLEL] Delegate to verifier (Haiku) + tester (Haiku)
-   Run build/lint/type-check AND tests in parallel
-
-7. [IF verification fails] → Error handling flow (see below)
-
-8. [LOOP steps 2-7 until green]
-
-9. Delegate to doc-updater (Haiku) to update tracking documents:
-   - Mark Build phase complete in STAGE-XXX-YYY.md
-   - Update stage status in epic's EPIC-XXX.md table (MANDATORY)
-10. Main agent commits tracking files immediately:
-   - ONLY commit specific files: `git add epics/EPIC-XXX/STAGE-XXX-YYY.md epics/EPIC-XXX/EPIC-XXX.md`
-   - Commit message: "chore: complete STAGE-XXX-YYY Build phase"
-   - **NEVER use `git add -A`** - it picks up unrelated uncommitted files
-```
-
-**Skip planner when:**
-
-- Single-file change with clear requirements
-- Bug fix with known solution
-- Simple config or documentation change
-
-### Refinement Phase
-
-## ⛔ RED FLAGS - Read BEFORE Making ANY Viewport Decisions
-
-**IF YOU ARE THINKING ANY OF THESE THOUGHTS, YOU ARE VIOLATING THE RULE:**
-
-| Thought                                   | Why You're Wrong                                     |
-| ----------------------------------------- | ---------------------------------------------------- |
-| "This change is mobile-specific CSS"      | STOP - analyzing scope means you're rationalizing    |
-| "Desktop won't be affected technically"   | STOP - technical analysis is irrelevant to this rule |
-| "Desktop was approved before the change"  | STOP - timing doesn't matter                         |
-| "The CSS only targets mobile breakpoints" | STOP - CSS scope doesn't matter                      |
-| "It's just padding, not a layout change"  | STOP - change severity doesn't matter                |
-| "Only the changed viewport needs re-test" | STOP - you misunderstand the rule                    |
-
-**Self-Check Question**: Did you just analyze whether a code change will "affect" a viewport? **If yes, you are rationalizing.** The rule doesn't care about your analysis.
-
-**The Absolute Workflow Rule:**
-
-```
-if (ANY_code_changed_during_refinement) {
-    reset_BOTH_viewport_approvals();
-    require_re_test_for_BOTH_viewports();
-}
-```
-
-**There are ZERO exceptions based on:**
-
-- ❌ CSS specificity or targeting
-- ❌ Technical impact analysis
-- ❌ Change severity (padding vs layout)
-- ❌ Timing (before/after approval)
-- ❌ Developer judgment of scope
-- ❌ "Common sense" about what "should" affect what
-
-**This is a WORKFLOW rule, not a technical rule.** It exists to ensure comprehensive testing coverage regardless of what you think the technical impact is.
-
----
-
-**CRITICAL: Any code change during Refinement resets the OTHER viewport's approval!**
-
-- If Desktop is approved and you change code for Mobile → Desktop approval is reset
-- If Mobile is approved and you change code for Desktop → Mobile approval is reset
-- Both viewports must be re-tested after any code change
-
-**No exceptions. Ever.**
-
-**For Frontend Changes:**
-
-```
-1. User tests Desktop viewport
-2. User reports any issues
-3. [IF issues] → Delegate to debugger-lite/debugger → Delegate to fixer → Delegate to verifier
-4. [LOOP until Desktop approved]
-
-5. User tests Mobile viewport
-6. User reports any issues
-7. [IF issues] → Delegate to debugger-lite/debugger → Delegate to fixer → Delegate to verifier
-8. [LOOP until Mobile approved]
-
-9. Delegate to doc-updater (Haiku) to update tracking documents:
-   - Mark Refinement phase complete in STAGE-XXX-YYY.md
-   - Update stage status in epic's EPIC-XXX.md table (MANDATORY)
-   - Add regression items to epic's epics/EPIC-XXX/regression.md
-10. Main agent commits tracking files immediately:
-   - ONLY commit specific files: `git add epics/EPIC-XXX/STAGE-XXX-YYY.md epics/EPIC-XXX/EPIC-XXX.md epics/EPIC-XXX/regression.md`
-   - Commit message: "chore: complete STAGE-XXX-YYY Refinement phase"
-   - **NEVER use `git add -A`** - it picks up unrelated uncommitted files
-```
-
-**For Backend-Only Changes:**
-
-```
-1. Delegate to e2e-tester (Sonnet) to design and run API/integration tests
-2. [IF issues found] → Delegate to debugger-lite/debugger → Delegate to fixer → Delegate to verifier
-3. [LOOP until e2e-tester passes]
-4. Delegate to doc-updater (Haiku) to update tracking documents:
-   - Mark Refinement phase complete in STAGE-XXX-YYY.md
-   - Update stage status in epic's EPIC-XXX.md table (MANDATORY)
-   - Add regression items to epic's epics/EPIC-XXX/regression.md
-5. Main agent commits tracking files immediately:
-   - ONLY commit specific files: `git add epics/EPIC-XXX/STAGE-XXX-YYY.md epics/EPIC-XXX/EPIC-XXX.md epics/EPIC-XXX/regression.md`
-   - Commit message: "chore: complete STAGE-XXX-YYY Refinement phase"
-   - **NEVER use `git add -A`** - it picks up unrelated uncommitted files
-```
-
-**Determine frontend vs backend:**
-
-- Frontend: Any UI components, styles, user-facing changes
-- Backend: API changes, database, services, no UI impact
-
-### Finalize Phase (ALL via subagents)
-
-**CRITICAL: Every step in Finalize MUST be delegated to a subagent. Main agent coordinates only.**
-
-```
-1. Delegate to code-reviewer (Opus) for pre-test code review
-
-2. [Implement ALL review suggestions]
-   → Delegate to fixer (Haiku) or scribe (Haiku) as appropriate
-   ALL suggestions are mandatory regardless of severity
-
-3. [CONDITIONAL: Test writing]
-   IF tests were NOT written during Build phase:
-     → Delegate to test-writer (Sonnet) to write missing tests
-
-4. Delegate to tester (Haiku) to run all tests
-
-5. [CONDITIONAL: Second code review]
-   IF implementation code changed after step 2:
-     → Delegate to code-reviewer (Opus) for post-test review
-   ELSE (only tests added, no impl changes):
-     → Skip second review
-
-6. [CONDITIONAL: Documentation]
-   IF complex feature OR API OR public-facing:
-     → Delegate to doc-writer (Opus)
-   ELSE (simple internal change):
-     → Delegate to doc-writer-lite (Sonnet) OR skip if minimal
-
-7. Delegate to doc-updater (Haiku) to write to changelog/<date>.changelog.md
-8. Main agent creates implementation commit:
-   - ONLY add implementation files (code, tests, docs): `git add <specific files>`
-   - Include commit hash in message
-   - **NEVER use `git add -A`** - it picks up uncommitted tracking files
-9. Delegate to doc-updater (Haiku) to add commit hash to changelog entry
-10. Main agent commits changelog update:
-    - ONLY commit changelog: `git add changelog/<date>.changelog.md`
-    - Commit message: "chore: add commit hash to STAGE-XXX-YYY changelog"
-11. Delegate to doc-updater (Haiku) to update tracking documents:
-    - Mark Finalize phase complete in STAGE-XXX-YYY.md
-    - Update stage status to "Complete" in STAGE-XXX-YYY.md
-    - Update stage status in epic's EPIC-XXX.md table (MANDATORY - mark as Complete)
-    - Update epic "Current Stage" to next stage
-12. Main agent commits tracking files:
-    - ONLY commit tracking files: `git add epics/EPIC-XXX/STAGE-XXX-YYY.md epics/EPIC-XXX/EPIC-XXX.md`
-    - Commit message: "chore: mark STAGE-XXX-YYY Complete"
-    - **NEVER use `git add -A`** - it picks up unrelated uncommitted files
-
-Phase auto-completes when all steps done.
-```
+**Red Flags - STOP Before Calling Fixer**:
+
+- Instructions use words like "fix", "resolve", "handle" → Too vague
+- No specific line numbers provided → Too vague
+- No old text → new text provided → Too vague
+- Instructions mention "investigate", "check", or "verify" → Wrong role
 
 ---
 
 ## Error Handling Flow
-
-## Error Resolution Decision Tree
-
-```
-                    ┌─────────────┐
-                    │ Error Occurs│
-                    └──────┬──────┘
-                           │
-                    ┌──────▼──────┐
-                    │   Severity?  │
-                    └──────┬──────┘
-                           │
-        ┌──────────────────┼──────────────────┐
-        │                  │                  │
-  ┌─────▼─────┐  ┌─────────▼─────────┐  ┌────▼─────┐
-  │ Trivial   │  │     Medium        │  │   High   │
-  │  Low      │  │                   │  │          │
-  └─────┬─────┘  └─────────┬─────────┘  └────┬─────┘
-        │                  │                  │
-        │         ┌────────▼────────┐  ┌──────▼──────┐
-        │         │  debugger-lite  │  │  debugger   │
-        │         │    (Sonnet)     │  │   (Opus)    │
-        │         └────────┬────────┘  └──────┬──────┘
-        │                  │                  │
-        │         ┌────────▼──────────────────┘
-        │         │   Get Instructions        │
-        │         └────────┬──────────────────┘
-        │                  │
-        └──────────────────┼────────────────────┐
-                           │                    │
-                    ┌──────▼──────┐             │
-                    │    fixer    │◄────────────┘
-                    │   (Haiku)   │
-                    └──────┬──────┘
-                           │
-                    ┌──────▼──────┐
-                    │  Resolved   │
-                    └─────────────┘
-```
-
-**Key Points:**
-
-- Trivial/Low: Direct to fixer
-- Medium/High: Through diagnostic agent first
-- All paths converge at fixer for implementation
-
-When tests fail or errors occur, route by severity:
-
-```
-┌─────────────────────────────────────────────────────────┐
-│   Main Agent (Sonnet) ROUTES by severity (does not     │
-│                   analyze directly)                     │
-└─────────────────────────────────────────────────────────┘
-                          │
-         ┌────────────────┼────────────────┐
-         │                │                │
-    Simple Error     Medium Error     Complex Error
-    (import, typo,   (single-file     (multi-file,
-    type mismatch)   logic, clear     unclear cause)
-         │           stack trace)          │
-         ▼                │                ▼
-    fixer (Haiku)         ▼           debugger (Opus)
-    directly         debugger-lite         │
-                     (Sonnet)              ▼
-                          │           fixer (Haiku)
-                          ▼
-                     fixer (Haiku)
-```
 
 ### Error Severity Routing
 
@@ -806,122 +346,14 @@ When tests fail or errors occur, route by severity:
 - NEVER tell first agent to implement
 - NEVER expect second agent to diagnose
 
-### Fixer Retry Policy (ONE ATTEMPT ONLY)
+### Calling Debugger Agents
 
-**Critical rule**: Fixer gets exactly ONE attempt per instruction set.
-
-**Flow**:
-
-```
-1. Main agent calls fixer with explicit instructions
-2. Fixer applies changes and returns
-3. Main agent calls verifier/tester to check result
-4. If still failing → main agent escalates to debugger for NEW diagnosis
-5. Debugger provides NEW instructions → back to step 1
-```
-
-**What NOT to do**:
-
-- ❌ Call fixer multiple times with same instructions
-- ❌ Call fixer with "try again" or "fix it differently"
-- ❌ Let fixer iterate internally on failures
-
-**Why this matters**: Prevents wasted tokens on repeated failed attempts. Forces proper diagnosis before each fix attempt.
-
-**Legacy retry policy (for scribe only)**:
-
-- scribe gets ONE retry with error output
-- If still failing → escalate to debugger-lite or debugger
-- After debugger → fixer implements (not scribe)
-- If STILL failing → surface to user
-
----
-
-## Calling Debugger Agents (debugger-lite / debugger)
-
-### Correct Instructions Format
-
-When calling debugger-lite or debugger:
-
-✅ **CORRECT:**
+**CORRECT:**
 "Diagnose the root cause of [error]. Provide specific fix instructions that fixer agent can implement."
 
-❌ **INCORRECT:**
+**INCORRECT:**
 "Diagnose and fix [error]"
 "Fix this error"
-"Resolve this issue"
-
-### After Receiving Diagnostic
-
-1. Review the diagnostic agent's instructions
-2. Call fixer agent with those instructions:
-   "Implement the following fix: [diagnostic agent's instructions]"
-
-### Example Flow
-
-```
-Main → debugger-lite: "Diagnose ESLint error in tool-registry. Provide fix instructions."
-debugger-lite → Main: "Error caused by missing import. Fix: Add import statement at line 3."
-Main → fixer: "Implement fix: Add import statement at line 3 as specified."
-```
-
----
-
-## Common Mistakes (AVOID THESE)
-
-### ❌ Calling Fixer Directly for Medium/High Errors
-
-**Wrong:**
-
-```
-Medium error → fixer agent
-```
-
-**Right:**
-
-```
-Medium error → debugger-lite → fixer agent
-```
-
-### ❌ Telling Debugger to Implement
-
-**Wrong:**
-
-```
-debugger-lite: "Diagnose and fix this error"
-```
-
-**Right:**
-
-```
-debugger-lite: "Diagnose and provide fix instructions"
-fixer: "Implement these instructions: [...]"
-```
-
-### ❌ Repeating Same Agent Without Strategy Change
-
-**Wrong:**
-
-```
-fixer → fails
-fixer → fails
-fixer → fails
-```
-
-**Right:**
-
-```
-fixer → fails
-debugger-lite → diagnose why it failed
-fixer → implement diagnostic fix
-```
-
-### Why These Are Wrong
-
-1. **Skip diagnosis**: Leads to repeated failures
-2. **Mixed concerns**: Agents optimized for specific roles
-3. **Cost inefficiency**: Wrong agent for the task
-4. **Violated pipeline**: Each error severity has a defined flow
 
 ---
 
@@ -939,13 +371,149 @@ fixer → implement diagnostic fix
 
 ---
 
-## Key Rules
+## The `git add -A` Problem (CRITICAL)
 
-1. **Main agent coordinates, subagents execute** - Never do execution work directly
-2. **Update tracking docs via doc-updater subagent** - Never edit stage files or docs directly
-3. **All Finalize phase tasks use subagents** - code-reviewer, test-writer, tester, doc-writer, doc-updater
-4. **Delegate file operations** - Use scribe/fixer for code, doc-updater for docs
-5. **Delegate verification** - Use verifier for build/lint, tester for tests
+**Never use `git add -A`, `git add .`, or `git commit -a`**
+
+When doc-updater updates tracking files, it does NOT commit them. If tracking files remain uncommitted and a later stage uses `git add -A`, it picks up:
+
+- Changelog entries from previous stages
+- Stage files from previous stages
+- Epic files that should have been committed earlier
+
+**ALWAYS use specific file paths:**
+
+```bash
+# CORRECT - Tracking files
+git add epics/EPIC-XXX/STAGE-XXX-YYY.md epics/EPIC-XXX/EPIC-XXX.md
+
+# CORRECT - Changelog
+git add changelog/2026-01-13.changelog.md
+
+# WRONG - Picks up everything
+git add -A
+git add .
+```
+
+### Epic File Updates Are MANDATORY
+
+The epic file's stage table MUST be updated when a stage changes status. This is NOT optional.
+
+---
+
+## Exit Gate Error Handling
+
+If an exit gate step fails (e.g., journal skill fails due to disk error):
+
+1. Report the failure to the user with specific error details
+2. Ask user: Retry? Skip? Wait?
+3. If skipping, document in stage file: "Journal skipped due to [error]"
+4. Only proceed to next phase with user consent
+
+**Required steps** (blocking): Update stage file, Update epic file
+**Always-attempt steps** (skip only on system error with user consent): lessons-learned, journal
+
+If lessons-learned or journal fails due to system error (not by choice):
+
+1. Report error to user with specific details
+2. Ask: Retry? Skip? Wait for resolution?
+3. If skipping, document in stage file: "[Skill] skipped due to [error] on [date]"
+
+**Journal and lessons-learned are NEVER skipped by choice - only on system failure.**
+
+### Required Step Failures
+
+If stage file or epic file update fails:
+
+1. **Report failure with full error details** (disk space, permissions, file locks)
+2. **Retry ONCE** (transient errors may resolve)
+3. **If retry fails, present options:**
+   - Wait: User resolves issue (free disk space, fix permissions), then retry
+   - Manual update: User edits file manually, confirms when done
+   - Abort: Document incomplete exit, roll back phase state
+4. **NEVER proceed without required steps complete**
+
+**Why:** Stage/epic files are source of truth. Skipping breaks session independence and `/next_task` navigation.
+
+### Partial Exit Gate Completion
+
+If stage file updates but epic file update fails:
+
+1. **Retry epic file update** (most likely to succeed after stage file worked)
+2. **If retry fails:** User manually edits epic file stage table
+3. **Rollback option:** Revert stage file to previous phase status, re-run exit gate
+
+**Prevention:** doc-updater should update stage + epic in sequence (stage first, then epic). This makes forward recovery (retry epic) easier than rollback.
+
+### Concurrent Session Detection
+
+Before completing ANY phase exit gate:
+
+1. **Check git status** for unexpected changes:
+
+   ```bash
+   git status epics/EPIC-XXX/STAGE-XXX-YYY.md epics/EPIC-XXX/EPIC-XXX.md
+   ```
+
+2. **If files show "modified" but you haven't updated them yet:**
+   - Another session may have completed the phase
+   - Run: `git diff epics/EPIC-XXX/STAGE-XXX-YYY.md`
+   - Check if phase is already marked complete
+
+3. **Resolution:**
+   - Phase already complete: Inform user, do NOT duplicate work, exit gracefully
+   - Different phase complete: Pull changes, proceed with current phase
+   - Conflict detected: User must resolve manually
+
+**Prevention:** Sessions should coordinate via user. Tracking files should be committed immediately after phase completion.
+
+---
+
+## Session Protocols
+
+### Starting a Session
+
+1. Run `/next_task` to get assignment
+2. This skill loads automatically
+3. Invoke the appropriate phase skill based on current phase
+4. Begin phase-specific workflow
+
+### Refinement Phase State Interpretation
+
+- "Refinement: In Progress" → Invoke `phase-refinement` (REQUIRED even when resuming from previous session)
+- "Refinement: Complete (awaiting feedback)" → Wait for user feedback in main conversation, don't invoke any phase skill yet
+- "Refinement: Complete" (no note) + user approved → Invoke `phase-finalize`
+
+**CRITICAL:** Always invoke the phase skill when resuming a session. Do NOT rely on "memory" from previous session context. Phase skills may have been updated, and session independence requires fresh skill invocation every time.
+
+### Handling State Conflicts
+
+If task-navigator returns a different phase than stage file shows:
+
+1. **Report the conflict:** "Task-navigator says [X], but stage file shows [Y]"
+2. **Stage file is authoritative** - it contains the detailed phase completion status
+3. **Ask user:** "Which should I follow? (A) Stage file state, (B) Investigate discrepancy"
+4. **If stage file is corrupted:** Report specific inconsistency, ask user to manually fix
+
+### Corrupted or Malformed Stage Files
+
+If stage file has conflicting or invalid state:
+
+1. **Report specific inconsistency:**
+   - "Header says Status: Build but Build section shows [x] Complete"
+   - "Refinement shows Desktop: Approved but no approval note found"
+
+2. **Do NOT proceed with ambiguous state**
+
+3. **Ask user for resolution:**
+   - "Please check the stage file and confirm the correct current phase"
+   - "Once fixed, I'll re-read and continue"
+
+### Ending a Session
+
+1. Complete current phase's exit gate (includes lessons-learned and journal)
+2. State progress: "Completed [X], next session will [Y]"
+3. Note any blockers or decisions needed
 
 ---
 
@@ -957,150 +525,99 @@ fixer → implement diagnostic fix
 - "Nice to have" = "Must have"
 - Only skip if implementation would break functionality (document why)
 
----
+### User as Technical Reviewer
 
-## Session Protocols
+User's technical expertise does NOT exempt stages from code-reviewer agent:
 
-### Starting a Session
+- User reviewing code = additional quality layer (good)
+- Skipping code-reviewer because user reviewed = workflow violation (bad)
+- BOTH reviews happen: user's judgment + agent's automated checks
+- Findings may overlap (confirms quality)
+- Findings may differ (catches different issues)
 
-1. Run `/next_task` to get assignment
-2. This skill loads automatically
-3. Confirm current phase and goal with user
-4. Begin phase-specific workflow
+**User authority controls WHAT to build, not WHETHER to run quality gates.**
 
-### Ending a Session
+### Emergency Situations Do NOT Bypass Workflow
 
-1. Delegate to doc-updater to update tracking docs
-2. State progress: "Completed [X], next session will [Y]"
-3. Note any blockers or decisions needed
-4. Phase auto-advances when all gates complete
+**"Production is down" / "Critical hotfix" / "User has a deadline":**
 
----
+- Time pressure does NOT skip code-reviewer, verifier, or tester
+- Emergency is NOT an exception - it's a reason to be MORE careful
+- Fast is achieved through efficient subagent coordination, not skipping steps
 
-## Task Navigator Output Format
+**If genuinely time-critical:**
 
-When `/next_task` runs, expect this format:
+1. Run abbreviated workflow (code-reviewer can be quick for small changes)
+2. Document in stage file: "Emergency workflow - abbreviated review due to [reason]"
+3. Schedule follow-up full review if abbreviated
+4. User must explicitly consent to abbreviated workflow (consent does NOT allow skipping workflow entirely - only abbreviating)
 
-```
-═══════════════════════════════════════════════════════════
-NEXT TASK
-═══════════════════════════════════════════════════════════
-Epic:   EPIC-XXX [Name]
-Stage:  STAGE-XXX-YYY [Name]
-Phase:  [Design | Build | Refinement | Finalize]
+**Abbreviated Workflow Minimums (NEVER skip these - PER STAGE):**
 
-Instructions:
-[Phase-specific instructions]
+- code-reviewer subagent MUST run **per stage** (even if 30-second quick pass)
+- verifier MUST confirm build/type-check passes **per stage**
+- For logic changes: At least smoke test **per stage** (full suite can be deferred)
+- **Zero review per stage is NEVER okay, regardless of fix size**
 
-Seed data needed: [Yes - describe | No | Already agreed]
-═══════════════════════════════════════════════════════════
-```
+**Batched reviews across stages are NOT permitted:**
 
----
+- ❌ "One review for 5 hotfixes" → Each stage needs its own review
+- ❌ "Review them all together" → Each stage reviewed independently
+- ✅ "Run 5 abbreviated reviews in parallel" → Each stage gets its own fast review
 
-## Changelog Pattern
+**Why per-stage matters:** Each stage may introduce different issues. Batching hides which stage caused which problem and makes rollback harder.
 
-Agent writes to `changelog/<YYYY-MM-DD>.changelog.md`:
+**Time-critical with multiple stages?**
 
-- Multiple entries same day → PREPEND to same file
-- Include commit hash in entry
-- User runs `changelog/create_changelog.sh` to consolidate
+- Run abbreviated code-reviewer **per stage** (30 seconds each)
+- Run reviews **in parallel** to save time
+- Total: 5 stages × 30s = 2.5 minutes (parallel) vs 2.5 minutes (sequential but batched-unsafe)
 
----
+"Abbreviated" means **faster execution**, not **fewer steps**:
 
-## Regression Tracking
+- Spec: Bullet points acceptable (still required unless truly trivial per L5)
+- code-reviewer: Focus on critical issues only (still invoked)
+- Testing: Smoke tests instead of comprehensive (still run something)
 
-Each epic has its own regression file: `epics/EPIC-XXX/regression.md`
+**Explicit Consent Requirements:**
 
-- Only read/write regression for current epic
-- Add items during Refinement phase
+Before requesting emergency consent, agent MUST explain:
 
----
+> "Abbreviated workflow means: quick code-reviewer pass, verifier only, smoke tests. Full workflow is safer. Use abbreviated workflow for this fix?"
 
-## Phase Gates (Must Complete All)
+Vague statements do NOT count as consent:
 
-### Design Phase
+- ❌ "Do what you need to do"
+- ❌ "Just fix it ASAP"
+- ❌ "I trust you"
+- ✅ "Yes, use abbreviated workflow for this hotfix"
 
-- [ ] Task card received from task-navigator
-- [ ] Context gathered via Explore
-- [ ] IF multiple approaches: brainstormer presented 2-3 options, user selected one
-- [ ] IF obvious solution: Confirmed approach with user
-- [ ] Seed data requirements confirmed (if applicable)
-- [ ] Tracking documents updated via doc-updater:
-  - Selected approach recorded in stage file
-  - Design phase marked complete
-  - Epic stage status updated (MANDATORY)
-- [ ] Tracking files committed immediately with specific git add (NO git add -A)
-- [ ] Invoke self-reflection skill
+**Rationalizations that don't work:**
 
-### Build Phase
-
-- [ ] Implementation spec created (planner OR planner-lite OR direct for trivial)
-- [ ] Code written via scribe
-- [ ] Seed data added (if agreed in Design)
-- [ ] Placeholder stubs added for related future features
-- [ ] Dev server verified working
-- [ ] Verification passed (verifier + tester in parallel)
-- [ ] Tracking documents updated via doc-updater:
-  - Build phase marked complete in stage file
-  - Epic stage status updated (MANDATORY)
-- [ ] Tracking files committed immediately with specific git add (NO git add -A)
-- [ ] Invoke self-reflection skill
-
-### Refinement Phase (Frontend)
-
-- [ ] Desktop tested and approved by user
-- [ ] Mobile tested and approved by user
-- [ ] **Remember**: Code changes reset OTHER viewport's approval
-- [ ] Tracking documents updated via doc-updater:
-  - Refinement phase marked complete in stage file
-  - Epic stage status updated (MANDATORY)
-  - Regression items added to epic's regression.md
-- [ ] Tracking files committed immediately with specific git add (NO git add -A)
-- [ ] Invoke self-reflection skill
-
-### Refinement Phase (Backend-Only)
-
-- [ ] e2e-tester designed and ran API/integration tests
-- [ ] All scenarios passed (or issues fixed via debugger → fixer)
-- [ ] Tracking documents updated via doc-updater:
-  - Refinement phase marked complete in stage file
-  - Epic stage status updated (MANDATORY)
-  - Regression items added to epic's regression.md
-- [ ] Tracking files committed immediately with specific git add (NO git add -A)
-- [ ] Invoke self-reflection skill
-
-### Finalize Phase
-
-- [ ] code-reviewer (Opus) completed pre-test review
-- [ ] ALL review suggestions implemented via fixer/scribe
-- [ ] IF tests not written in Build: test-writer created tests
-- [ ] tester ran all tests - passing
-- [ ] IF impl code changed after first review: code-reviewer ran post-test review
-- [ ] Documentation created (doc-writer OR doc-writer-lite based on complexity)
-- [ ] Changelog entry added via doc-updater
-- [ ] Implementation commit created with SPECIFIC file paths (NO git add -A)
-- [ ] Commit hash added to changelog via doc-updater
-- [ ] Changelog committed immediately (ONLY changelog file)
-- [ ] Tracking documents updated via doc-updater:
-  - Finalize phase marked complete in stage file
-  - Stage status set to "Complete"
-  - Epic stage status updated to "Complete" (MANDATORY)
-  - Epic "Current Stage" updated to next stage
-- [ ] Tracking files committed immediately with specific git add (NO git add -A)
-- [ ] Invoke self-reflection skill
+- "Production is broken" → Broken prod + buggy fix = worse
+- "User needs it in 5 minutes" → Skipped review takes longer to fix later
+- "Code-reviewer will take too long" → Code-reviewer is usually 2-3 minutes
+- "This is different, it's urgent" → Urgency increases error likelihood
+- "User said 'do whatever'" → Vague consent ≠ explicit consent
 
 ---
 
 ## Common Rationalizations (Don't Fall For These)
 
-| Excuse                                     | Reality                                            | Correct Action                                       |
-| ------------------------------------------ | -------------------------------------------------- | ---------------------------------------------------- |
-| "This is simple, skip Design"              | Simple tasks become complex; Design catches this   | Present 2-3 options even for "simple" stages         |
-| "User wants to skip formality"             | Explicit skips must be documented                  | Document in stage: "Skipped by user [reason] [date]" |
-| "Just want to see it working"              | Build already provides working implementation      | Refinement is for feedback, not skipping tests       |
-| "Documentation overhead isn't worth it"    | Tracking docs enable session independence          | Update docs via doc-updater after every phase        |
-| "I already explored, can generate options" | Coordination ≠ architecture; use specialized agent | Delegate to brainstormer (Opus) for options          |
+| Excuse                                             | Reality                                                 | Correct Action                                       |
+| -------------------------------------------------- | ------------------------------------------------------- | ---------------------------------------------------- |
+| "This is simple, skip Design"                      | Simple tasks become complex; Design catches this        | Present 2-3 options even for "simple" stages         |
+| "User wants to skip formality"                     | Explicit skips must be documented                       | Document in stage: "Skipped by user [reason] [date]" |
+| "Just want to see it working"                      | Build already provides working implementation           | Refinement is for feedback, not skipping tests       |
+| "Documentation overhead isn't worth it"            | Tracking docs enable session independence               | Update docs via doc-updater after every phase        |
+| "I already explored, can generate options"         | Coordination ≠ architecture; use specialized agent      | Delegate to brainstormer (Opus) for options          |
+| "User said skip code review"                       | User controls WHAT to build, not quality process        | Run code-reviewer, explain findings to user          |
+| "Senior dev reviewed verbally"                     | External reviews complement, don't replace, agents      | Run code-reviewer agent for automated check          |
+| "User prefers git add -A"                          | User preference doesn't override safety rules           | Use specific paths, explain why                      |
+| "User tested it themselves"                        | User testing is Refinement, agent testing is Build      | Run tester agent for automated verification          |
+| "User is technical expert, reviewed it themselves" | User expertise complements agents, doesn't replace them | Run code-reviewer, share findings with expert user   |
+| "User has more experience than me"                 | Workflow exists for consistency, not hierarchy          | Run code-reviewer regardless of user expertise       |
+| "User is paying for this time"                     | User pays for quality process, not shortcuts            | Explain code-reviewer value, run it anyway           |
 
 ---
 
@@ -1114,75 +631,11 @@ Signs you're skipping the workflow:
 - Using Opus agents when Haiku would suffice
 - Running operations sequentially that could be parallel
 - Skipping code review suggestions
-- Not using conditional routing (always using Opus planner for simple tasks)
 - Editing files directly instead of delegating to scribe/fixer/doc-updater
 - Reading code files directly instead of using Explore or having subagent read
 - Running build/test commands directly instead of delegating to verifier/tester
 - Updating stage docs yourself instead of using doc-updater subagent
 - **Using `git add -A` or `git add .` instead of specific file paths**
 - **Forgetting to update epic file** when stage completes
-- **Not committing tracking files immediately** after doc-updater updates them
-
----
-
-## The `git add -A` Problem (CRITICAL)
-
-**Never use `git add -A`, `git add .`, or `git commit -a`**
-
-### Why This Causes Bugs
-
-When doc-updater updates tracking files, it does NOT commit them. If tracking files remain uncommitted and a later stage uses `git add -A`, it picks up:
-
-- Changelog entries from previous stages
-- Stage files from previous stages
-- Epic files that should have been committed earlier
-- Any other uncommitted files in the repo
-
-**Example from STAGE-007-003:**
-
-- STAGE-007-001 and 002 left tracking files uncommitted
-- STAGE-007-003 used `git add -A` for its implementation commit
-- Result: STAGE-007-003 commit included EPIC-006 files and STAGE-007-001/002 tracking files
-
-### The Fix
-
-**ALWAYS use specific file paths:**
-
-```bash
-# ✅ CORRECT - Tracking files
-git add epics/EPIC-XXX/STAGE-XXX-YYY.md epics/EPIC-XXX/EPIC-XXX.md
-
-# ✅ CORRECT - Changelog
-git add changelog/2026-01-13.changelog.md
-
-# ✅ CORRECT - Implementation files (list each one)
-git add packages/llm/src/file1.ts packages/llm/src/file2.ts docs/guide.md
-
-# ❌ WRONG - Picks up everything
-git add -A
-git add .
-git commit -a
-```
-
-### Commit Immediately After doc-updater
-
-**Every doc-updater call must be followed by an immediate commit:**
-
-```
-1. Delegate to doc-updater
-2. Main agent commits ONLY those specific files
-3. Continue with next step
-```
-
-**Never batch commits.** Commit tracking files separately from implementation files.
-
-### Epic File Updates Are MANDATORY
-
-The epic file's stage table MUST be updated when a stage changes status. This is NOT optional ("if needed").
-
-**Every stage completion requires:**
-
-1. Update stage status in STAGE-XXX-YYY.md
-2. Update stage status in EPIC-XXX.md table (same status)
-3. Update epic "Current Stage" field
-4. Commit both files immediately
+- **Not invoking phase skill** after loading this orchestrator
+- **Skipping exit gate** (lessons-learned and journal) at phase end

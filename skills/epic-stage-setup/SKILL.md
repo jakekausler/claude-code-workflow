@@ -46,10 +46,28 @@ Epic (Feature)
 When invoked for a new project:
 
 1. Creates `epics/` directory for epic/stage tracking documents
-2. Creates `docs/REGRESSION-CHECKLIST.md` for responsive testing checklist
-3. Creates `.fpf/` directory structure for First Principles Framework decisions
-4. Adds workflow documentation to project CLAUDE.md (from TEMPLATES.md)
-5. Creates `.fpf/context.md` with FPF-specific fields (scale, SLAs, constraints)
+2. Creates per-epic `regression.md` files for responsive testing checklists
+3. Adds workflow documentation to project CLAUDE.md (from templates below)
+4. Creates `changelog/` directory with consolidation script
+
+### Directory Structure
+
+```
+epics/
+├── EPIC-001-feature-name/
+│   ├── EPIC-001.md
+│   ├── STAGE-001-001.md
+│   ├── STAGE-001-002.md
+│   └── regression.md        # Per-epic regression checklist
+├── EPIC-002-another-feature/
+│   ├── EPIC-002.md
+│   └── regression.md
+└── ...
+
+changelog/
+├── create_changelog.sh     # Script to consolidate entries
+└── .gitkeep               # Keeps directory in git
+```
 
 ---
 
@@ -58,7 +76,6 @@ When invoked for a new project:
 Tell user:
 
 - Use `/next_task` to check current work
-- Use `/finish_phase` to advance phases
 - Use `/epic-stats` to see overall progress
 - Create first epic: `epics/EPIC-001-name/EPIC-001.md`
 
@@ -183,10 +200,10 @@ Add these sections to a project's CLAUDE.md when bootstrapping:
 
 Each stage goes through 4 phases, typically each in a separate session:
 
-1. DESIGN PHASE → Present options, user picks, confirm seed data
-2. BUILD PHASE → Implement, add seed data, add placeholders
-3. REFINEMENT PHASE → Dual sign-off (Desktop AND Mobile approval)
-4. FINALIZE PHASE → Tests, review, docs, commit (all via subagents)
+1. DESIGN PHASE - Present options, user picks, confirm seed data
+2. BUILD PHASE - Implement, add seed data, add placeholders
+3. REFINEMENT PHASE - Dual sign-off (Desktop AND Mobile approval)
+4. FINALIZE PHASE - Tests, review, docs, commit (all via subagents)
 ```
 
 ### Commands Section
@@ -194,11 +211,10 @@ Each stage goes through 4 phases, typically each in a separate session:
 ```markdown
 ## Commands
 
-| Command         | Purpose                                         |
-| --------------- | ----------------------------------------------- |
-| `/next_task`    | Find next work by scanning epic/stage hierarchy |
-| `/finish_phase` | Mark current phase complete and advance         |
-| `/epic-stats`   | Calculate progress across epics                 |
+| Command       | Purpose                                         |
+| ------------- | ----------------------------------------------- |
+| `/next_task`  | Find next work by scanning epic/stage hierarchy |
+| `/epic-stats` | Calculate progress across epics                 |
 ```
 
 ### Stage Tracking Section
@@ -228,78 +244,77 @@ epics/EPIC-XXX-name/STAGE-XXX-YYY.md
 
 ## Regression Checklist Template
 
-Create at `docs/REGRESSION-CHECKLIST.md`:
+Create per-epic regression files at `epics/EPIC-XXX-name/regression.md`:
 
 ```markdown
-# Regression Checklist
+# Regression Checklist - EPIC-XXX: [Name]
 
 Items to verify after each deployment. Format: `[D]` = desktop, `[M]` = mobile, `[D][M]` = both.
 
-## EPIC-001: [Name]
+## STAGE-XXX-001: [Stage Name]
 
-- [ ] [EPIC-001] [D][M] Description (STAGE-001-001)
+- [ ] [D][M] Description of item to check
+
+## STAGE-XXX-002: [Stage Name]
+
+- [ ] [D][M] Description of item to check
 ```
 
 ---
 
-## FPF Directory Structure
+## Changelog Pattern
 
-Create `.fpf/` directory with:
+Agents write entries to date-based files in `changelog/` directory:
+
+**File pattern**: `changelog/<YYYY-MM-DD>.changelog.md`
+
+**Entry format**:
 
 ```
-.fpf/
-  context.md          # Project context for FPF decisions
-  decisions/          # DRR (Decision Record with Rationale) files
+## [STAGE-XXX-YYY] Stage Name
+
+- Description of what was done
+- Commit: `<hash>`
 ```
 
-### context.md Template
+**Rules**:
 
-```markdown
-# FPF Context
+- Multiple entries on same day - PREPEND to same file (newest at top)
+- Always include commit hash after committing
+- User runs `./changelog/create_changelog.sh` to consolidate into CHANGELOG.md
 
-## Project Scale
+### create_changelog.sh Template
 
-- Expected users:
-- Data volume:
-- Performance SLAs:
+```bash
+#!/bin/bash
+# Consolidates changelog entries into CHANGELOG.md
+# Run from project root: ./changelog/create_changelog.sh
 
-## Technical Constraints
+set -e
 
-- [List constraints]
+CHANGELOG_DIR="changelog"
+OUTPUT_FILE="CHANGELOG.md"
 
-## Non-Negotiables
+# Create or clear the output file with header
+cat > "$OUTPUT_FILE" << 'EOF'
+# Changelog
 
-- [List requirements that cannot be compromised]
+All notable changes to this project are documented here.
+
+EOF
+
+# Process changelog files in reverse chronological order
+for file in $(ls -r "$CHANGELOG_DIR"/*.changelog.md 2>/dev/null); do
+    if [ -f "$file" ]; then
+        date=$(basename "$file" .changelog.md)
+        echo "## $date" >> "$OUTPUT_FILE"
+        echo "" >> "$OUTPUT_FILE"
+        cat "$file" >> "$OUTPUT_FILE"
+        echo "" >> "$OUTPUT_FILE"
+    fi
+done
+
+echo "CHANGELOG.md updated from $CHANGELOG_DIR entries"
 ```
 
 ---
-
-## CHANGELOG Format
-
-```
-YYYY-MM-DD HH:MM [commit-hash] Epic/Stage: brief description
-```
-
-Examples:
-
-```
-2025-01-15 14:32 [abc1234] EPIC-001/STAGE-001-002: Campaign selector - chose modal over dropdown
-2025-01-15 15:45 [def5678] EPIC-001/STAGE-001-002: User requested larger cards
-2025-01-15 16:20 [ghi9012] EPIC-001/STAGE-001-002: Finalize - tests passing, docs updated
-```
-
----
-
-## FPF Decision Summary Format
-
-When an FPF (First Principles Framework) cycle completes, add this summary to the stage doc:
-
-```markdown
-### Architectural Decision: [Topic]
-
-- **FPF Cycle**: [DRR-YYYY-MM-DD-topic](.fpf/decisions/DRR-YYYY-MM-DD-topic.md)
-- **Decision**: [Brief description]
-- **Weakest Link**: [Factor] ([score])
-- **Bounded Validity**: Re-evaluate if [triggers]
-- **Rejected**: [List of rejected approaches with brief reasons]
-```

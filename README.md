@@ -36,10 +36,15 @@ This repository contains a proven workflow system that transforms Claude Code fr
 ├── hooks/                                 # Lifecycle hooks
 │   └── claude_prompt_enhancer.sh          # Inject context into prompts
 ├── settings.json.example                  # Claude Code settings template
-└── skills/                                # Custom skills
-    └── creating-epics-and-stages/         # Epic/stage creation skill
-        ├── SKILL.md                       # Skill implementation
-        └── TEMPLATES.md                   # Epic and stage templates
+└── skills/                                # Custom skills (8 total)
+    ├── epic-stage-setup/                  # Create new epics and stages
+    ├── epic-stage-workflow/               # Main workflow coordinator (orchestrator)
+    ├── phase-design/                      # Design phase guidance
+    ├── phase-build/                       # Build phase guidance
+    ├── phase-refinement/                  # Refinement phase guidance
+    ├── phase-finalize/                    # Finalize phase guidance
+    ├── journal/                           # Emotional reflection after phases
+    └── lessons-learned/                   # Structured learning capture
 ```
 
 ## Quick Start
@@ -98,13 +103,14 @@ echo "test prompt" | ~/.claude/hooks/claude_prompt_enhancer.sh
 
 ### 4. Create Your First Epic
 
-Use the `creating-epics-and-stages` skill to structure your work:
+Use the `epic-stage-setup` skill to structure your work:
 
 ```
-Use the creating-epics-and-stages skill to create a new epic for building a REST API
+Use the epic-stage-setup skill to create a new epic for building a REST API
 ```
 
 Claude will guide you through:
+
 1. Defining the epic scope and goals
 2. Breaking it into stages (3-5 stages recommended)
 3. Creating tracking documents in `epics/EPIC-XXX/`
@@ -114,6 +120,7 @@ Claude will guide you through:
 ### CLAUDE.md - Global Development Guidelines
 
 The heart of the system. Contains:
+
 - **Philosophy**: Core beliefs (incremental progress, learning from code, pragmatism)
 - **Process**: Planning, implementation flow, what to do when stuck
 - **Technical Standards**: Architecture, code quality, error handling
@@ -125,14 +132,18 @@ The heart of the system. Contains:
 ### Commands
 
 #### `/next_task`
+
 Scans your `epics/` directory to find the next work item:
+
 - Identifies current epic and stage
 - Shows current phase
 - Provides phase-specific instructions
 - Run this at the start of every session
 
 #### `/finish_phase`
+
 Advances to the next phase or stage:
+
 - Validates phase completion
 - Updates tracking documents
 - Shows what's next
@@ -143,7 +154,9 @@ Advances to the next phase or stage:
 Specialized subagents handle specific workflow tasks. These are invoked using the Task tool and provide focused capabilities:
 
 #### `task-navigator`
+
 Powers the `/next_task` command to navigate the task hierarchy:
+
 - Scans epic/stage tracking documents
 - Finds the next incomplete work item
 - Determines current phase (Design, Build, Refinement, Finalize)
@@ -153,7 +166,9 @@ Powers the `/next_task` command to navigate the task hierarchy:
 The task-navigator is the foundation of multi-session work, restoring context at the start of each session.
 
 #### `code-reviewer`
+
 Expert code review before commits:
+
 - Reviews code changes for best practices and quality
 - Checks for security vulnerabilities (SQL injection, XSS, secrets)
 - Identifies performance issues (N+1 queries, memory leaks)
@@ -164,7 +179,9 @@ Expert code review before commits:
 Use before every commit to maintain code quality.
 
 #### `doc-updater`
+
 Updates tracking documents and project documentation:
+
 - Records design decisions and rationale
 - Marks tasks and phases as complete
 - Updates status fields
@@ -175,7 +192,9 @@ Updates tracking documents and project documentation:
 Preserves context across sessions by keeping documentation current.
 
 #### `typescript-fixer`
+
 Fixes TypeScript compilation and ESLint errors:
+
 - Resolves type mismatches and inference issues
 - Fixes import/export and module resolution problems
 - Handles strict mode violations
@@ -186,7 +205,9 @@ Fixes TypeScript compilation and ESLint errors:
 Use when TypeScript or ESLint errors block progress.
 
 #### `typescript-tester`
+
 Runs and debugs tests following TDD principles:
+
 - Executes test suites and captures failures
 - Analyzes test failures to understand expected behavior
 - Fixes code to match test expectations (not the other way around)
@@ -197,17 +218,89 @@ Critical principle: When tests fail, fix the code, not the tests.
 
 ### Skills
 
-#### `creating-epics-and-stages`
-Interactive skill for creating epic/stage structures:
-- Guides you through epic definition
+Claude Code skills are interactive workflows that guide specific tasks. This workflow includes **8 specialized skills**:
+
+#### Epic and Stage Management
+
+##### `epic-stage-setup`
+
+Creates new epic/stage structures:
+
+- Guides epic definition and scope
 - Creates properly formatted tracking documents
-- Includes templates for all required sections
-- Supports Design → Build → Refinement → Finalize phases
+- Bootstraps the project hierarchy
+- **Use when**: Starting a new project or feature area
+
+##### `epic-stage-workflow`
+
+Core workflow orchestrator:
+
+- Coordinates Design → Build → Refinement → Finalize flow
+- Automatically invoked after `/next_task`
+- Routes to appropriate phase skill
+- Contains shared rules for all phases
+- **Use when**: Working on existing epics/stages
+
+#### Phase-Specific Skills
+
+Each phase has a dedicated skill with specialized guidance:
+
+##### `phase-design`
+
+- Explores requirements and constraints
+- Facilitates A/B/C option generation
+- Documents design decisions and user preferences
+- Sets success criteria
+
+##### `phase-build`
+
+- Structures implementation with spec-first workflow
+- Coordinates planner → scribe → verifier pipeline
+- Enforces TDD patterns
+- Manages subagent delegation
+
+##### `phase-refinement`
+
+- Facilitates user testing across viewports
+- Manages approval workflow with retraction handling
+- Documents issues and resolutions
+- Enforces viewport reset rules on code changes
+
+##### `phase-finalize`
+
+- Orchestrates pre/post-test code review
+- Validates test coverage
+- Coordinates documentation updates
+- Manages git commit workflow
+
+#### Reflection Skills (Phase Exit Gates)
+
+##### `journal`
+
+Emotional reflection after phase completion:
+
+- **Always invoked** after every phase (mandatory)
+- Captures candid feelings about the work
+- Provides emotional closure
+- Focus: "How did that feel?"
+
+##### `lessons-learned`
+
+Structured learning capture:
+
+- Invoked when something **noteworthy** happened
+- Documents technical insights and gotchas
+- Captures actionable improvements
+- Focus: "What did I learn?"
+
+**Key distinction**: Journal is emotional and always runs. Lessons-learned is technical and conditional.
 
 ### Hooks
 
 #### `claude_prompt_enhancer.sh`
+
 Automatically injects CLAUDE.md into every user prompt:
+
 - Runs on `UserPromptSubmit` lifecycle event
 - Ensures consistent behavior across sessions
 - Provides context about subagent permissions
@@ -218,21 +311,27 @@ Automatically injects CLAUDE.md into every user prompt:
 ### The Complete Workflow
 
 1. **Start with Brainstorming** (optional but recommended)
+
    ```
    I want to build a user authentication system
    ```
+
    Claude will help refine your idea before implementation.
 
 2. **Create Epic and Stages**
+
    ```
-   Use the creating-epics-and-stages skill to create an epic for user authentication
+   Use the epic-stage-setup skill to create an epic for user authentication
    ```
+
    Define 3-5 stages that break down the work.
 
 3. **Begin Each Session with `/next_task`**
+
    ```
    /next_task
    ```
+
    Claude will tell you exactly what to work on and what phase you're in. This command uses the `task-navigator` agent to scan your epic/stage tracking documents and restore session context.
 
 4. **Work Through Phases**
@@ -246,9 +345,11 @@ Automatically injects CLAUDE.md into every user prompt:
    **Finalize Phase**: Code review, tests, documentation, commit
 
 5. **Complete Phase with `/finish_phase`**
+
    ```
    /finish_phase
    ```
+
    Updates tracking documents and advances to next phase.
 
 6. **Repeat Until Epic Complete**
@@ -259,12 +360,14 @@ Automatically injects CLAUDE.md into every user prompt:
 For complex tasks, the main agent coordinates while specialized subagents execute:
 
 **Main Agent (Coordinator)**:
+
 - Communicates with you
 - Plans strategy
 - Presents options
 - Runs navigation commands (`/next_task`, `/finish_phase`)
 
 **Specialized Subagents (Executors)**:
+
 - `task-navigator`: Navigates task hierarchy and restores session context
 - `code-reviewer`: Reviews code for quality and security before commits
 - `doc-updater`: Updates tracking documents and CHANGELOG
@@ -276,14 +379,53 @@ This separation keeps the main conversation focused while distributing complex w
 ### Multi-Session Work
 
 The epic/stage system preserves context across sessions:
+
 - Each session starts with `/next_task` to restore context
 - Each session ends with `/finish_phase` to checkpoint progress
 - Tracking documents maintain state between sessions
 - CLAUDE.md ensures consistent behavior
 
+### Battle-Tested Reliability
+
+This workflow has been stress-tested across **6 intensive sessions**, with **59 loopholes identified and fixed**. Key areas hardened:
+
+- **Authority hierarchy**: Clear Level 1 (user) vs Level 2 (workflow integrity) boundaries
+- **Approval lifecycle**: Handling of retractions, batch approvals, conditional approvals
+- **Spec requirements**: "Almost done" is not an exception - specs required at any completion %
+- **Cross-session state**: Mandatory git checks before trusting previous approvals
+- **Per-stage reviews**: Batched reviews across stages explicitly prohibited
+
+The skills are designed to resist rationalization and guide correct behavior even under pressure.
+
+## Skill Invocation Patterns
+
+| Skill                 | Trigger                     | Purpose                     |
+| --------------------- | --------------------------- | --------------------------- |
+| `epic-stage-setup`    | User requests epic creation | Bootstrap project structure |
+| `epic-stage-workflow` | `/next_task` finds work     | Coordinate phase workflow   |
+| `phase-design`        | Entering Design phase       | Guide requirements/options  |
+| `phase-build`         | Entering Build phase        | Guide implementation        |
+| `phase-refinement`    | Entering Refinement phase   | Guide user testing          |
+| `phase-finalize`      | Entering Finalize phase     | Guide review/commit         |
+| `journal`             | After **every** phase       | Emotional reflection        |
+| `lessons-learned`     | After **noteworthy** phases | Capture learnings           |
+
+### Workflow Sequence
+
+```
+/next_task → task-navigator → epic-stage-workflow → phase-* skill
+                                                          ↓
+                                              Phase completion
+                                                          ↓
+                                              journal (always) + lessons-learned (if applicable)
+                                                          ↓
+                                              /finish_phase → next phase
+```
+
 ## Examples
 
 See the `examples/epics/EPIC-001/` directory for a complete example:
+
 - EPIC-001.md: Epic overview with all stages listed
 - STAGE-001-002.md: Example stage with all four phases
 
@@ -298,18 +440,23 @@ The key configuration is the `UserPromptSubmit` hook that enables automatic prom
 ```json
 {
   "hooks": {
-    "UserPromptSubmit": [{
-      "matcher": "",
-      "hooks": [{
-        "type": "command",
-        "command": "~/.claude/hooks/claude_prompt_enhancer.sh"
-      }]
-    }]
+    "UserPromptSubmit": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/claude_prompt_enhancer.sh"
+          }
+        ]
+      }
+    ]
   }
 }
 ```
 
 This hook:
+
 - Runs automatically when you submit a prompt
 - Injects your CLAUDE.md guidelines into every prompt
 - Ensures consistent behavior across sessions
@@ -330,6 +477,7 @@ For additional Claude Code settings (models, permissions, plugins, etc.), see th
 ### Structuring Stages
 
 Good stage breakdown:
+
 - STAGE-001-001: Project setup and scaffolding
 - STAGE-001-002: Core domain logic (TDD)
 - STAGE-001-003: API/CLI interface
@@ -346,6 +494,7 @@ Good stage breakdown:
 ### Quality Gates
 
 Never skip phases:
+
 - **Design** ensures you build the right thing
 - **Build** gets it working
 - **Refinement** makes it work well
@@ -356,6 +505,7 @@ Never skip phases:
 ### Hooks Not Running
 
 Check hook permissions:
+
 ```bash
 ls -la ~/.claude/hooks/
 chmod +x ~/.claude/hooks/*.sh
@@ -364,6 +514,7 @@ chmod +x ~/.claude/hooks/*.sh
 ### Commands Not Available
 
 Verify commands are installed:
+
 ```bash
 ls -la ~/.claude/commands/
 ```
@@ -373,6 +524,7 @@ Restart Claude Code after copying commands.
 ### CLAUDE.md Not Applied
 
 Check that:
+
 1. The prompt enhancer hook is configured in `~/.claude/settings.json`
 2. The hook script exists and is executable: `~/.claude/hooks/claude_prompt_enhancer.sh`
 3. Restart Claude Code after making settings changes
@@ -396,6 +548,7 @@ This workflow is built on core beliefs:
 - **Clear intent over clever code**: Be boring and obvious
 
 The goal is to enable Claude to work autonomously while maintaining:
+
 - Clear communication
 - Consistent quality
 - Traceable decisions
@@ -411,6 +564,7 @@ This workflow system is open for contributions:
 4. Submit a pull request
 
 Areas for contribution:
+
 - Additional slash commands
 - More skills for common workflows
 - Enhanced hook scripts
@@ -424,6 +578,7 @@ MIT License - see LICENSE file for details.
 ## Acknowledgments
 
 Built on patterns from:
+
 - The Superpowers plugin by obra
 - The Claude Code community
 - Years of software development best practices
