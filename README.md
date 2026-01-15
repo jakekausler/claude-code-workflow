@@ -6,11 +6,11 @@ A complete workflow system for Claude Code that enables structured autonomy thro
 
 This repository contains a proven workflow system that transforms Claude Code from a powerful assistant into a structured autonomous development partner. It provides:
 
-- **Phase-based development**: Design → Build → Refinement → Finalize
+- **Phase-based development**: Design -> Build -> Refinement -> Finalize
 - **Epic/Stage tracking**: Multi-session work with clear milestones
 - **Subagent delegation**: Context management for complex tasks
 - **Prompt injection**: Consistent behavior through global guidelines
-- **Navigation commands**: `/next_task` and `/finish_phase` for workflow control
+- **Navigation commands**: `/next_task` for workflow control
 - **Hook system**: Automatic prompt enhancement with CLAUDE.md
 
 ## Repository Structure
@@ -19,14 +19,24 @@ This repository contains a proven workflow system that transforms Claude Code fr
 .
 ├── CLAUDE.md                              # Global development guidelines
 ├── README.md                              # This file
-├── agents/                                # Specialized subagents
-│   ├── code-reviewer.md                   # Code review before commits
-│   ├── doc-updater.md                     # Documentation and tracking updates
-│   ├── task-navigator.md                  # Task hierarchy navigation (powers /next_task)
-│   ├── typescript-fixer.md                # TypeScript and ESLint error fixing
-│   └── typescript-tester.md               # Test running and debugging
+├── agents/                                # Specialized subagents (16 total)
+│   ├── brainstormer.md                    # Generate architecture options (Opus)
+│   ├── code-reviewer.md                   # Code review before commits (Opus)
+│   ├── debugger.md                        # Complex multi-file bug analysis (Opus)
+│   ├── debugger-lite.md                   # Medium-complexity error analysis (Sonnet)
+│   ├── doc-updater.md                     # Documentation and tracking updates (Haiku)
+│   ├── doc-writer.md                      # Comprehensive documentation (Opus)
+│   ├── doc-writer-lite.md                 # Simple documentation (Sonnet)
+│   ├── e2e-tester.md                      # Backend E2E test scenarios (Sonnet)
+│   ├── fixer.md                           # Apply fix instructions (Haiku)
+│   ├── planner.md                         # Complex implementation specs (Opus)
+│   ├── planner-lite.md                    # Simple implementation specs (Sonnet)
+│   ├── scribe.md                          # Write code from specs (Haiku)
+│   ├── task-navigator.md                  # Task hierarchy navigation
+│   ├── test-writer.md                     # Write tests for existing code (Sonnet)
+│   ├── tester.md                          # Run test suites (Haiku)
+│   └── verifier.md                        # Run build/type-check/lint (Haiku)
 ├── commands/                              # Slash commands for workflow navigation
-│   ├── finish_phase.md                    # Complete current phase and advance
 │   └── next_task.md                       # Find next task to work on
 ├── examples/                              # Example configurations
 │   ├── epics/
@@ -34,6 +44,7 @@ This repository contains a proven workflow system that transforms Claude Code fr
 │   │       ├── EPIC-001.md                # Epic overview and stages
 │   │       └── STAGE-001-002.md           # Example stage with phases
 │   └── hooks/                             # Hook examples
+│       ├── README.md                      # Hook documentation
 │       ├── claude_ready.sh                # Home Assistant notification hook (sanitized)
 │       └── settings-hooks-example.json    # Complete hooks configuration
 ├── hooks/                                 # Lifecycle hooks
@@ -42,12 +53,12 @@ This repository contains a proven workflow system that transforms Claude Code fr
 └── skills/                                # Custom skills (8 total)
     ├── epic-stage-setup/                  # Create new epics and stages
     ├── epic-stage-workflow/               # Main workflow coordinator (orchestrator)
-    ├── phase-design/                      # Design phase guidance
-    ├── phase-build/                       # Build phase guidance
-    ├── phase-refinement/                  # Refinement phase guidance
-    ├── phase-finalize/                    # Finalize phase guidance
     ├── journal/                           # Emotional reflection after phases
-    └── lessons-learned/                   # Structured learning capture
+    ├── lessons-learned/                   # Structured learning capture
+    ├── phase-build/                       # Build phase guidance
+    ├── phase-design/                      # Design phase guidance
+    ├── phase-finalize/                    # Finalize phase guidance
+    └── phase-refinement/                  # Refinement phase guidance
 ```
 
 ## Quick Start
@@ -148,7 +159,7 @@ The heart of the system. Contains:
 - **Technical Standards**: Architecture, code quality, error handling
 - **Subagent Delegation**: How to coordinate work across multiple agents
 - **Session Protocols**: Starting and ending sessions consistently
-- **Phase-Based Workflow**: Design → Build → Refinement → Finalize
+- **Phase-Based Workflow**: Design -> Build -> Refinement -> Finalize
 - **Testing Principles**: TDD workflow, test quality standards
 
 ### Commands
@@ -162,32 +173,22 @@ Scans your `epics/` directory to find the next work item:
 - Provides phase-specific instructions
 - Run this at the start of every session
 
-#### `/finish_phase`
-
-Advances to the next phase or stage:
-
-- Validates phase completion
-- Updates tracking documents
-- Shows what's next
-- Run this when completing each phase
-
 ### Agents
 
-Specialized subagents handle specific workflow tasks. These are invoked using the Task tool and provide focused capabilities:
+Specialized subagents handle specific workflow tasks. These are invoked using the Task tool and provide focused capabilities. Agents are organized by model tier for cost efficiency.
 
-#### `task-navigator`
+#### Opus Tier (Complex Reasoning)
 
-Powers the `/next_task` command to navigate the task hierarchy:
+##### `brainstormer`
 
-- Scans epic/stage tracking documents
-- Finds the next incomplete work item
-- Determines current phase (Design, Build, Refinement, Finalize)
-- Returns formatted instructions for the current phase
-- Detects when all tasks are complete
+Generate architectural options for complex decisions:
 
-The task-navigator is the foundation of multi-session work, restoring context at the start of each session.
+- Creates 2-3 distinct implementation approaches
+- Analyzes trade-offs for each option
+- Provides recommendation with reasoning
+- Used in Design phase when multiple valid solutions exist
 
-#### `code-reviewer`
+##### `code-reviewer`
 
 Expert code review before commits:
 
@@ -198,9 +199,83 @@ Expert code review before commits:
 - Ensures type safety and error handling
 - Returns APPROVED or CHANGES REQUIRED with specific feedback
 
-Use before every commit to maintain code quality.
+##### `debugger`
 
-#### `doc-updater`
+Find root cause of complex multi-file bugs:
+
+- Analyzes errors spanning multiple files
+- Traces through code to identify root cause
+- Explains WHY errors occur, not just WHERE
+- Produces fix instructions for fixer agent
+
+##### `doc-writer`
+
+Create comprehensive documentation:
+
+- API documentation with examples
+- Public-facing documentation
+- Complex feature documentation
+- Architecture documentation requiring synthesis
+
+##### `planner`
+
+Create detailed implementation specs for complex features:
+
+- Multi-file architectural changes
+- Features requiring coordination across modules
+- New systems or significant refactors
+- Outputs specs that scribe (Haiku) can execute
+
+#### Sonnet Tier (Balanced Performance)
+
+##### `debugger-lite`
+
+Analyze medium-complexity errors:
+
+- Single-file logic errors
+- Errors with clear stack traces
+- Type mismatches requiring some analysis
+- Produces fix instructions for fixer agent
+
+##### `doc-writer-lite`
+
+Create simple documentation:
+
+- Internal documentation
+- README updates
+- Simple feature documentation
+- Status updates and summaries
+
+##### `e2e-tester`
+
+Design and run backend test scenarios:
+
+- Creates temporary API/integration test scripts
+- Tests backend-only changes during Refinement phase
+- NOT Playwright browser tests (those are separate)
+- Scripts are temporary, not committed
+
+##### `planner-lite`
+
+Create implementation specs for simpler tasks:
+
+- Simple single-file features
+- Straightforward multi-file changes
+- Bug fixes with known solutions
+- Outputs specs that scribe (Haiku) can execute
+
+##### `test-writer`
+
+Write tests for existing code:
+
+- Unit tests and integration tests
+- Follows project test patterns
+- Covers edge cases and error scenarios
+- Used in Finalize phase for coverage
+
+#### Haiku Tier (Fast Execution)
+
+##### `doc-updater`
 
 Updates tracking documents and project documentation:
 
@@ -211,32 +286,55 @@ Updates tracking documents and project documentation:
 - Adds CHANGELOG entries
 - Updates README and feature documentation
 
-Preserves context across sessions by keeping documentation current.
+##### `fixer`
 
-#### `typescript-fixer`
+Execute fix instructions:
 
-Fixes TypeScript compilation and ESLint errors:
+- Applies exact changes specified by debugger or code-reviewer
+- Minimal, targeted fixes
+- Does NOT run verification (that's verifier's job)
+- Reports what was changed
 
-- Resolves type mismatches and inference issues
-- Fixes import/export and module resolution problems
-- Handles strict mode violations
-- Addresses missing type declarations
-- Makes minimal, targeted fixes
-- Verifies fixes with type-check and lint
+##### `scribe`
 
-Use when TypeScript or ESLint errors block progress.
+Write code from detailed specifications:
 
-#### `typescript-tester`
+- Creates/modifies files as specified by planner
+- Writes code exactly as specified in specs
+- Does NOT verify code compiles (that's verifier's job)
+- Reports what files were created/modified
 
-Runs and debugs tests following TDD principles:
+##### `tester`
 
-- Executes test suites and captures failures
-- Analyzes test failures to understand expected behavior
-- Fixes code to match test expectations (not the other way around)
-- Supports TDD workflow (Red-Green-Refactor)
-- Verifies fixes don't introduce regressions
+Run test suites and report results:
 
-Critical principle: When tests fail, fix the code, not the tests.
+- Executes test commands
+- Reports pass/fail status
+- Lists specific failures with error messages
+- Does NOT investigate or fix failures
+
+##### `verifier`
+
+Run build, type-check, and lint commands:
+
+- Executes verification commands
+- Reports pass/fail with specific errors
+- Lists all issues found
+- Does NOT investigate or fix issues
+
+#### Navigation Agent
+
+##### `task-navigator`
+
+Powers the `/next_task` command to navigate the task hierarchy:
+
+- Scans epic/stage tracking documents
+- Finds the next incomplete work item
+- Determines current phase (Design, Build, Refinement, Finalize)
+- Returns formatted instructions for the current phase
+- Detects when all tasks are complete
+
+The task-navigator is the foundation of multi-session work, restoring context at the start of each session.
 
 ### Skills
 
@@ -257,7 +355,7 @@ Creates new epic/stage structures:
 
 Core workflow orchestrator:
 
-- Coordinates Design → Build → Refinement → Finalize flow
+- Coordinates Design -> Build -> Refinement -> Finalize flow
 - Automatically invoked after `/next_task`
 - Routes to appropriate phase skill
 - Contains shared rules for all phases
@@ -277,7 +375,7 @@ Each phase has a dedicated skill with specialized guidance:
 ##### `phase-build`
 
 - Structures implementation with spec-first workflow
-- Coordinates planner → scribe → verifier pipeline
+- Coordinates planner -> scribe -> verifier pipeline
 - Enforces TDD patterns
 - Manages subagent delegation
 
@@ -379,15 +477,7 @@ Sends notifications when Claude is waiting for input:
 
    **Finalize Phase**: Code review, tests, documentation, commit
 
-5. **Complete Phase with `/finish_phase`**
-
-   ```
-   /finish_phase
-   ```
-
-   Updates tracking documents and advances to next phase.
-
-6. **Repeat Until Epic Complete**
+5. **Repeat Until Epic Complete**
    Each stage goes through all four phases. Epic is complete when all stages are done.
 
 ### Subagent Delegation
@@ -399,15 +489,28 @@ For complex tasks, the main agent coordinates while specialized subagents execut
 - Communicates with you
 - Plans strategy
 - Presents options
-- Runs navigation commands (`/next_task`, `/finish_phase`)
+- Runs navigation commands (`/next_task`)
 
 **Specialized Subagents (Executors)**:
 
-- `task-navigator`: Navigates task hierarchy and restores session context
-- `code-reviewer`: Reviews code for quality and security before commits
-- `doc-updater`: Updates tracking documents and CHANGELOG
-- `typescript-fixer`: Fixes TypeScript and ESLint errors
-- `typescript-tester`: Runs tests and debugs failures
+| Agent | Model | Purpose |
+|-------|-------|---------|
+| `brainstormer` | Opus | Generate architecture options |
+| `code-reviewer` | Opus | Review code for quality and security |
+| `debugger` | Opus | Analyze complex multi-file bugs |
+| `planner` | Opus | Create detailed implementation specs |
+| `doc-writer` | Opus | Write comprehensive documentation |
+| `debugger-lite` | Sonnet | Analyze medium-complexity errors |
+| `planner-lite` | Sonnet | Create simple implementation specs |
+| `doc-writer-lite` | Sonnet | Write simple documentation |
+| `e2e-tester` | Sonnet | Run backend test scenarios |
+| `test-writer` | Sonnet | Write tests for existing code |
+| `task-navigator` | - | Navigate task hierarchy |
+| `doc-updater` | Haiku | Update tracking documents |
+| `fixer` | Haiku | Apply fix instructions |
+| `scribe` | Haiku | Write code from specs |
+| `tester` | Haiku | Run test suites |
+| `verifier` | Haiku | Run verification commands |
 
 This separation keeps the main conversation focused while distributing complex work to specialized agents with clear responsibilities.
 
@@ -416,7 +519,6 @@ This separation keeps the main conversation focused while distributing complex w
 The epic/stage system preserves context across sessions:
 
 - Each session starts with `/next_task` to restore context
-- Each session ends with `/finish_phase` to checkpoint progress
 - Tracking documents maintain state between sessions
 - CLAUDE.md ensures consistent behavior
 
@@ -448,13 +550,11 @@ The skills are designed to resist rationalization and guide correct behavior eve
 ### Workflow Sequence
 
 ```
-/next_task → task-navigator → epic-stage-workflow → phase-* skill
-                                                          ↓
+/next_task -> task-navigator -> epic-stage-workflow -> phase-* skill
+                                                          |
                                               Phase completion
-                                                          ↓
+                                                          |
                                               journal (always) + lessons-learned (if applicable)
-                                                          ↓
-                                              /finish_phase → next phase
 ```
 
 ## Examples
@@ -542,9 +642,9 @@ nano ~/.claude/hooks/claude_ready.sh
 
 Replace these placeholders in the script:
 
-- `YOUR_HOME_ASSISTANT_TOKEN_HERE` → Your long-lived access token
-- `YOUR_HOME_ASSISTANT_IP:8123` → Your Home Assistant URL (e.g., `192.168.1.100:8123` or `homeassistant.local:8123`)
-- `mobile_app_YOUR_DEVICE` → Your notification service (e.g., `mobile_app_jake_s_android`)
+- `YOUR_HOME_ASSISTANT_TOKEN_HERE` -> Your long-lived access token
+- `YOUR_HOME_ASSISTANT_IP:8123` -> Your Home Assistant URL (e.g., `192.168.1.100:8123` or `homeassistant.local:8123`)
+- `mobile_app_YOUR_DEVICE` -> Your notification service (e.g., `mobile_app_jake_s_android`)
 
 **Step 4: Add Hook Configuration**
 
@@ -638,7 +738,6 @@ The script extracts the project path and sends a notification with the project n
 2. Create an epic with 3-5 stages
 3. Each stage should be completable in 1-3 sessions
 4. Start each session with `/next_task`
-5. End each phase with `/finish_phase`
 
 ### Structuring Stages
 
