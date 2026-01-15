@@ -28,11 +28,14 @@ This repository contains a proven workflow system that transforms Claude Code fr
 ├── commands/                              # Slash commands for workflow navigation
 │   ├── finish_phase.md                    # Complete current phase and advance
 │   └── next_task.md                       # Find next task to work on
-├── examples/                              # Example epic/stage structures
-│   └── epics/
-│       └── EPIC-001/                      # Sample completed epic
-│           ├── EPIC-001.md                # Epic overview and stages
-│           └── STAGE-001-002.md           # Example stage with phases
+├── examples/                              # Example configurations
+│   ├── epics/
+│   │   └── EPIC-001/                      # Sample completed epic
+│   │       ├── EPIC-001.md                # Epic overview and stages
+│   │       └── STAGE-001-002.md           # Example stage with phases
+│   └── hooks/                             # Hook examples
+│       ├── claude_ready.sh                # Home Assistant notification hook (sanitized)
+│       └── settings-hooks-example.json    # Complete hooks configuration
 ├── hooks/                                 # Lifecycle hooks
 │   └── claude_prompt_enhancer.sh          # Inject context into prompts
 ├── settings.json.example                  # Claude Code settings template
@@ -100,6 +103,25 @@ chmod +x ~/.claude/hooks/claude_prompt_enhancer.sh
 # Test the hook
 echo "test prompt" | ~/.claude/hooks/claude_prompt_enhancer.sh
 ```
+
+**Optional: Set Up Notification Hooks**
+
+If you use Home Assistant, you can get notifications when Claude is waiting for input:
+
+```bash
+# Copy the notification hook example
+cp examples/hooks/claude_ready.sh ~/.claude/hooks/
+chmod +x ~/.claude/hooks/claude_ready.sh
+
+# Edit the script to add your Home Assistant token and URL
+# See the comments in the script for detailed instructions
+nano ~/.claude/hooks/claude_ready.sh
+
+# Merge the notification hooks into your settings.json
+# See examples/hooks/settings-hooks-example.json for the complete hook configuration
+```
+
+See the [Notification Hooks](#notification-hooks) section below for detailed setup instructions.
 
 ### 4. Create Your First Epic
 
@@ -306,6 +328,19 @@ Automatically injects CLAUDE.md into every user prompt:
 - Provides context about subagent permissions
 - Enables Claude to follow development guidelines automatically
 
+#### `claude_ready.sh` (Optional)
+
+Sends notifications when Claude is waiting for input:
+
+- Runs on `Notification` lifecycle events (`permission_prompt`, `idle_prompt`)
+- Integrates with Home Assistant for mobile/desktop notifications
+- Notifies you when Claude needs permission approval
+- Notifies you when Claude has finished responding and is waiting for your next prompt
+- Includes the project/repository name in the notification
+- Fully customizable notification content and styling
+
+**Use case**: Get notified on your phone or computer when long-running tasks complete, so you can come back and continue the conversation without constantly checking.
+
 ## How It Works
 
 ### The Complete Workflow
@@ -463,6 +498,137 @@ This hook:
 - Enables Claude to follow development guidelines automatically
 
 For additional Claude Code settings (models, permissions, plugins, etc.), see the [official Claude Code documentation](https://docs.anthropic.com/claude-code).
+
+### Notification Hooks
+
+Claude Code supports notification hooks that can alert you when specific events occur. The workflow includes an optional Home Assistant integration for getting notified when Claude is waiting for input.
+
+#### Setting Up Home Assistant Notifications
+
+The `claude_ready.sh` hook sends notifications to Home Assistant when Claude enters an idle state. This is useful for long-running tasks where you want to be notified when Claude needs your input.
+
+**Step 1: Get Your Home Assistant Token**
+
+1. Log into your Home Assistant instance
+2. Click on your profile (bottom left corner)
+3. Scroll down to "Long-Lived Access Tokens"
+4. Click "Create Token"
+5. Give it a name like "Claude Code Notifications"
+6. Copy the generated token
+
+**Step 2: Find Your Notification Service**
+
+Home Assistant supports multiple notification services:
+
+- **Mobile app**: `mobile_app_DEVICE_NAME` (recommended for phone notifications)
+- **Persistent notification**: `persistent_notification` (shows in Home Assistant UI)
+- **Other services**: `telegram_bot`, `pushover`, etc.
+
+To find your mobile device name:
+1. Go to Home Assistant > Settings > Devices & Services
+2. Click on "Mobile App"
+3. Your device name will be listed (e.g., `jake_s_android`, `iphone`)
+
+**Step 3: Configure the Hook**
+
+```bash
+# Copy the example hook
+cp examples/hooks/claude_ready.sh ~/.claude/hooks/
+chmod +x ~/.claude/hooks/claude_ready.sh
+
+# Edit the script
+nano ~/.claude/hooks/claude_ready.sh
+```
+
+Replace these placeholders in the script:
+
+- `YOUR_HOME_ASSISTANT_TOKEN_HERE` → Your long-lived access token
+- `YOUR_HOME_ASSISTANT_IP:8123` → Your Home Assistant URL (e.g., `192.168.1.100:8123` or `homeassistant.local:8123`)
+- `mobile_app_YOUR_DEVICE` → Your notification service (e.g., `mobile_app_jake_s_android`)
+
+**Step 4: Add Hook Configuration**
+
+Add the notification hooks to your `~/.claude/settings.json`:
+
+```json
+{
+  "hooks": {
+    "Notification": [
+      {
+        "matcher": "permission_prompt",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/claude_ready.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "idle_prompt",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/claude_ready.sh"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/claude_prompt_enhancer.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+See `examples/hooks/settings-hooks-example.json` for a complete example.
+
+**Step 5: Test the Hook**
+
+```bash
+# Test the hook manually
+echo '{"cwd": "/home/user/test-project"}' | ~/.claude/hooks/claude_ready.sh
+
+# Check if you received a notification
+# If not, check the Home Assistant logs for errors
+```
+
+#### Customizing Notifications
+
+The hook script includes comments showing how to customize notifications with:
+
+- **Notification actions**: Add buttons like "Open Project"
+- **Priority levels**: Set high priority for important notifications
+- **Custom sounds**: Choose notification sounds
+- **Icons**: Set custom notification icons
+- **Multiple services**: Send to multiple notification services
+
+See the comments in `examples/hooks/claude_ready.sh` for detailed examples.
+
+#### How Notification Hooks Work
+
+Claude Code triggers notification hooks on these events:
+
+- `permission_prompt`: Claude is waiting for permission approval (e.g., file write, bash command)
+- `idle_prompt`: Claude has finished responding and is waiting for your next prompt
+
+The hook receives a JSON payload with context:
+
+```json
+{
+  "cwd": "/path/to/project",
+  "event": "idle_prompt"
+}
+```
+
+The script extracts the project path and sends a notification with the project name, making it easy to know which project needs attention.
 
 ## Best Practices
 
