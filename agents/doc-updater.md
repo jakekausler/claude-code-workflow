@@ -81,14 +81,26 @@ Update EPIC-XXX.md:
 
 **IMPORTANT**: Changelog entries are written to date-based files, NOT directly to CHANGELOG.md.
 
+**CRITICAL: Getting the date/time - NEVER estimate or hardcode dates:**
+```bash
+# Get today's date for the changelog filename
+TODAY=$(date +%Y-%m-%d)
+# Example output: 2025-12-01
+
+# Get current time for the entry timestamp
+CURRENT_TIME=$(date +%H:%M)
+# Example output: 16:20
 ```
-Write to changelog/<YYYY-MM-DD>.changelog.md:
-YYYY-MM-DD HH:MM [commit-hash] EPIC-XXX/STAGE-XXX-YYY: brief description
+
+```
+Write to changelog/$TODAY.changelog.md:
+$TODAY $CURRENT_TIME [commit-hash] EPIC-XXX/STAGE-XXX-YYY: brief description
 ```
 
 **Rules**:
 
-- Write entries to `changelog/<YYYY-MM-DD>.changelog.md` (e.g., `changelog/2025-12-01.changelog.md`)
+- Always use bash `date` command to get current date/time - NEVER estimate
+- Write entries to `changelog/$TODAY.changelog.md` (e.g., `changelog/2025-12-01.changelog.md`)
 - Multiple entries on the same day are PREPENDED to the same file (newest first)
 - Always include the commit hash in entries
 - User runs `changelog/create_changelog.sh` to consolidate all entries into CHANGELOG.md
@@ -137,7 +149,7 @@ Use the Task tool:
 ## Critical Rules
 
 1. **Preserve existing content** - Never delete information, only add/update
-2. **Add timestamps** - Include timestamps for session notes and feedback
+2. **Add timestamps** - Include timestamps for session notes and feedback using bash `date` command - NEVER estimate
 3. **Exact format** - Follow the established markdown format
 4. **One update at a time** - Each invocation handles one logical update
 5. **Verify before updating** - Read the file first to understand current state

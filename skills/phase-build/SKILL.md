@@ -21,7 +21,8 @@ The Build phase implements the selected approach from Design. It creates working
 **Required workflow:**
 
 1. **Planner/planner-lite agents MUST:**
-   - Save spec to `/tmp/spec-YYYY-MM-DD-HH-MM-SS.md` (timestamp format)
+   - Get timestamp using bash: `TIMESTAMP=$(date +%Y-%m-%d-%H-%M-%S)` - NEVER estimate
+   - Save spec to `/tmp/spec-$TIMESTAMP.md`
    - Include "Spec saved to: [filepath]" at END of response
    - Example: "Spec saved to: /tmp/spec-2026-01-12-15-30-45.md"
 

@@ -266,7 +266,14 @@ Items to verify after each deployment. Format: `[D]` = desktop, `[M]` = mobile, 
 
 Agents write entries to date-based files in `changelog/` directory:
 
-**File pattern**: `changelog/<YYYY-MM-DD>.changelog.md`
+**CRITICAL: Getting the date - NEVER estimate or hardcode dates:**
+```bash
+# Get today's date for the changelog filename
+TODAY=$(date +%Y-%m-%d)
+# Example output: 2026-01-14
+```
+
+**File pattern**: `changelog/$TODAY.changelog.md`
 
 **Entry format**:
 

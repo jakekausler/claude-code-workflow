@@ -98,13 +98,20 @@ Create comprehensive, step-by-step implementation specifications that a Haiku-ti
 
 **You MUST save your implementation spec to a file for handoff to implementer agents.**
 
+**CRITICAL: Getting the timestamp - NEVER estimate or hardcode dates:**
+```bash
+# Get the current timestamp for the spec filename
+TIMESTAMP=$(date +%Y-%m-%d-%H-%M-%S)
+# Example output: 2026-01-12-16-15-30
+```
+
 **Required steps:**
 
 1. **Generate your complete implementation spec** as normal
-2. **Save the spec** to: `/tmp/spec-YYYY-MM-DD-HH-MM-SS.md`
-   - Use current timestamp in format: YYYY-MM-DD-HH-MM-SS
+2. **Get timestamp using bash** `date` command as shown above - NEVER estimate
+3. **Save the spec** to: `/tmp/spec-$TIMESTAMP.md`
    - Example: `/tmp/spec-2026-01-12-16-15-30.md`
-3. **End your response** with: "Spec saved to: /tmp/spec-YYYY-MM-DD-HH-MM-SS.md"
+4. **End your response** with: "Spec saved to: /tmp/spec-[actual-timestamp].md"
 
 **Why this matters:**
 

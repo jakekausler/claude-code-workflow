@@ -44,18 +44,39 @@ That's it. No other guidance. Write whatever comes naturally.
 
 **Create directory on first use:** `mkdir -p ~/docs/claude-journal`
 
-Create a new file at `~/docs/claude-journal/YYYY-MM-DDTHH-MM-SS.md` with this exact header:
+**CRITICAL: Getting the timestamp - NEVER estimate or hardcode dates:**
+```bash
+# Get the current timestamp for the filename (dashes instead of colons)
+TIMESTAMP=$(date +%Y-%m-%dT%H-%M-%S)
+# Example output: 2026-01-14T15-30-45
+
+# Get the current timestamp for the metadata (with colons)
+METADATA_DATE=$(date +%Y-%m-%dT%H:%M:%S)
+# Example output: 2026-01-14T15:30:45
+```
+
+Create a new file at `~/docs/claude-journal/$TIMESTAMP.md` with this exact header:
+
+**Filename convention:** Use dashes instead of colons for filesystem compatibility: `YYYY-MM-DDTHH-MM-SS.md` (e.g., `2026-01-14T15-30-45.md`)
 
 ```markdown
 ---
 date: YYYY-MM-DDTHH:MM:SS
-repository: [repository name from cwd]
-stage: [current stage ID if known, or "N/A"]
+repository: [full repository path]
+epic: [epic ID, e.g., EPIC-001]
+stage: [stage ID, e.g., STAGE-001-001]
 phase: [Design|Build|Refinement|Finalize]
 ---
 
 [Your candid, freeform reflection here]
 ```
+
+**How to populate metadata fields:**
+- **date**: Use the `$METADATA_DATE` value from the bash command above (ISO 8601 format with colons: YYYY-MM-DDTHH:MM:SS). NEVER estimate - always use `date` command.
+- **repository**: Use the FULL path to the repository (e.g., "/storage/programs/claude-learnings-viewer"), not just the project name
+- **epic**: Current epic ID from context (e.g., "EPIC-001" from "EPIC-001-foundation-cli-shell")
+- **stage**: Current stage ID from context (e.g., "STAGE-001-001")
+- **phase**: Current phase from context (Design, Build, Refinement, or Finalize)
 
 Below the metadata separator (`---`), write whatever you're feeling. There are no rules. No structure. No expectations.
 

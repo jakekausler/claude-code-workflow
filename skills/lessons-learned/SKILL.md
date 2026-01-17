@@ -13,9 +13,11 @@ At the end of each phase, pause and ask: **"Did anything happen this phase worth
 
 Invoke at the END of every phase in epic-stage-workflow, BEFORE the journal skill.
 
-## Categories
+## Common Categories (Examples)
 
-| Type                  | Covers                                                           |
+These are common category values, but you can use any descriptive category that fits the lesson:
+
+| Category Example      | Typically Covers                                                 |
 | --------------------- | ---------------------------------------------------------------- |
 | **Process Friction**  | Workarounds, unexpected difficulty, things that should be easier |
 | **Self-Correction**   | Mistakes, user corrections, near-violations, failed attempts     |
@@ -95,14 +97,30 @@ Any valid trigger? → YES → Write learning entry
 
 **Location:** `~/docs/claude-learnings/YYYY-MM-DDTHH-MM-SS.md`
 
-```markdown
-# Learning Entry
+**CRITICAL: Getting the timestamp - NEVER estimate or hardcode dates:**
+```bash
+# Get the current timestamp for the filename (dashes instead of colons)
+TIMESTAMP=$(date +%Y-%m-%dT%H-%M-%S)
+# Example output: 2026-01-13T14-32-00
 
-**Date**: YYYY-MM-DDTHH:MM:SS
-**Repository**: /path/to/current/repo
-**Stage**: EPIC-XXX/STAGE-XXX-YYY
-**Phase**: Design | Build | Refinement | Finalize
-**Category**: Process Friction | Self-Correction | Pattern Discovery
+# Get the current timestamp for the metadata (with colons)
+METADATA_DATE=$(date +%Y-%m-%dT%H:%M:%S)
+# Example output: 2026-01-13T14:32:00
+```
+
+**IMPORTANT: Filename convention uses dashes (not colons) for filesystem compatibility: `YYYY-MM-DDTHH-MM-SS.md`**
+
+```markdown
+---
+date: YYYY-MM-DDTHH:MM:SS
+repository: [full repository path]
+epic: [epic ID, e.g., EPIC-001]
+stage: [stage ID, e.g., STAGE-001-001]
+phase: [Design|Build|Refinement|Finalize]
+category: [descriptive category value]
+---
+
+# Learning Entry
 
 ## Situation
 
@@ -116,6 +134,14 @@ Any valid trigger? → YES → Write learning entry
 
 [1-3 actionable bullets on what to do differently]
 ```
+
+**How to populate metadata fields:**
+- **date**: Use the `$METADATA_DATE` value from the bash command above (ISO 8601 format with colons: YYYY-MM-DDTHH:MM:SS). NEVER estimate - always use `date` command.
+- **repository**: Use the FULL absolute path to the repository (e.g., "/storage/programs/claude-learnings-viewer"), not just the project name. This is the current working directory path.
+- **epic**: Current epic ID from context (e.g., "EPIC-001" from "EPIC-001-foundation-cli-shell")
+- **stage**: Current stage ID from context (e.g., "STAGE-001-001")
+- **phase**: Current phase from context (Design, Build, Refinement, or Finalize)
+- **category**: Any descriptive category value. Common examples include "Process Friction", "Self-Correction", "Pattern Discovery", but you can use other categories as appropriate for the lesson.
 
 ## Workflow
 
@@ -138,13 +164,16 @@ If no triggers apply:
 ## Example Learning Entry
 
 ````markdown
-# Learning Entry
+---
+date: 2026-01-13T14:32:00
+repository: /storage/programs/campaign-manager-with-input
+epic: EPIC-043
+stage: STAGE-043-012
+phase: Build
+category: Process Friction
+---
 
-**Date**: 2026-01-13T14:32:00
-**Repository**: /storage/programs/campaign-manager-with-input
-**Stage**: EPIC-043/STAGE-043-012
-**Phase**: Build
-**Category**: Process Friction
+# Learning Entry
 
 ## Situation
 
@@ -160,10 +189,10 @@ pnpm --filter @campaign/api exec prisma migrate reset --force
 # Had to manually restart
 pkill -f "ts-node-dev" && pnpm run dev
 ```
-````
 
 ## Future Guidance
 
 - Stop dev server before Prisma migrations
 - `ts-node-dev` doesn't watch `node_modules`
 - Consider adding to CLAUDE.md gotchas
+````
