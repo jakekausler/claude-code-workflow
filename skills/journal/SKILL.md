@@ -66,6 +66,7 @@ repository: [full repository path]
 epic: [epic ID, e.g., EPIC-001]
 stage: [stage ID, e.g., STAGE-001-001]
 phase: [Design|Build|Refinement|Finalize]
+analyzed: false
 ---
 
 [Your candid, freeform reflection here]
@@ -77,6 +78,7 @@ phase: [Design|Build|Refinement|Finalize]
 - **epic**: Current epic ID from context (e.g., "EPIC-001" from "EPIC-001-foundation-cli-shell")
 - **stage**: Current stage ID from context (e.g., "STAGE-001-001")
 - **phase**: Current phase from context (Design, Build, Refinement, or Finalize)
+- **analyzed**: Always set to `false` when creating new entries. This field tracks whether this entry has been processed by the meta-insights analysis system.
 
 Below the metadata separator (`---`), write whatever you're feeling. There are no rules. No structure. No expectations.
 

@@ -37,6 +37,7 @@ This repository contains a proven workflow system that transforms Claude Code fr
 │   ├── tester.md                          # Run test suites (Haiku)
 │   └── verifier.md                        # Run build/type-check/lint (Haiku)
 ├── commands/                              # Slash commands for workflow navigation
+│   ├── analyze_learnings.md               # Analyze learnings/journal for improvement
 │   └── next_task.md                       # Find next task to work on
 ├── examples/                              # Example configurations
 │   ├── epics/
@@ -50,11 +51,12 @@ This repository contains a proven workflow system that transforms Claude Code fr
 ├── hooks/                                 # Lifecycle hooks
 │   └── claude_prompt_enhancer.sh          # Inject context into prompts
 ├── settings.json.example                  # Claude Code settings template
-└── skills/                                # Custom skills (8 total)
+└── skills/                                # Custom skills (9 total)
     ├── epic-stage-setup/                  # Create new epics and stages
     ├── epic-stage-workflow/               # Main workflow coordinator (orchestrator)
     ├── journal/                           # Emotional reflection after phases
     ├── lessons-learned/                   # Structured learning capture
+    ├── meta-insights/                     # Analyze learnings for continuous improvement
     ├── phase-build/                       # Build phase guidance
     ├── phase-design/                      # Design phase guidance
     ├── phase-finalize/                    # Finalize phase guidance
@@ -172,6 +174,17 @@ Scans your `epics/` directory to find the next work item:
 - Shows current phase
 - Provides phase-specific instructions
 - Run this at the start of every session
+
+#### `/analyze_learnings`
+
+Analyzes learnings and journal entries to identify improvement opportunities:
+
+- Finds unanalyzed entries in `~/docs/claude-learnings/` and `~/docs/claude-journal/`
+- Detects cross-cutting themes across all repositories
+- Presents findings with actionable recommendations
+- Generates implementation prompts for approved actions
+- Saves prompts to `~/docs/claude-meta-insights/actions/<timestamp>/` for execution in fresh sessions
+- Powers the continuous improvement feedback loop
 
 ### Agents
 
@@ -338,7 +351,7 @@ The task-navigator is the foundation of multi-session work, restoring context at
 
 ### Skills
 
-Claude Code skills are interactive workflows that guide specific tasks. This workflow includes **8 specialized skills**:
+Claude Code skills are interactive workflows that guide specific tasks. This workflow includes **9 specialized skills**:
 
 #### Epic and Stage Management
 
@@ -415,6 +428,33 @@ Structured learning capture:
 
 **Key distinction**: Journal is emotional and always runs. Lessons-learned is technical and conditional.
 
+#### Continuous Improvement
+
+##### `meta-insights`
+
+Analyzes learnings and journal entries to drive continuous improvement:
+
+- **Always invoked via** `/analyze_learnings` command
+- Finds unanalyzed entries in `~/docs/claude-learnings/` and `~/docs/claude-journal/`
+- Detects cross-cutting themes across repositories
+- Scores themes by frequency, severity, and actionability
+- Tracks theme lifecycle: NEW → ACTIVE → MONITORING → RESOLVED (or RECURRING)
+- Presents findings with 2-3 action options per theme
+- **Generates paste-ready prompts** for approved actions
+- Saves prompts to `~/docs/claude-meta-insights/actions/<timestamp>/`
+- Updates `trends.json` to track effectiveness of actions
+
+**Critical rule**: Analysis session generates prompts only, never implements. Implementation happens in separate fresh sessions.
+
+**Key features**:
+- Automatic repository separation (never mixes themes across repos)
+- Adaptive thresholds based on session frequency
+- Helper scripts for efficient entry management
+- Subagent delegation for reading entries
+- Main agent handles analysis and user interaction
+
+**Use when**: You want to review patterns from recent work and improve skills, documentation, or processes based on real evidence.
+
 ### Hooks
 
 #### `claude_prompt_enhancer.sh`
@@ -480,6 +520,33 @@ Sends notifications when Claude is waiting for input:
 5. **Repeat Until Epic Complete**
    Each stage goes through all four phases. Epic is complete when all stages are done.
 
+### Continuous Improvement Loop
+
+The workflow includes a feedback system that learns from your work:
+
+1. **Capture**: During work, `journal` and `lessons-learned` skills save entries with frontmatter linking to epic/stage/phase
+2. **Analyze**: Periodically run `/analyze_learnings` to detect patterns across entries
+3. **Review**: Claude presents themes sorted by score (frequency + severity + actionability)
+4. **Generate**: For approved actions, Claude creates paste-ready prompts
+5. **Implement**: Copy prompts into fresh sessions to update skills, docs, or processes
+6. **Track**: The system monitors theme lifecycle (NEW → ACTIVE → MONITORING → RESOLVED)
+
+**Benefits**:
+- Skills improve based on real patterns from actual work
+- Documentation stays relevant to common issues
+- Repeated mistakes get systematically addressed
+- Evidence-based workflow refinement
+
+**Example flow**:
+```
+Work on feature → Hit Prisma migration issue → journal captures frustration
+→ lessons-learned documents the gotcha → Continue working
+→ Later: /analyze_learnings → Detects 8 instances of migration issues
+→ Generates prompt to update project CLAUDE.md with gotcha
+→ Paste prompt in fresh session → CLAUDE.md updated
+→ Future work: No more migration confusion
+```
+
 ### Subagent Delegation
 
 For complex tasks, the main agent coordinates while specialized subagents execute:
@@ -536,16 +603,17 @@ The skills are designed to resist rationalization and guide correct behavior eve
 
 ## Skill Invocation Patterns
 
-| Skill                 | Trigger                     | Purpose                     |
-| --------------------- | --------------------------- | --------------------------- |
-| `epic-stage-setup`    | User requests epic creation | Bootstrap project structure |
-| `epic-stage-workflow` | `/next_task` finds work     | Coordinate phase workflow   |
-| `phase-design`        | Entering Design phase       | Guide requirements/options  |
-| `phase-build`         | Entering Build phase        | Guide implementation        |
-| `phase-refinement`    | Entering Refinement phase   | Guide user testing          |
-| `phase-finalize`      | Entering Finalize phase     | Guide review/commit         |
-| `journal`             | After **every** phase       | Emotional reflection        |
-| `lessons-learned`     | After **noteworthy** phases | Capture learnings           |
+| Skill                 | Trigger                       | Purpose                        |
+| --------------------- | ----------------------------- | ------------------------------ |
+| `epic-stage-setup`    | User requests epic creation   | Bootstrap project structure    |
+| `epic-stage-workflow` | `/next_task` finds work       | Coordinate phase workflow      |
+| `phase-design`        | Entering Design phase         | Guide requirements/options     |
+| `phase-build`         | Entering Build phase          | Guide implementation           |
+| `phase-refinement`    | Entering Refinement phase     | Guide user testing             |
+| `phase-finalize`      | Entering Finalize phase       | Guide review/commit            |
+| `journal`             | After **every** phase         | Emotional reflection           |
+| `lessons-learned`     | After **noteworthy** phases   | Capture learnings              |
+| `meta-insights`       | `/analyze_learnings` command  | Continuous improvement         |
 
 ### Workflow Sequence
 

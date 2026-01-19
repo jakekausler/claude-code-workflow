@@ -118,6 +118,7 @@ epic: [epic ID, e.g., EPIC-001]
 stage: [stage ID, e.g., STAGE-001-001]
 phase: [Design|Build|Refinement|Finalize]
 category: [descriptive category value]
+analyzed: false
 ---
 
 # Learning Entry
@@ -142,6 +143,7 @@ category: [descriptive category value]
 - **stage**: Current stage ID from context (e.g., "STAGE-001-001")
 - **phase**: Current phase from context (Design, Build, Refinement, or Finalize)
 - **category**: Any descriptive category value. Common examples include "Process Friction", "Self-Correction", "Pattern Discovery", but you can use other categories as appropriate for the lesson.
+- **analyzed**: Always set to `false` when creating new learning entries. This field tracks whether the entry has been processed by the meta-insights analysis system.
 
 ## Workflow
 
@@ -171,6 +173,7 @@ epic: EPIC-043
 stage: STAGE-043-012
 phase: Build
 category: Process Friction
+analyzed: false
 ---
 
 # Learning Entry
