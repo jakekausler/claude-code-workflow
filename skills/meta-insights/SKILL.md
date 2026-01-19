@@ -72,7 +72,7 @@ This is not negotiable. Analysis session = prompts only.
 cat ~/docs/claude-meta-insights/trends.json
 ```
 
-**Batching**: If >50 unanalyzed entries, process most recent 50 only.
+**Batching**: If >25 unanalyzed entries, process 25 oldest entries only.
 
 **Delegate to subagent**: Spawn specialized subagent to read entries and extract initial patterns:
 ```
