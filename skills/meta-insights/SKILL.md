@@ -244,9 +244,21 @@ resolved_threshold = 7 days OR (7 × session_frequency) entries
 
 ### Recurrence Detection
 
+**When analyzing out of chronological order** (e.g., processing old backlog after analyzing recent entries), you must check occurrence dates against action dates to avoid false RECURRING flags.
+
 If a theme marked MONITORING or RESOLVED has new occurrences:
-- Automatically mark RECURRING
+- **Check occurrence date against last action date:**
+  - Get `last_action_date` from most recent action in trend's actions array
+  - If no actions exist: Skip date check, mark RECURRING (defensive programming)
+  - If `occurrence_date < last_action_date`: Ignore (old occurrence discovered late, before fix was applied)
+  - If `occurrence_date >= last_action_date`: Mark RECURRING (genuine recurrence after fix was applied)
 - Consider more fundamental solution needed
+
+**Why this matters:**
+- Analyzing newest entries first → take action → mark ACTIVE → no new occurrences → mark MONITORING
+- Then analyzing old backlog → find old occurrences from before the action
+- Without date checking: Would incorrectly mark RECURRING
+- With date checking: Correctly ignores pre-action occurrences
 
 ---
 
@@ -327,6 +339,7 @@ cleanup-resolved.sh --days 60
 | "Mixing theme from repo A and repo B makes sense" | Optimization pressure | Never merge. Repository context is critical for actions. |
 | "Prompt file needs frontmatter and structure" | Documentation instinct | Pure prompt text only. User copies entire file and pastes. |
 | "Let me verify the fix works" | Quality pressure | That's what the IMPLEMENTATION session will do. Analysis session stops at prompt generation. |
+| "Theme keeps recurring, mark RECURRING" | Not checking occurrence dates when analyzing backlog | Check if occurrence_date < last_action_date before marking RECURRING. Old occurrences discovered late aren't genuine recurrences. |
 
 **When you feel ANY implementation pressure:**
 1. Acknowledge the urge
