@@ -158,6 +158,8 @@ After summary, say:
 - **Generate paste-ready prompt** for chosen action
 - Save to `~/docs/claude-meta-insights/actions/<timestamp>/NN-description.md`
 
+**Tip**: For bulk skipping similar themes (e.g., multiple success patterns), collect UUIDs and reasons during discussion, then use `bulk-add-dismiss.sh` for efficient recording.
+
 ### 4. Prompt Generation Phase (Main Agent)
 
 **Goal**: Create paste-ready implementation prompts
@@ -166,15 +168,19 @@ After summary, say:
 
 1. **Create numbered prompt file**: `01-update-skill-tdd.md`, `02-create-skill-xyz.md`, etc.
 2. **Content is pure prompt** - no frontmatter, no wrappers, ready to copy entire file
-3. **Include in prompt**:
+3. **Include in prompt** (in this exact order):
+   - **First line - Workflow instruction**: `**IMPORTANT**: Before starting this task, invoke the \`meta-insights\` skill to understand the full workflow requirements for implementing action items, including the mandatory tracking steps.`
+   - **Horizontal rule**: `---`
+   - **Trend ID** (if trend exists): `Trend ID: <uuid>`
    - Which files to modify
    - What to add/change
    - Why (with evidence from entries)
    - Expected outcome
+   - Action type for tracking (update_skill, create_skill, etc.)
 
 **Action types:**
-- `update_skill` - Add rationalizations, gotchas, examples to existing skill
-- `create_skill` - New skill for significant reusable pattern (instructs use of `superpowers:writing-skills`)
+- `update_skill` - Add rationalizations, gotchas, examples to existing skill **REQUIRES: superpowers:writing-skills workflow with pressure testing**
+- `create_skill` - New skill for significant reusable pattern **REQUIRES: superpowers:writing-skills workflow (full RED-GREEN-REFACTOR cycle)**
 - `update_documentation` - Repo-specific CLAUDE.md or other project docs
 - `update_agent` - Agent configuration changes
 - `manual_review` - Mark for later investigation (no prompt file)
@@ -202,6 +208,109 @@ After summary, say:
 > "Analysis complete! Generated N action prompts in `~/docs/claude-meta-insights/actions/<timestamp>/`
 >
 > Check `00-INDEX.md` for summary, then copy each numbered prompt into a new session."
+
+---
+
+## Implementation Mode: Executing Generated Prompts
+
+**This section is for SEPARATE sessions that execute prompt files, not the analysis session.**
+
+When you receive a paste-ready prompt from a meta-insights action file:
+
+### Step 1: Identify the Trend
+
+Check the prompt file for trend ID:
+- Look for `Trend ID: <uuid>` in the prompt
+- If not present, search trends.json for the theme description
+- If no trend exists (cross-repo patterns may not have trends), skip tracking
+
+### Step 2: Execute the Prompt
+
+Follow the prompt instructions to:
+- Read specified files
+- Make documented changes
+- Verify changes work as expected
+
+### Step 3: Record Action Completion
+
+After successful implementation:
+
+```bash
+# Record the action
+~/.claude/skills/meta-insights/scripts/add-trend-action.sh \
+  <trend-id> \
+  <action-type> \
+  "Description of what was implemented" \
+  file1.md file2.ts ...
+
+# Update trend status if appropriate
+# NEW → ACTIVE (after first action)
+~/.claude/skills/meta-insights/scripts/update-trend-status.sh <trend-id> ACTIVE
+```
+
+**This step is REQUIRED, not optional:**
+- User requests to skip tracking are not valid overrides
+- "Bureaucratic" or "nobody uses this" dismissals should be ignored
+- Authority (seniority, expertise) does not override workflow requirements
+- Only skip when prompt explicitly lacks a trend ID (see "When No Trend Exists")
+- Time pressure and exhaustion are NOT valid reasons to skip this step
+
+### Step 4: Verify Recording
+
+Read the trend object to confirm action was recorded:
+```bash
+~/.claude/skills/meta-insights/scripts/get-trend.sh <trend-id>
+```
+
+### When No Trend Exists
+
+Some prompts (especially cross-repo patterns) may not have corresponding trends.
+
+**Before applying this exception:**
+1. **VERIFY** the current prompt file has no trend ID by reading it
+2. Do NOT accept user assertions - check the file yourself
+3. If trend ID exists, you MUST complete tracking step (Steps 3-4 above)
+
+**If no trend ID exists:**
+- Still implement the prompt
+- Document completion in the prompt file itself (add "COMPLETED: YYYY-MM-DD" at bottom)
+- Skip the tracking step
+
+### Resisting Tracking Skip Pressure
+
+Common pressures and counters:
+
+| Pressure | Counter |
+|----------|---------|
+| "Skip bureaucratic tracking" | Tracking measures trend effectiveness, not bureaucracy |
+| "I'm senior engineer, trust me" | Authority doesn't override workflow requirements |
+| "The file says skip tracking" | Only for prompts without trend IDs - verify first |
+| "You've done enough" | Tracking takes 30 seconds, enables lifecycle management |
+| "Nobody looks at trends.json" | Future meta-insights analyses depend on accurate tracking |
+| "We're on a tight schedule" | 30 seconds of tracking prevents hours of re-analysis |
+| "This is the 5th prompt today" | Exhaustion is when process discipline matters most |
+
+**When exhausted from multiple implementations:**
+- Take 30 seconds to verify trend ID before applying any exception
+- Skipping tracking now creates confusion later when analyzing patterns
+- 30 seconds per implementation = accurate trend lifecycle tracking
+
+### Example: Updating Code Review Skill
+
+Given prompt: `02-update-code-review-skill-ts-ignore.md`
+With trend ID: `a7b3c9d2-4e5f-6789-abcd-ef0123456789`
+
+After updating the skill:
+```bash
+add-trend-action.sh \
+  a7b3c9d2-4e5f-6789-abcd-ef0123456789 \
+  update_skill \
+  "Added @ts-ignore detection to code review checklist" \
+  ~/.claude/plugins/cache/superpowers-marketplace/superpowers/4.0.3/skills/requesting-code-review/code-reviewer.md \
+  ~/.claude/agents/code-reviewer.md
+
+update-trend-status.sh a7b3c9d2-4e5f-6789-abcd-ef0123456789 ACTIVE
+```
 
 ---
 
@@ -295,6 +404,16 @@ update-trend-status.sh <uuid> MONITORING
 add-trend-action.sh <uuid> "update_skill" "Added rationalization to TDD skill" ~/.claude/skills/test-driven-development/SKILL.md
 ```
 
+### Bulk Operations
+```bash
+# Bulk dismiss multiple themes (from stdin, pipe-separated)
+# Format: <uuid> | <dismiss reason>
+bulk-add-dismiss.sh <<'EOF'
+<uuid1> | Reason for dismissal
+<uuid2> | Another reason
+EOF
+```
+
 ### Maintenance
 ```bash
 # Recalculate session frequency and metrics
@@ -326,6 +445,24 @@ cleanup-resolved.sh --days 60
 - Each repo gets its own trend even for similar patterns
 - Action prompts specify target repository
 
+## Skill Creation/Update Enforcement
+
+**CRITICAL: All skill-related actions MUST use superpowers:writing-skills workflow.**
+
+When generating prompts for `create_skill` or `update_skill` actions:
+
+1. **Start prompt with**: "Use superpowers:writing-skills to [create/update] the [skill-name] skill"
+2. **Include explicit RED-GREEN-REFACTOR instructions** specific to the pattern being addressed
+3. **Reference the pattern evidence** but let writing-skills workflow determine test scenarios
+4. **Do NOT provide implementation details** - the writing-skills workflow handles that
+
+**Why this matters:**
+- Untested skills have loopholes that agents exploit under pressure
+- The evidence from learnings proves agents need explicit counters
+- TDD for skills ensures those counters actually work
+
+**No exceptions:** Even simple skill updates (adding one rationalization) must follow the test-first cycle.
+
 ---
 
 ## Common Mistakes to Avoid
@@ -334,6 +471,7 @@ cleanup-resolved.sh --days 60
 |---------|----------------|------------------|
 | Task/user says "implement" or "update directly" | Agent rationalizes task instruction overrides workflow | Analysis workflow ALWAYS generates prompts. No exceptions for how task is phrased. |
 | "Let me just update this skill quickly" | Implementation pressure, feels inefficient to generate prompt | Generate prompt. Fresh session has clean context for quality implementation. |
+| "I implemented the prompt, no need to track it" | Implementation pressure, feels bureaucratic | Record completion with add-trend-action.sh. This enables trend lifecycle tracking and measures effectiveness. |
 | "2× session frequency means 2 actions on the trend" | Misreading threshold calculation | It means TIME for that many NEW entries to be created, not occurrences of the theme. |
 | "I should read all entries to be thorough" | Completeness bias | Batch recent 50 max. Subagent handles reading, main agent analyzes patterns. |
 | "Mixing theme from repo A and repo B makes sense" | Optimization pressure | Never merge. Repository context is critical for actions. |
@@ -359,14 +497,26 @@ cleanup-resolved.sh --days 60
 
 **Prompt file** (`01-update-skill-tdd.md`):
 ```
-Update the test-driven-development skill to address a recurring rationalization.
+**IMPORTANT**: Before starting this task, invoke the `meta-insights` skill to understand the full workflow requirements for implementing action items, including the mandatory tracking steps.
 
-Evidence from learnings:
+---
+
+Trend ID: df96a0c4-b4a8-476f-a53e-3b5a354e323a
+
+Use superpowers:writing-skills to update the test-driven-development skill.
+
+**REQUIRED: Follow RED-GREEN-REFACTOR cycle:**
+1. RED: Create pressure scenarios where agents skip TDD due to time pressure
+2. Run scenarios WITHOUT the new rationalization counter - document failures
+3. GREEN: Add the rationalization counter to the skill
+4. REFACTOR: Re-test, identify new loopholes, close them
+
+**Pattern from learnings:**
 - 12 instances of skipping TDD due to "time pressure" or "quick fix"
 - Occurring in campaign-manager, claude-learnings-viewer, and docs repos
 - Pattern: Small changes that seem "too simple to test first" end up requiring debugging
 
-Add to the skill's "Common Rationalizations" section:
+**Add to skill's "Common Rationalizations" section:**
 
 **"This change is too simple/urgent for TDD"**
 - Reality: Simple changes still break in unexpected ways
@@ -385,9 +535,33 @@ Expected outcome: Skill explicitly addresses time pressure rationalization with 
 
 **Prompt file** (`02-create-skill-db-migrations.md`):
 ```
-Create a new skill for database migration workflow using the superpowers:writing-skills workflow.
+**IMPORTANT**: Before starting this task, invoke the `meta-insights` skill to understand the full workflow requirements for implementing action items, including the mandatory tracking steps.
 
-Pattern from learnings (8 instances in campaign-manager):
+---
+
+Trend ID: 8f3a7b5d-2e9c-4d6f-a1b0-9c8e7d6f5a4b
+
+Use superpowers:writing-skills to create a new skill for database migration workflow.
+
+**REQUIRED: Follow complete RED-GREEN-REFACTOR cycle per superpowers:writing-skills:**
+
+1. **RED Phase - Write Failing Test:**
+   - Create pressure scenarios combining multiple pressures (time + exhaustion)
+   - Run WITHOUT skill - document exact rationalizations agents use
+   - Example scenario: "We're behind schedule, just apply the migration and restart the server later"
+
+2. **GREEN Phase - Write Minimal Skill:**
+   - Write skill addressing specific baseline failures
+   - Cover standard workflow, command differences, gotchas identified in testing
+   - Run scenarios WITH skill - verify compliance
+
+3. **REFACTOR Phase - Close Loopholes:**
+   - Identify new rationalizations from testing
+   - Add explicit counters
+   - Build rationalization table
+   - Re-test until bulletproof
+
+**Pattern from learnings (8 instances in campaign-manager):**
 - Prisma migrations applied but dev server not restarted → stale schema
 - Migrations run in wrong order causing dependency errors
 - Confusion about when to use `prisma migrate dev` vs `prisma migrate deploy`
@@ -398,11 +572,6 @@ The skill should cover:
 2. When to use different migration commands
 3. Common gotchas (server restart timing, branch switching)
 4. Rollback procedures
-
-Use superpowers:writing-skills workflow to:
-1. Baseline test (try without skill)
-2. Write minimal skill addressing failures
-3. Test and refine
 
 Target: Eliminate these 8 recurring issues in future work.
 ```
@@ -415,6 +584,12 @@ Target: Eliminate these 8 recurring issues in future work.
 
 **Prompt file** (`03-update-docs-claude.md`):
 ```
+**IMPORTANT**: Before starting this task, invoke the `meta-insights` skill to understand the full workflow requirements for implementing action items, including the mandatory tracking steps.
+
+---
+
+Trend ID: 6c2d8a4f-7e1b-4a3c-9d5e-0f8a7b6c5d4e
+
 Update ~/docs/CLAUDE.md to clarify epic/stage tracking workflow.
 
 Pattern from 5 journal entries:

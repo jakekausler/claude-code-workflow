@@ -349,6 +349,16 @@ Powers the `/next_task` command to navigate the task hierarchy:
 
 The task-navigator is the foundation of multi-session work, restoring context at the start of each session.
 
+#### Recent Agent Enhancements
+
+The agent system has been continuously refined based on real-world usage. Recent improvements include:
+
+- **code-reviewer**: Enhanced TypeScript type safety enforcement with stricter validation rules
+- **doc-writer**: Includes accuracy validation step before finalizing documentation
+- **test-writer**: Emphasizes behavior verification over structural checks, ensuring tests validate actual functionality rather than implementation details
+
+These enhancements improve reliability and quality across the workflow, ensuring agents produce better results while maintaining their specialized focus.
+
 ### Skills
 
 Claude Code skills are interactive workflows that guide specific tasks. This workflow includes **9 specialized skills**:
@@ -442,6 +452,8 @@ Analyzes learnings and journal entries to drive continuous improvement:
 - Presents findings with 2-3 action options per theme
 - **Generates paste-ready prompts** for approved actions
 - Saves prompts to `~/docs/claude-meta-insights/actions/<timestamp>/`
+- **Implementation Mode**: Executes generated prompts in separate sessions with proper isolation
+- **Bulk operations support**: Includes `bulk-add-dismiss.sh` script for efficient entry management
 - Updates `trends.json` to track effectiveness of actions
 
 **Critical rule**: Analysis session generates prompts only, never implements. Implementation happens in separate fresh sessions.
@@ -572,7 +584,7 @@ For complex tasks, the main agent coordinates while specialized subagents execut
 | `doc-writer-lite` | Sonnet | Write simple documentation |
 | `e2e-tester` | Sonnet | Run backend test scenarios |
 | `test-writer` | Sonnet | Write tests for existing code |
-| `task-navigator` | - | Navigate task hierarchy |
+| `task-navigator` | Haiku | Navigate task hierarchy |
 | `doc-updater` | Haiku | Update tracking documents |
 | `fixer` | Haiku | Apply fix instructions |
 | `scribe` | Haiku | Write code from specs |

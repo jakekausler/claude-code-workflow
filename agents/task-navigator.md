@@ -1,6 +1,7 @@
 ---
 name: task-navigator
 description: Navigates epic/stage/phase hierarchy to find next work.
+model: haiku
 color: pink
 ---
 

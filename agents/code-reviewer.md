@@ -100,6 +100,27 @@ The code reviewer evaluates:
 - [ ] Type safety (TypeScript strict mode)
 - [ ] Edge case handling
 - [ ] Null/undefined safety
+- [ ] No TypeScript suppression comments without justification (`@ts-ignore`, `@ts-expect-error`, `// @ts-nocheck`)
+  - **Acceptable**: `@ts-expect-error` with detailed explanation and issue reference
+  - **Requires fix**: `@ts-ignore` with no/vague explanation - should fix underlying type issue instead
+
+**Common Invalid Justifications:**
+- ❌ "Will fix later" without tracked issue
+- ❌ "Complex type issue" without explanation
+- ❌ "Out of scope to fix properly"
+- ❌ "Tests pass so types don't matter"
+- ❌ "Senior engineer says it's fine"
+- ❌ "Need to ship urgently"
+- ❌ "Too much work to fix now"
+- ❌ "Runtime validation ensures safety"
+- ❌ "Original author knows it's correct"
+
+**All TypeScript suppression comments are Critical severity** regardless of:
+- Developer seniority or original authorship
+- Time pressure or shipping deadlines
+- PR size or sunk cost in current work
+- Test coverage percentage
+- Claimed complexity of proper fix
 
 ### Best Practices
 
@@ -220,6 +241,14 @@ The base agent should follow this workflow:
 - Duplicate code blocks
 - Overly abstracted code (premature optimization)
 - God objects/classes doing too much
+
+### TypeScript Type Safety
+
+- `@ts-ignore` comments without proper justification
+- `@ts-expect-error` without explanation linking to external issue
+- `// @ts-nocheck` at file level
+- **Why this matters**: Suppression comments bypass TypeScript's type safety, masking real bugs and accumulating technical debt
+- **Action**: Request fixing the underlying type issue rather than suppressing the error
 
 ## Example Usage
 

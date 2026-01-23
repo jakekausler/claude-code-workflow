@@ -30,8 +30,6 @@ Instructions:
 [Phase-specific instructions]
 
 Seed data needed: [Yes - describe | No | Already agreed]
-
-When complete, run: /finish_phase
 ═══════════════════════════════════════════════════════════
 ```
 

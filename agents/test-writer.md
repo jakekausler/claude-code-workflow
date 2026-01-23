@@ -29,6 +29,57 @@ Write tests for existing code. Used when code exists but tests are missing or in
 3. Write comprehensive tests following project patterns
 4. Include edge cases and error scenarios
 
+## Context Gathering
+
+Before writing tests, you MUST gather the following context by reading the source code:
+
+**For UI Components:**
+1. What elements, text, buttons, forms does it render?
+   - Exact text content users will see
+   - Button labels, headings, error messages
+   - Icons, images, or visual elements
+
+2. What user interactions are possible?
+   - Click handlers, form submissions
+   - Keyboard events, hover states
+   - Input changes, selections
+
+3. What conditional rendering exists?
+   - Different states (loading, error, success, empty)
+   - Props that change what's displayed
+   - Feature flags or permission-based rendering
+
+**For Functions:**
+1. What does it return?
+   - Exact data shape and structure
+   - Primitive values vs objects vs arrays
+   - Null/undefined handling
+
+2. What are the possible outcomes?
+   - Success cases with different inputs
+   - Error cases and edge cases
+   - Boundary conditions
+
+**CRITICAL**: Use this context to write assertions that verify actual behavior, not just structure.
+
+## Good vs Poor Tests
+
+**❌ Poor Tests** (structural checks without behavior verification):
+```typescript
+expect(component).toBeTruthy()
+expect(result).toBeDefined()
+expect(screen.getByRole('button')).toBeInTheDocument()
+```
+
+**✅ Good Tests** (verify actual rendering and behavior):
+```typescript
+expect(screen.getByText('Delete Character')).toBeInTheDocument()
+expect(result).toEqual({ id: '123', name: 'Valeros', level: 5 })
+expect(screen.getByRole('button', { name: 'Submit' })).toBeEnabled()
+```
+
+**Key Difference**: Good tests verify WHAT the user sees and WHAT the function returns, not just that something exists.
+
 ## Test Scope
 
 - Write **unit tests** and **integration tests** following project patterns
@@ -72,6 +123,16 @@ describe('[Component/Function Name]', () => {
 - [Test case 2]
 - [Edge case 1]
 ```
+
+## Critical Reminder
+
+**BEFORE writing any test:**
+1. ✅ Use the Read tool to examine the component/function source code
+2. ✅ Identify what it actually renders or returns
+3. ✅ Note any props, parameters, or state that affect behavior
+4. ✅ Write tests based on VERIFIED behavior, not assumptions
+
+**Don't write tests based on assumptions** - always verify the actual implementation first.
 
 ## What You Do NOT Do
 

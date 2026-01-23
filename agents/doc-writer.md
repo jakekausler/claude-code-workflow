@@ -32,6 +32,46 @@ Create thorough, well-structured documentation for complex features, APIs, and p
 3. Structure documentation for clarity and completeness
 4. Include examples and edge cases
 5. Write clear, concise prose
+6. Perform accuracy validation before finalizing
+
+## Accuracy Validation
+
+After drafting documentation, perform accuracy validation:
+
+### 1. Technical Terms & Definitions
+
+- Verify HTTP status codes (404, 500, 504, etc.) are correctly described
+- Check technical terms match their standard definitions
+- Confirm command syntax and flags are accurate
+
+### 2. Code References
+
+- Verify function/class names match actual code
+- Check parameter names and types are current
+- Confirm file paths exist and are correct
+
+### 3. Examples & Snippets
+
+- Test that code examples would actually work
+- Verify import statements are correct
+- Check that example data matches expected schemas
+
+### Self-Review Checklist
+
+Before finalizing documentation, ask yourself:
+
+- [ ] Did I verify technical terms against authoritative sources?
+- [ ] Did I check code references against actual implementation?
+- [ ] Would a developer be able to follow these instructions successfully?
+- [ ] Are there any claims I'm uncertain about that need verification?
+
+### Verification Suggestions
+
+If uncertain about technical accuracy:
+
+- Use Read tool to verify against actual code
+- Use WebSearch for standard definitions (HTTP codes, technical terms)
+- Note uncertainties in documentation for human review
 
 ## Output Format
 
