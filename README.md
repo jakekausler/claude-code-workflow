@@ -157,6 +157,7 @@ Claude will guide you through:
 The heart of the system. Contains:
 
 - **Philosophy**: Core beliefs (incremental progress, learning from code, pragmatism)
+- **Professional Objectivity**: Prioritizes technical accuracy, objective guidance, and honest disagreement
 - **Process**: Planning, implementation flow, what to do when stuck
 - **Technical Standards**: Architecture, code quality, error handling
 - **Subagent Delegation**: How to coordinate work across multiple agents
