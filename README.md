@@ -38,6 +38,7 @@ This repository contains a proven workflow system that transforms Claude Code fr
 │   └── verifier.md                        # Run build/type-check/lint (Haiku)
 ├── commands/                              # Slash commands for workflow navigation
 │   ├── analyze_learnings.md               # Analyze learnings/journal for improvement
+│   ├── competitive-review.md              # Competitive code review with 5 agents
 │   └── next_task.md                       # Find next task to work on
 ├── examples/                              # Example configurations
 │   ├── epics/
@@ -186,6 +187,21 @@ Analyzes learnings and journal entries to identify improvement opportunities:
 - Generates implementation prompts for approved actions
 - Saves prompts to `~/docs/claude-meta-insights/actions/<timestamp>/` for execution in fresh sessions
 - Powers the continuous improvement feedback loop
+
+#### `/competitive-review`
+
+Runs a competitive code review process with multiple parallel reviewers:
+
+- Spawns 5 parallel code reviewers competing to find the most issues
+- Arguments: `[rounds] [branch] [base]` - optional round limit, branch to review, base branch
+- Each reviewer is told they're competing, incentivizing thorough analysis
+- Reviews structured as: Summary, Critical issues, Major issues, Minor issues, Suggestions
+- After reviews, summarizes findings in a table showing consensus across reviewers
+- Spawns parallel fixers to address ALL issues found (including minor/suggestions)
+- Iterates review/fix cycle until no new issues found or round limit reached
+- Runs verification after each fix cycle
+
+**Use when**: You want thorough code review before merging, especially for critical changes where multiple perspectives help catch issues
 
 ### Agents
 
