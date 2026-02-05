@@ -8,7 +8,7 @@ disable-model-invocation: true
 Run a competitive code review process.
 
 **Arguments:**
-- `$0` - Number of rounds (optional, defaults to unlimited until no issues)
+- `$0` - Number of rounds (optional, defaults to 1)
 - `$1` - Branch to review (optional, defaults to current branch)
 - `$2` - Base branch to compare against (optional, defaults to main)
 
@@ -40,7 +40,7 @@ Then spawn parallel subagents (general-purpose type) to fix ALL issues found, in
 After fixing:
 1. Run `npm run verify` (or equivalent) to ensure changes work
 2. Commit the changes with a descriptive message
-3. Repeat the review/fix cycle until reviewers find no new actionable issues, or until $0 rounds are complete (if specified)
+3. Repeat the review/fix cycle until reviewers find no new actionable issues, or until $0 rounds are complete (defaults to 1 round)
 
 ## Output
 

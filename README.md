@@ -193,12 +193,12 @@ Analyzes learnings and journal entries to identify improvement opportunities:
 Runs a competitive code review process with multiple parallel reviewers:
 
 - Spawns 5 parallel code reviewers competing to find the most issues
-- Arguments: `[rounds] [branch] [base]` - optional round limit, branch to review, base branch
+- Arguments: `[rounds] [branch] [base]` - number of review cycles (default: 1), branch to review, base branch
 - Each reviewer is told they're competing, incentivizing thorough analysis
 - Reviews structured as: Summary, Critical issues, Major issues, Minor issues, Suggestions
 - After reviews, summarizes findings in a table showing consensus across reviewers
 - Spawns parallel fixers to address ALL issues found (including minor/suggestions)
-- Iterates review/fix cycle until no new issues found or round limit reached
+- Iterates review/fix cycle for the specified number of rounds (default: 1 round)
 - Runs verification after each fix cycle
 
 **Use when**: You want thorough code review before merging, especially for critical changes where multiple perspectives help catch issues
