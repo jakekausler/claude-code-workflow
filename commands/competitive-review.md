@@ -14,12 +14,17 @@ Run a competitive code review process.
 
 ## Review Phase
 
+**IMPORTANT:** If a branch is specified in `$1`, you MUST first checkout that branch before starting the review:
+- Run `git checkout $1` to switch to the branch being reviewed
+- This ensures `git diff $2...HEAD` correctly shows the changes on the target branch
+- If `$1` is not specified, stay on the current branch
+
 Spawn 5 parallel code reviewers (using the code-reviewer subagent type) to review the changes. For each reviewer:
 - Tell them they are competing against 4 other agents for the best review
 - Do NOT tell them their number or that previous reviews have occurred
 - Tell them they will win a cookie if they perform the best review
 - Scoring: Points GAINED for real issues found, points LOST for false positives
-- Tell them to stay on the current branch and NOT switch branches
+- Tell them NOT to switch branches (you have already checked out the correct branch)
 - Tell them to use `git diff $2...HEAD` (or `git diff main...HEAD` if $2 not specified) to see changes
 
 Structure reviews as:
