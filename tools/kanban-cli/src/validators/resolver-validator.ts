@@ -16,27 +16,44 @@ export interface ResolverValidatorOptions {
  * - (dry-run) Resolver executes without throwing
  * - (dry-run) Resolver return value is in transitions_to or null
  */
-export async function validateResolvers(
+export function validateResolvers(
   config: PipelineConfig,
   registry: ResolverRegistry,
   options: ResolverValidatorOptions = {}
-): Promise<ValidationResult> {
+): ValidationResult | Promise<ValidationResult> {
   const errors: string[] = [];
   const warnings: string[] = [];
 
-  for (const phase of config.workflow.phases) {
-    if (!isResolverState(phase)) continue;
+  if (!options.dryRun) {
+    // Synchronous validation when not dry-running
+    for (const phase of config.workflow.phases) {
+      if (!isResolverState(phase)) continue;
 
-    // Check resolver is registered
-    if (!registry.has(phase.resolver)) {
-      errors.push(
-        `State "${phase.name}": resolver "${phase.resolver}" is not registered`
-      );
-      continue;
+      // Check resolver is registered
+      if (!registry.has(phase.resolver)) {
+        errors.push(
+          `State "${phase.name}": resolver "${phase.resolver}" is not registered`
+        );
+        continue;
+      }
     }
+    return { errors, warnings };
+  }
 
-    // Dry-run if requested
-    if (options.dryRun) {
+  // Async validation for dry-run
+  return (async () => {
+    for (const phase of config.workflow.phases) {
+      if (!isResolverState(phase)) continue;
+
+      // Check resolver is registered
+      if (!registry.has(phase.resolver)) {
+        errors.push(
+          `State "${phase.name}": resolver "${phase.resolver}" is not registered`
+        );
+        continue;
+      }
+
+      // Dry-run execution
       const mockStage = { id: 'MOCK-STAGE', status: phase.status };
       const mockContext = { env: {} };
 
@@ -57,7 +74,7 @@ export async function validateResolvers(
         );
       }
     }
-  }
 
-  return { errors, warnings };
+    return { errors, warnings };
+  })();
 }
