@@ -52,3 +52,45 @@ export type {
   KanbanColumn,
 } from './types/work-items.js';
 export { SYSTEM_COLUMNS } from './types/work-items.js';
+
+// Database
+export { KanbanDatabase, DEFAULT_DB_PATH } from './db/database.js';
+export { ALL_CREATE_STATEMENTS } from './db/schema.js';
+
+// Repositories
+export {
+  RepoRepository,
+  EpicRepository,
+  TicketRepository,
+  StageRepository,
+  DependencyRepository,
+} from './db/repositories/index.js';
+export type {
+  EpicRow,
+  TicketRow,
+  StageRow,
+  DependencyRow,
+  EpicUpsertData,
+  TicketUpsertData,
+  StageUpsertData,
+  DependencyUpsertData,
+} from './db/repositories/index.js';
+
+// Parser
+export {
+  parseFrontmatterRaw,
+  parseEpicFrontmatter,
+  parseTicketFrontmatter,
+  parseStageFrontmatter,
+  parseFrontmatter,
+} from './parser/frontmatter.js';
+export { discoverWorkItems } from './parser/discovery.js';
+export type { DiscoveredFile } from './parser/discovery.js';
+
+// Kanban Columns
+export { computeKanbanColumn } from './engine/kanban-columns.js';
+export type { KanbanColumnInput } from './engine/kanban-columns.js';
+
+// Sync
+export { syncRepo } from './sync/sync.js';
+export type { SyncOptions, SyncResult } from './sync/sync.js';
