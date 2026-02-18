@@ -1,18 +1,42 @@
 ---
 name: phase-build
-description: Use when entering Build phase of epic-stage-workflow - guides implementation planning, code writing, and verification
+description: Use when entering Build phase of ticket-stage-workflow - guides implementation planning, code writing, and verification within the epic/ticket/stage hierarchy
 ---
 
 # Build Phase
 
 ## Purpose
 
-The Build phase implements the selected approach from Design. It creates working code that can be tested in Refinement.
+The Build phase implements the selected approach from Design. It creates working code that can be tested in Automatic Testing.
 
 ## Entry Conditions
 
 - Design phase is complete (approach selected, tracking docs updated)
-- `epic-stage-workflow` skill has been invoked (shared rules loaded)
+- `ticket-stage-workflow` skill has been invoked (shared rules loaded)
+- Stage YAML frontmatter has been read (status, refinement_type, ticket, epic, worktree_branch, etc.)
+
+## Worktree Awareness
+
+Before implementation begins, check if `worktree_branch` is set in the stage's YAML frontmatter.
+
+**If `worktree_branch` is set:**
+
+1. Check if the git worktree already exists for this branch:
+   ```bash
+   git worktree list | grep <worktree_branch>
+   ```
+2. If the worktree does NOT exist, create it:
+   ```bash
+   git worktree add ../worktrees/<worktree_branch> -b <worktree_branch>
+   ```
+   The worktree path uses the branch name under a `worktrees/` sibling directory.
+3. Ensure the worktree is checked out to the correct branch before any code changes begin.
+
+**If `worktree_branch` is not set:**
+
+- Proceed with implementation in the current working directory (default behavior).
+
+> **Note**: Full worktree lifecycle management (cleanup, port isolation, `$WORKTREE_INDEX` assignment) ships in Stage 6. For now, create the worktree if it doesn't exist and work within it.
 
 ## Spec Handoff Protocol (CRITICAL)
 
@@ -97,8 +121,8 @@ WRONG:   scribe implements → write spec after "for documentation"
 
 **Key distinction:**
 
-- ❌ Retroactive = Writing spec for COMPLETED work ("I did X, here's the spec for X")
-- ✅ Prospective = Writing spec for REMAINING work after learning ("I learned X, here's spec for remaining Y")
+- Retroactive = Writing spec for COMPLETED work ("I did X, here's the spec for X")
+- Prospective = Writing spec for REMAINING work after learning ("I learned X, here's spec for remaining Y")
 
 **Escalation triggers (any of these → STOP and write spec):**
 
@@ -117,9 +141,9 @@ There is NO completion percentage where you're "too far along" to need a spec.
 
 **Explicit examples that do NOT exempt you:**
 
-- ❌ "Remaining 1% is trivial"
-- ❌ "It's just a closing brace"
-- ❌ "The overhead isn't worth it for this little"
+- "Remaining 1% is trivial"
+- "It's just a closing brace"
+- "The overhead isn't worth it for this little"
 
 **Why late-stage specs matter:** A spec written at 99% documents the complexity you discovered. It's a "complexity warning label" preventing future developers from assuming the task was trivial.
 
@@ -149,7 +173,12 @@ This is a sunk cost situation. The time spent is gone whether you keep or redo t
 ## Phase Workflow
 
 ```
-1. [CONDITIONAL: Planning]
+1. [CONDITIONAL: Worktree Setup]
+   IF worktree_branch is set in stage YAML frontmatter:
+     → Ensure git worktree exists (create if needed)
+     → Switch to worktree directory for all subsequent work
+
+2. [CONDITIONAL: Planning]
    IF complex multi-file feature OR architectural change:
      → Delegate to planner (Opus) for detailed implementation spec
      → Planner MUST save spec to /tmp/spec-YYYY-MM-DD-HH-MM-SS.md
@@ -159,25 +188,26 @@ This is a sunk cost situation. The time spent is gone whether you keep or redo t
    ELSE (trivial change):
      → Skip planner, main agent instructs scribe directly (no spec file needed)
 
-2. Delegate to scribe (Haiku) to write code from spec file
+3. Delegate to scribe (Haiku) to write code from spec file
    → Pass spec file path explicitly: "Read and implement: /tmp/spec-YYYY-MM-DD-HH-MM-SS.md"
 
-3. Add seed data if agreed in Design phase
+4. Add seed data if agreed in Design phase
 
-4. Add placeholder stubs for related future features
+5. Add placeholder stubs for related future features
 
-5. Verify dev server works - feature must be testable
+6. Verify dev server works - feature must be testable
 
-6. [PARALLEL] Delegate to verifier (Haiku) + tester (Haiku)
+7. [PARALLEL] Delegate to verifier (Haiku) + tester (Haiku)
    Run build/lint/type-check AND tests in parallel
 
-7. [IF verification fails] → Error handling flow (see epic-stage-workflow)
+8. [IF verification fails] → Error handling flow (see ticket-stage-workflow)
 
-8. [LOOP steps 2-7 until green]
+9. [LOOP steps 3-8 until green]
 
-9. Delegate to doc-updater (Haiku) to update tracking documents:
-   - Mark Build phase complete in STAGE-XXX-YYY.md
-   - Update stage status in epic's EPIC-XXX.md table (MANDATORY)
+10. Delegate to doc-updater (Haiku) to update tracking documents:
+   - Mark Build phase complete in STAGE-XXX-YYY-ZZZ.md
+   - Update stage status in ticket's TICKET-XXX-YYY.md (MANDATORY)
+   - Update ticket status in epic's EPIC-XXX.md if needed
 ```
 
 ## Planner Selection Criteria
@@ -228,10 +258,29 @@ Trivial ONLY includes:
 
 **Test**: Would verifier/tester need to run? → Not trivial → Write spec
 
+## Reading Stage Data
+
+All stage metadata is read from YAML frontmatter in the stage file (`STAGE-XXX-YYY-ZZZ.md`), not from markdown headers. Key fields:
+
+- `id`: Stage identifier (e.g., `STAGE-001-001-001`)
+- `ticket`: Parent ticket (e.g., `TICKET-001-001`)
+- `epic`: Parent epic (e.g., `EPIC-001`)
+- `title`: Stage title
+- `status`: Current status
+- `refinement_type`: List of types (frontend, backend, cli, database, infrastructure, custom)
+- `depends_on`: Dependencies
+- `worktree_branch`: Git worktree branch name
+
+File paths follow the three-level hierarchy:
+```
+epics/EPIC-XXX/TICKET-XXX-YYY/STAGE-XXX-YYY-ZZZ.md
+```
+
 ## Phase Gates Checklist
 
 Before completing Build phase, verify:
 
+- [ ] Worktree checked out (if `worktree_branch` is set)
 - [ ] Implementation spec created (planner OR planner-lite OR direct for trivial)
 - [ ] Code written via scribe
 - [ ] Seed data added (if agreed in Design)
@@ -239,8 +288,8 @@ Before completing Build phase, verify:
 - [ ] Dev server verified working
 - [ ] Verification passed (verifier + tester in parallel)
 - [ ] Tracking documents updated via doc-updater:
-  - Build phase marked complete in stage file
-  - Epic stage status updated (MANDATORY)
+  - Build phase marked complete in stage file (`STAGE-XXX-YYY-ZZZ.md`)
+  - Ticket stage status updated (MANDATORY)
 
 ## Time Pressure Does NOT Override Exit Gates
 
@@ -259,29 +308,31 @@ Before completing Build phase, verify:
 
 ## Phase Exit Gate (MANDATORY)
 
-Before proceeding to Refinement phase, you MUST complete these steps IN ORDER:
+Before proceeding to Automatic Testing phase, you MUST complete these steps IN ORDER:
 
-1. Update stage tracking file (mark Build phase complete)
-2. Update epic tracking file (update stage status in table)
-3. Use Skill tool to invoke `lessons-learned`
-4. Use Skill tool to invoke `journal`
+1. Update stage tracking file (mark Build phase complete in `STAGE-XXX-YYY-ZZZ.md`)
+2. Update ticket tracking file (update stage status in `TICKET-XXX-YYY.md`)
+3. Run `kanban-cli sync --stage STAGE-XXX-YYY-ZZZ` to sync changes to the kanban board
+4. Use Skill tool to invoke `lessons-learned`
+5. Use Skill tool to invoke `journal`
 
 **Why this order?**
 
 - Steps 1-2: Establish facts (phase done, status updated)
-- Steps 3-4: Capture learnings and feelings based on the now-complete phase
+- Step 3: Sync state to kanban board so downstream tools see current status
+- Steps 4-5: Capture learnings and feelings based on the now-complete phase
 
 Lessons and journal need the full phase context, including final status updates. Running them before status updates means they lack complete information.
 
-After completing all exit gate steps, use Skill tool to invoke `phase-refinement` to begin the next phase.
+After completing all exit gate steps, use Skill tool to invoke `automatic-testing` to begin the next phase.
 
 **DO NOT skip any exit gate step. DO NOT proceed until all steps are done.**
 
-**DO NOT proceed to Refinement phase until exit gate is complete.** This includes:
+**DO NOT proceed to Automatic Testing phase until exit gate is complete.** This includes:
 
-- Announcing "proceeding to Refinement"
+- Announcing "proceeding to Automatic Testing"
 - Starting user testing discussions
 - Thinking about what to test
-- Invoking phase-refinement skill
+- Invoking automatic-testing skill
 
-**Complete ALL exit gate steps FIRST. Then invoke phase-refinement.**
+**Complete ALL exit gate steps FIRST. Then invoke automatic-testing.**
