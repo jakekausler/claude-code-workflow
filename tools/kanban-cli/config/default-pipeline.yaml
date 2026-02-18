@@ -1,0 +1,50 @@
+workflow:
+  entry_phase: Design
+
+  phases:
+    - name: Design
+      skill: phase-design
+      status: Design
+      transitions_to: [Build, User Design Feedback]
+
+    - name: User Design Feedback
+      skill: user-design-feedback
+      status: User Design Feedback
+      transitions_to: [Build]
+
+    - name: Build
+      skill: phase-build
+      status: Build
+      transitions_to: [Automatic Testing]
+
+    - name: Automatic Testing
+      skill: automatic-testing
+      status: Automatic Testing
+      transitions_to: [Manual Testing]
+
+    - name: Manual Testing
+      skill: manual-testing
+      status: Manual Testing
+      transitions_to: [Finalize]
+
+    - name: Finalize
+      skill: phase-finalize
+      status: Finalize
+      transitions_to: [Done, PR Created]
+
+    - name: PR Created
+      resolver: pr-status
+      status: PR Created
+      transitions_to: [Done, Addressing Comments]
+
+    - name: Addressing Comments
+      skill: review-cycle
+      status: Addressing Comments
+      transitions_to: [PR Created]
+
+  defaults:
+    WORKFLOW_REMOTE_MODE: false
+    WORKFLOW_AUTO_DESIGN: false
+    WORKFLOW_MAX_PARALLEL: 1
+    WORKFLOW_GIT_PLATFORM: auto
+    WORKFLOW_LEARNINGS_THRESHOLD: 10
