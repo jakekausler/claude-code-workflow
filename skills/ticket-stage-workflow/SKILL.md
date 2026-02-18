@@ -1,11 +1,27 @@
 ---
-name: epic-stage-workflow
-description: Use when implementing or working on existing epics and stages, after running /next_task, during Design/Build/Refinement/Finalize phases, or when session protocols apply.
+name: ticket-stage-workflow
+description: Use when implementing or working on existing tickets and stages, after running /next_task, during Design/Build/Automatic Testing/Finalize phases, or when session protocols apply.
 ---
 
-# Epic/Stage Workflow - Orchestrator
+# Ticket-Stage Workflow - Orchestrator
 
 This is the **orchestrator skill**. It contains shared rules that apply to ALL phases. Phase-specific guidance is in separate phase skills.
+
+## Workflow Hierarchy
+
+```
+Epic (Initiative/Theme)
+  └── Ticket (Feature/Capability)
+        └── Stage (Component/Step)
+              └── Phase: Design → Build → Automatic Testing → Finalize
+```
+
+- **Epic** = Initiative or theme grouping related tickets
+- **Ticket** = Feature or capability to be delivered
+- **Stage** = Single component or interaction within a ticket
+- **Phase** = Design | Build | Automatic Testing | Finalize
+
+Epics and tickets are containers. Stages are where work happens. Phases are the workflow within a stage. Stage files use YAML frontmatter for all metadata -- read status, refinement_type, dependencies, and other fields from the frontmatter, not from markdown headers.
 
 ## Model Tiering
 
@@ -29,14 +45,14 @@ This is the **orchestrator skill**. It contains shared rules that apply to ALL p
 ## When to Use
 
 - After running `/next_task` to get your task assignment
-- During any Design, Build, Refinement, or Finalize phase
+- During any Design, Build, Automatic Testing, Manual Testing, or Finalize phase
 - When session protocols apply
 
 ## When NOT to Use
 
-- Initial project setup (use epic-stage-setup instead)
-- Creating new epics or stages
-- Tasks outside the epic/stage system
+- Initial project setup (use `ticket-stage-setup` instead)
+- Creating new epics, tickets, or stages
+- Tasks outside the epic/ticket/stage system
 
 ## Protocol, Not Advice
 
@@ -127,18 +143,74 @@ If user claims something is Level 3 (not Level 2):
 
 ## Phase Routing
 
-After loading this skill, determine the current phase and invoke the appropriate phase skill:
+After loading this skill, determine the current phase from the stage file's YAML frontmatter `status` field and invoke the appropriate phase skill:
 
-| Phase      | Skill to Invoke    |
-| ---------- | ------------------ |
-| Design     | `phase-design`     |
-| Build      | `phase-build`      |
-| Refinement | `phase-refinement` |
-| Finalize   | `phase-finalize`   |
+| Status                  | Skill to Invoke      |
+| ----------------------- | -------------------- |
+| Design                  | `phase-design`       |
+| User Design Feedback    | `phase-design`       |
+| Build                   | `phase-build`        |
+| Automatic Testing       | `automatic-testing`  |
+| Manual Testing          | `automatic-testing`  |
+| Finalize                | `phase-finalize`     |
+| PR Created              | (resolver - no skill)|
+| Addressing Comments     | `review-cycle`       |
 
 **To invoke a phase skill:** Use the Skill tool with the skill name (e.g., `phase-design`).
 
+**Pass `refinement_type`:** When invoking `automatic-testing`, pass the `refinement_type` from the stage's YAML frontmatter so it knows which approval checklist to enforce.
+
 **Each phase skill ends with a mandatory exit gate that invokes `lessons-learned` and `journal` skills.**
+
+**After any status change**, run `kanban-cli sync --stage STAGE-XXX-YYY-ZZZ` to update the SQLite cache.
+
+### Status Values Reference
+
+| Status               | Meaning                                        |
+| -------------------- | ---------------------------------------------- |
+| Not Started          | Stage has not entered the pipeline yet          |
+| Design               | In design phase                                 |
+| User Design Feedback | Awaiting user decision on design options        |
+| Build                | In build phase                                  |
+| Automatic Testing    | In automatic testing phase                      |
+| Manual Testing       | In manual testing phase (user approval)         |
+| Finalize             | In finalize phase                               |
+| PR Created           | MR/PR created, awaiting review (remote mode)    |
+| Addressing Comments  | Addressing MR/PR review comments (remote mode)  |
+| Complete             | All phases done                                 |
+| Skipped              | Intentionally skipped                           |
+
+---
+
+## Environment Variables
+
+The workflow reads these environment variables to control behavior. They can also be set in the pipeline config (`~/.config/kanban-workflow/config.yaml` or `<repo>/.kanban-workflow.yaml`).
+
+| Env Var                        | Values              | Default  | Effect                                                                         |
+| ------------------------------ | ------------------- | -------- | ------------------------------------------------------------------------------ |
+| `WORKFLOW_REMOTE_MODE`         | `true`/`false`      | `false`  | Finalize pushes to remote branch + creates MR/PR instead of merging to main    |
+| `WORKFLOW_AUTO_DESIGN`         | `true`/`false`      | `false`  | Design phase accepts recommended approach without prompting user               |
+| `WORKFLOW_MAX_PARALLEL`        | integer             | `1`      | Max parallel stages for the orchestration loop                                 |
+| `WORKFLOW_GIT_PLATFORM`        | `github`/`gitlab`/`auto` | `auto` | Which platform for MR/PR creation                                           |
+| `WORKFLOW_LEARNINGS_THRESHOLD` | integer             | `10`     | Auto-analyze learnings when unanalyzed count exceeds this                      |
+
+**Stage 1 note:** In Stage 1, only the basic single-stage local workflow is functional. Remote mode (`WORKFLOW_REMOTE_MODE`), parallel orchestration (`WORKFLOW_MAX_PARALLEL`), auto-design (`WORKFLOW_AUTO_DESIGN`), and auto-analysis threshold (`WORKFLOW_LEARNINGS_THRESHOLD`) are documented for future stages but are not yet operational. `WORKFLOW_GIT_PLATFORM` is used only when remote mode is enabled (Stage 3+).
+
+---
+
+## File Path Conventions
+
+All tracking files follow the three-level nested directory structure:
+
+```
+epics/EPIC-XXX-name/EPIC-XXX.md                                          # Epic file
+epics/EPIC-XXX-name/TICKET-XXX-YYY-name/TICKET-XXX-YYY.md              # Ticket file
+epics/EPIC-XXX-name/TICKET-XXX-YYY-name/STAGE-XXX-YYY-ZZZ-name.md     # Stage file
+epics/EPIC-XXX-name/TICKET-XXX-YYY-name/regression.md                   # Regression checklist
+epics/EPIC-XXX-name/TICKET-XXX-YYY-name/changelog/                      # Changelog entries
+```
+
+ID patterns: `EPIC-XXX`, `TICKET-XXX-YYY`, `STAGE-XXX-YYY-ZZZ` (all 3-digit zero-padded).
 
 ---
 
@@ -379,25 +451,25 @@ When doc-updater updates tracking files, it does NOT commit them. If tracking fi
 
 - Changelog entries from previous stages
 - Stage files from previous stages
-- Epic files that should have been committed earlier
+- Ticket and epic files that should have been committed earlier
 
 **ALWAYS use specific file paths:**
 
 ```bash
 # CORRECT - Tracking files
-git add epics/EPIC-XXX/STAGE-XXX-YYY.md epics/EPIC-XXX/EPIC-XXX.md
+git add epics/EPIC-XXX/TICKET-XXX-YYY/STAGE-XXX-YYY-ZZZ.md epics/EPIC-XXX/TICKET-XXX-YYY/TICKET-XXX-YYY.md epics/EPIC-XXX/EPIC-XXX.md
 
 # CORRECT - Changelog
-git add changelog/2026-01-13.changelog.md
+git add epics/EPIC-XXX/TICKET-XXX-YYY/changelog/2026-01-13.changelog.md
 
 # WRONG - Picks up everything
 git add -A
 git add .
 ```
 
-### Epic File Updates Are MANDATORY
+### Ticket and Epic File Updates Are MANDATORY
 
-The epic file's stage table MUST be updated when a stage changes status. This is NOT optional.
+The ticket file's stage list and the epic file MUST be updated when a stage changes status. This is NOT optional.
 
 ---
 
@@ -410,7 +482,7 @@ If an exit gate step fails (e.g., journal skill fails due to disk error):
 3. If skipping, document in stage file: "Journal skipped due to [error]"
 4. Only proceed to next phase with user consent
 
-**Required steps** (blocking): Update stage file, Update epic file
+**Required steps** (blocking): Update stage file, Update ticket file, Update epic file
 **Always-attempt steps** (skip only on system error with user consent): lessons-learned, journal
 
 If lessons-learned or journal fails due to system error (not by choice):
@@ -433,17 +505,17 @@ If stage file or epic file update fails:
    - Abort: Document incomplete exit, roll back phase state
 4. **NEVER proceed without required steps complete**
 
-**Why:** Stage/epic files are source of truth. Skipping breaks session independence and `/next_task` navigation.
+**Why:** Stage/ticket/epic files are source of truth. Skipping breaks session independence and `/next_task` navigation.
 
 ### Partial Exit Gate Completion
 
-If stage file updates but epic file update fails:
+If stage file updates but ticket or epic file update fails:
 
-1. **Retry epic file update** (most likely to succeed after stage file worked)
-2. **If retry fails:** User manually edits epic file stage table
+1. **Retry ticket/epic file update** (most likely to succeed after stage file worked)
+2. **If retry fails:** User manually edits ticket/epic file
 3. **Rollback option:** Revert stage file to previous phase status, re-run exit gate
 
-**Prevention:** doc-updater should update stage + epic in sequence (stage first, then epic). This makes forward recovery (retry epic) easier than rollback.
+**Prevention:** doc-updater should update stage + ticket + epic in sequence (stage first, then ticket, then epic). This makes forward recovery (retry ticket/epic) easier than rollback.
 
 ### Concurrent Session Detection
 
@@ -452,12 +524,12 @@ Before completing ANY phase exit gate:
 1. **Check git status** for unexpected changes:
 
    ```bash
-   git status epics/EPIC-XXX/STAGE-XXX-YYY.md epics/EPIC-XXX/EPIC-XXX.md
+   git status epics/EPIC-XXX/TICKET-XXX-YYY/STAGE-XXX-YYY-ZZZ.md epics/EPIC-XXX/TICKET-XXX-YYY/TICKET-XXX-YYY.md epics/EPIC-XXX/EPIC-XXX.md
    ```
 
 2. **If files show "modified" but you haven't updated them yet:**
    - Another session may have completed the phase
-   - Run: `git diff epics/EPIC-XXX/STAGE-XXX-YYY.md`
+   - Run: `git diff epics/EPIC-XXX/TICKET-XXX-YYY/STAGE-XXX-YYY-ZZZ.md`
    - Check if phase is already marked complete
 
 3. **Resolution:**
@@ -478,11 +550,11 @@ Before completing ANY phase exit gate:
 3. Invoke the appropriate phase skill based on current phase
 4. Begin phase-specific workflow
 
-### Refinement Phase State Interpretation
+### Testing Phase State Interpretation
 
-- "Refinement: In Progress" → Invoke `phase-refinement` (REQUIRED even when resuming from previous session)
-- "Refinement: Complete (awaiting feedback)" → Wait for user feedback in main conversation, don't invoke any phase skill yet
-- "Refinement: Complete" (no note) + user approved → Invoke `phase-finalize`
+- `status: Automatic Testing` → Invoke `automatic-testing` skill (REQUIRED even when resuming from previous session)
+- `status: Manual Testing` → Wait for user feedback in main conversation, invoke `automatic-testing` if user provides feedback
+- `status: Finalize` + user approved testing → Invoke `phase-finalize`
 
 **CRITICAL:** Always invoke the phase skill when resuming a session. Do NOT rely on "memory" from previous session context. Phase skills may have been updated, and session independence requires fresh skill invocation every time.
 
@@ -500,8 +572,8 @@ If task-navigator returns a different phase than stage file shows:
 If stage file has conflicting or invalid state:
 
 1. **Report specific inconsistency:**
-   - "Header says Status: Build but Build section shows [x] Complete"
-   - "Refinement shows Desktop: Approved but no approval note found"
+   - "Frontmatter says status: Build but Build section shows [x] Complete"
+   - "Automatic Testing shows Desktop: Approved but no approval note found"
 
 2. **Do NOT proceed with ambiguous state**
 
@@ -608,13 +680,13 @@ Vague statements do NOT count as consent:
 | -------------------------------------------------- | ------------------------------------------------------- | ---------------------------------------------------- |
 | "This is simple, skip Design"                      | Simple tasks become complex; Design catches this        | Present 2-3 options even for "simple" stages         |
 | "User wants to skip formality"                     | Explicit skips must be documented                       | Document in stage: "Skipped by user [reason] [date]" |
-| "Just want to see it working"                      | Build already provides working implementation           | Refinement is for feedback, not skipping tests       |
+| "Just want to see it working"                      | Build already provides working implementation           | Testing is for feedback, not skipping tests          |
 | "Documentation overhead isn't worth it"            | Tracking docs enable session independence               | Update docs via doc-updater after every phase        |
 | "I already explored, can generate options"         | Coordination ≠ architecture; use specialized agent      | Delegate to brainstormer (Opus) for options          |
 | "User said skip code review"                       | User controls WHAT to build, not quality process        | Run code-reviewer, explain findings to user          |
 | "Senior dev reviewed verbally"                     | External reviews complement, don't replace, agents      | Run code-reviewer agent for automated check          |
 | "User prefers git add -A"                          | User preference doesn't override safety rules           | Use specific paths, explain why                      |
-| "User tested it themselves"                        | User testing is Refinement, agent testing is Build      | Run tester agent for automated verification          |
+| "User tested it themselves"                        | User testing is Manual Testing, agent testing is Build  | Run tester agent for automated verification          |
 | "User is technical expert, reviewed it themselves" | User expertise complements agents, doesn't replace them | Run code-reviewer, share findings with expert user   |
 | "User has more experience than me"                 | Workflow exists for consistency, not hierarchy          | Run code-reviewer regardless of user expertise       |
 | "User is paying for this time"                     | User pays for quality process, not shortcuts            | Explain code-reviewer value, run it anyway           |
@@ -636,6 +708,6 @@ Signs you're skipping the workflow:
 - Running build/test commands directly instead of delegating to verifier/tester
 - Updating stage docs yourself instead of using doc-updater subagent
 - **Using `git add -A` or `git add .` instead of specific file paths**
-- **Forgetting to update epic file** when stage completes
+- **Forgetting to update ticket/epic file** when stage completes
 - **Not invoking phase skill** after loading this orchestrator
 - **Skipping exit gate** (lessons-learned and journal) at phase end
