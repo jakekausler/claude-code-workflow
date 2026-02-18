@@ -1,56 +1,98 @@
 ---
-name: phase-refinement
-description: Use when entering Refinement phase of epic-stage-workflow - guides user testing, feedback incorporation, and iteration
+name: automatic-testing
+description: Use when entering Automatic Testing phase of ticket-stage-workflow — guides type-specific testing and user approval cycles
 ---
 
-# Refinement Phase
+# Automatic Testing Phase
 
 ## Purpose
 
-The Refinement phase validates the implementation through user testing. It ensures the feature works correctly across viewports (frontend) or integration scenarios (backend).
+The Automatic Testing phase validates the implementation through type-specific testing. It ensures the feature works correctly based on the stage's `refinement_type` — whether that's frontend viewports, backend integration, CLI behavior, database migrations, infrastructure deployments, or custom criteria defined during Design.
 
 ## Entry Conditions
 
 - Build phase is complete (code written, verification passed)
-- `epic-stage-workflow` skill has been invoked (shared rules loaded)
+- `ticket-stage-workflow` skill has been invoked (shared rules loaded)
+- Stage YAML frontmatter contains `refinement_type` (array of one or more types)
 
-## RED FLAGS - Read BEFORE Making ANY Viewport Decisions
+## Determining the Checklist
+
+Read `refinement_type` from the stage's YAML frontmatter. This field is an array — when multiple types are listed, combine all checklists (all approvals required).
+
+### Checklists by Type
+
+**Frontend (`refinement_type` includes `frontend`)**:
+- [ ] Desktop Approved
+- [ ] Mobile Approved
+- [ ] Regression Items Added
+
+**Backend (`refinement_type` includes `backend`)**:
+- [ ] E2E Tests Approved
+- [ ] Regression Items Added
+
+**CLI (`refinement_type` includes `cli`)**:
+- [ ] CLI Behavior Approved
+- [ ] Regression Items Added
+
+**Database (`refinement_type` includes `database`)**:
+- [ ] Migration Verified
+- [ ] Data Integrity Approved
+- [ ] Regression Items Added
+
+**Infrastructure (`refinement_type` includes `infrastructure`)**:
+- [ ] Deployment Verified
+- [ ] Regression Items Added
+
+**Custom (`refinement_type` includes `custom`)**:
+- [ ] User-defined approvals (established during Design phase)
+- [ ] Regression Items Added
+
+### Combined Example
+
+A stage with `refinement_type: [frontend, backend]` requires:
+- [ ] Desktop Approved
+- [ ] Mobile Approved
+- [ ] E2E Tests Approved
+- [ ] Regression Items Added
+
+"Regression Items Added" appears once regardless of how many types are combined.
+
+## RED FLAGS - Read BEFORE Making ANY Approval Decisions
 
 **IF YOU ARE THINKING ANY OF THESE THOUGHTS, YOU ARE VIOLATING THE RULE:**
 
-| Thought                                   | Why You're Wrong                                     |
-| ----------------------------------------- | ---------------------------------------------------- |
-| "This change is mobile-specific CSS"      | STOP - analyzing scope means you're rationalizing    |
-| "Desktop won't be affected technically"   | STOP - technical analysis is irrelevant to this rule |
-| "Desktop was approved before the change"  | STOP - timing doesn't matter                         |
-| "The CSS only targets mobile breakpoints" | STOP - CSS scope doesn't matter                      |
-| "It's just padding, not a layout change"  | STOP - change severity doesn't matter                |
-| "Only the changed viewport needs re-test" | STOP - you misunderstand the rule                    |
+| Thought | Why You're Wrong |
+| --- | --- |
+| "This change only affects one refinement type" | STOP - analyzing scope means you're rationalizing |
+| "The other approvals won't be affected technically" | STOP - technical analysis is irrelevant to this rule |
+| "That type was approved before the change" | STOP - timing doesn't matter |
+| "The change only targets one subsystem" | STOP - subsystem scope doesn't matter |
+| "It's just a minor tweak, not a real change" | STOP - change severity doesn't matter |
+| "Only the changed type needs re-testing" | STOP - you misunderstand the rule |
 
-**Self-Check Question**: Did you just analyze whether a code change will "affect" a viewport? **If yes, you are rationalizing.** The rule doesn't care about your analysis.
+**Self-Check Question**: Did you just analyze whether a code change will "affect" one of the refinement types? **If yes, you are rationalizing.** The rule does not care about your analysis.
 
 ## The Absolute Workflow Rule
 
 ```
-if (ANY_code_changed_during_refinement) {
-    reset_BOTH_viewport_approvals();
-    require_re_test_for_BOTH_viewports();
+if (ANY_code_changed_during_testing) {
+    reset_ALL_approvals_for_ALL_refinement_types();
+    require_re_test_for_ALL_types();
 }
 ```
 
 **There are ZERO exceptions based on:**
 
-- CSS specificity or targeting
 - Technical impact analysis
-- Change severity (padding vs layout)
+- Change severity (minor tweak vs major refactor)
+- Subsystem targeting or scope
 - Timing (before/after approval)
 - Developer judgment of scope
 - "Common sense" about what "should" affect what
 
 **Why no exceptions:**
 
-- CSS has complex cascade and specificity rules
-- Media queries can interact in unexpected ways
+- Subsystems interact in unexpected ways
 - "Safe" changes cause bugs all the time
 - User approved a specific code state; that state changed
 - **The cost of re-testing is low. The cost of shipping a regression is high.**
@@ -59,40 +101,42 @@ if (ANY_code_changed_during_refinement) {
 
 ## Session Boundary Rules
 
-When resuming Refinement in a new session:
+When resuming Automatic Testing in a new session:
 
 ### Determining Starting Point
 
-1. **Check for code changes** since last session:
+1. **Check stage YAML frontmatter** to read `refinement_type` and current approval state
+
+2. **Check for code changes** since last session:
 
    ```bash
    git log --oneline <last-session-commit>..HEAD
    git status --porcelain
    ```
 
-2. **Read stage file** to check viewport state from previous session
+3. **Read stage file** to check approval state from previous session
 
-3. **If code has CHANGED** (new commits OR uncommitted changes):
-   - Invalidate all previous approvals automatically
-   - Report: "Code changed since last session (X new commits / uncommitted changes). Previous approvals invalidated. Re-testing required."
-   - Proceed with fresh testing: Desktop → Mobile
+4. **If code has CHANGED** (new commits OR uncommitted changes):
+   - Invalidate all previous approvals automatically for ALL refinement types
+   - Report: "Code changed since last session (X new commits / uncommitted changes). Previous approvals invalidated. Re-testing required for all refinement types."
+   - Proceed with fresh testing for all types in `refinement_type`
    - User CANNOT choose to trust stale approvals when code has changed
 
-4. **If code is CLEAN** (no commits since last session, no uncommitted changes):
-   - Report: "Code unchanged since last session (verified via git). Previous approvals: Desktop [status], Mobile [status]"
+5. **If code is CLEAN** (no commits since last session, no uncommitted changes):
+   - Report: "Code unchanged since last session (verified via git). Previous approvals: [list each type and its status]"
    - Ask user for direction:
-     - "(A) Re-test both viewports from scratch (safest)"
+     - "(A) Re-test all types from scratch (safest)"
      - "(B) Trust previous approvals (code verified unchanged)"
-     - "(C) Re-test only the unapproved viewport"
+     - "(C) Re-test only the unapproved types"
 
 **Why mandatory git check:** Between sessions, teammates may push changes, dependencies may update, or local edits may occur. Trusting stale approvals without verification risks shipping untested code.
 
 ### Code Changes Invalidate ALL Previous Approvals
 
-If you make ANY code change in this session (even to fix an approved viewport):
+If you make ANY code change in this session (even to fix one type's issue):
 
-- ALL viewport approvals from previous sessions are invalidated
-- Both viewports must be re-tested
+- ALL approvals for ALL refinement types from previous sessions are invalidated
+- All types must be re-tested
 - This rule applies regardless of what the code change is
 
 ### No Code Changes This Session
@@ -103,89 +147,89 @@ If you have NOT made any code changes yet:
 - OR user may choose to re-test for confidence
 - Agent presents options, user decides
 
-**The viewport reset rule applies across session boundaries.** Previous-session approvals are convenience, not guarantees.
+**The reset rule applies across session boundaries.** Previous-session approvals are convenience, not guarantees.
 
 ## Real-Time Testing Does NOT Bypass Reset Rule
 
-Even if user is watching you test both viewports live:
+Even if user is watching you test live:
 
-- Code change resets ALL viewport approvals
-- User must explicitly re-approve each viewport AFTER the change
-- Visual confirmation during testing ≠ formal approval
-- Re-test both viewports even if user says "I saw it working"
+- Code change resets ALL approvals for ALL refinement types
+- User must explicitly re-approve each type AFTER the change
+- Visual confirmation during testing does not equal formal approval
+- Re-test all types even if user says "I saw it working"
 
 **The rule is about workflow consistency, not trust.**
 
-| Thought                                 | Why You're Wrong                               |
-| --------------------------------------- | ---------------------------------------------- |
-| "User saw it working before the change" | Approval is for code STATE, not visual memory  |
-| "We never left the session"             | Session continuity doesn't override reset rule |
-| "User confirmed visually"               | Visual ≠ explicit approval via workflow        |
+| Thought | Why You're Wrong |
+| --- | --- |
+| "User saw it working before the change" | Approval is for code STATE, not visual memory |
+| "We never left the session" | Session continuity doesn't override reset rule |
+| "User confirmed visually" | Visual does not equal explicit approval via workflow |
 
 ### What Counts as "Explicit Approval"
 
 **Formal approval workflow:**
 
-1. Agent tests viewport (takes screenshot or describes state)
-2. Agent presents result to user: "Desktop shows [X]. Approve?"
+1. Agent tests the type (takes screenshot, runs tests, or describes state)
+2. Agent presents result to user: "[Type] shows [X]. Approve?"
 3. User provides unambiguous approval: "Approved" / "LGTM" / "Yes, looks good"
 
 **Timing matters:**
 
 - Approval MUST follow the agent's explicit "Approve?" question (step 2)
 - Statements during presentation (steps 1-2) are observations, NOT approvals
-- Example: User says "looks good" during demo → observation, not approval
+- Example: User says "looks good" during demo — observation, not approval
 - Agent must still ask "Approve?" and wait for response
 
 **NOT formal approval:**
 
-- "It's fine" during live testing → Too casual, may be acknowledgment not approval
-- "I saw it working" → Visual observation, not approval decision
-- "Skip re-testing" → Waiver request, not approval of functionality
-- Nodding along during demo → Passive observation, not active approval
-- Preemptive approval ("just approve it") before testing → Invalid timing
-- Conditional approval ("approve if X") → Agent must verify X, then ask "X confirmed. Approve?"
-- Emoji-only responses (👍, ✅) → Require text confirmation: "Confirming approval?"
+- "It's fine" during live testing — Too casual, may be acknowledgment not approval
+- "I saw it working" — Visual observation, not approval decision
+- "Skip re-testing" — Waiver request, not approval of functionality
+- Nodding along during demo — Passive observation, not active approval
+- Preemptive approval ("just approve it") before testing — Invalid timing
+- Conditional approval ("approve if X") — Agent must verify X, then ask "[Type] — X confirmed. Approve?"
+- Emoji-only responses — Require text confirmation: "Confirming approval?"
 
-**Multi-viewport approval:**
+**Multi-type approval:**
 
-- Agent must explicitly list viewports: "Approving desktop AND mobile?"
-- User must acknowledge all: "Yes, both approved" or "Approve desktop and mobile"
+- Agent must explicitly list types: "Approving Desktop, Mobile, AND E2E Tests?"
+- User must acknowledge all: "Yes, all approved" or "Approve desktop, mobile, and e2e"
 - Partial approval allowed: "Approve desktop, need to re-test mobile"
-- Generic "approve all" without agent listing viewports is NOT formal approval
+- Generic "approve all" without agent listing types is NOT formal approval
 
 **Approval lifecycle:**
 
 - Approval is valid until user retracts or code changes
 - Retraction keywords: "wait", "hold on", "let me check again", "actually..."
-- If user retracts → Return to Refinement (approval invalidated)
-- If code changes post-approval → Re-approval required (per viewport reset rule)
+- If user retracts — Return to testing (approval invalidated)
+- If code changes post-approval — Re-approval required (per reset rule)
 
 **Re-approval after retraction:**
 
 - User can re-approve after additional testing
-- Each approval/retraction cycle is independent - no limit on cycles
+- Each approval/retraction cycle is independent — no limit on cycles
 - Previous retractions do not affect validity of subsequent approval
 
 **Batch approval after retractions:**
 
-- If user approves multiple viewports at once (e.g., "Approve both desktop and mobile"), treat as valid for all explicitly listed viewports
-- Agent must have presented each viewport to user before batch approval is valid
-- Vague batch approvals ("approve everything") require clarification: "Confirming approval for desktop AND mobile?"
+- If user approves multiple types at once (e.g., "Approve desktop, mobile, and e2e"), treat as valid for all explicitly listed types
+- Agent must have presented each type to user before batch approval is valid
+- Vague batch approvals ("approve everything") require clarification: "Confirming approval for [list all types]?"
 
 **State after cascading retractions:**
 
-Example: approve → retract → approve → retract → "approve both"
+Example: approve — retract — approve — retract — "approve all"
 
-- Final "approve both" is valid approval for both viewports
+- Final "approve all" is valid approval for all listed types
 - Previous retraction history is irrelevant once user explicitly re-approves
 - Agent proceeds to next phase
 
 **If user wants to skip re-testing:**
 
-1. User must explicitly state: "I waive re-testing for [viewport] because [reason]"
-2. Agent documents in stage file: "Desktop re-test waived by user: [reason]"
-3. Waiver is NOT approval - it's documented risk acceptance
+1. User must explicitly state: "I waive re-testing for [type] because [reason]"
+2. Agent documents in stage file: "[Type] re-test waived by user: [reason]"
+3. Waiver is NOT approval — it's documented risk acceptance
 
 **Why this matters:**
 
@@ -195,83 +239,138 @@ Example: approve → retract → approve → retract → "approve both"
 
 ---
 
-**CRITICAL: Any code change during Refinement resets the OTHER viewport's approval!**
+**CRITICAL: Any code change during Automatic Testing resets ALL approvals for ALL refinement types on this stage!**
 
-- If Desktop is approved and you change code for Mobile → Desktop approval is reset
-- If Mobile is approved and you change code for Desktop → Mobile approval is reset
-- Both viewports must be re-tested after any code change
+- If one type is approved and you change code for another type — ALL approvals reset
+- All types must be re-tested after any code change
+- No exceptions. Ever.
 
-**No exceptions. Ever.**
-
-### Edge Case: Code Changes Before Both Viewports Tested
+### Edge Case: Code Changes Before All Types Tested
 
 **Scenario:**
 
-1. Desktop approved
+1. Frontend Desktop approved
 2. Before testing Mobile, code change is made (for any reason)
 3. Desktop approval is reset
 4. Mobile was never approved
 
-**Rule:** Treat this identically to both viewports being reset. Test Desktop first (again), then Mobile.
+**Rule:** Treat this identically to all types being reset. Re-test all types from the beginning.
 
-**Why:** The code state Desktop was approved against no longer exists. Both viewports must be validated against the new code state.
+**Why:** The code state that was approved no longer exists. All types must be validated against the new code state.
 
-## Frontend Workflow
+## Workflow by Refinement Type
+
+### Frontend Workflow
 
 ```
-1. User tests Desktop viewport
+1. User tests Desktop
 2. User reports any issues
-3. [IF issues] → Delegate to debugger-lite/debugger → Delegate to fixer → Delegate to verifier
+3. [IF issues] -> Fix -> Verify
 4. [LOOP until Desktop approved]
 
-5. User tests Mobile viewport
+5. User tests Mobile
 6. User reports any issues
-7. [IF issues] → Delegate to debugger-lite/debugger → Delegate to fixer → Delegate to verifier
+7. [IF issues] -> Fix -> Verify
 8. [LOOP until Mobile approved]
-
-9. Delegate to doc-updater (Haiku) to update tracking documents:
-   - Mark Refinement phase complete in STAGE-XXX-YYY.md
-   - Update stage status in epic's EPIC-XXX.md table (MANDATORY)
-   - Add regression items to epic's epics/EPIC-XXX/regression.md
 ```
 
-## Backend-Only Workflow
+### Backend Workflow
 
 ```
-1. Delegate to e2e-tester (Sonnet) to design and run API/integration tests
-2. [IF issues found] → Delegate to debugger-lite/debugger → Delegate to fixer → Delegate to verifier
-3. [LOOP until e2e-tester passes]
-4. Delegate to doc-updater (Haiku) to update tracking documents:
-   - Mark Refinement phase complete in STAGE-XXX-YYY.md
-   - Update stage status in epic's EPIC-XXX.md table (MANDATORY)
-   - Add regression items to epic's epics/EPIC-XXX/regression.md
+1. Design and run API/integration/E2E tests
+2. [IF issues found] -> Fix -> Verify
+3. [LOOP until E2E Tests approved]
 ```
 
-## Determining Frontend vs Backend
+### CLI Workflow
 
-- **Frontend**: Any UI components, styles, user-facing changes
-- **Backend**: API changes, database, services, no UI impact
+```
+1. Test CLI commands and behavior
+2. User verifies output, flags, edge cases
+3. [IF issues found] -> Fix -> Verify
+4. [LOOP until CLI Behavior approved]
+```
+
+### Database Workflow
+
+```
+1. Run migration on test data
+2. Verify migration integrity (up and down)
+3. [IF issues found] -> Fix -> Verify
+4. [LOOP until Migration Verified]
+
+5. Validate data integrity post-migration
+6. [IF issues found] -> Fix -> Verify
+7. [LOOP until Data Integrity Approved]
+```
+
+### Infrastructure Workflow
+
+```
+1. Deploy to test/staging environment
+2. Verify deployment health and behavior
+3. [IF issues found] -> Fix -> Verify
+4. [LOOP until Deployment Verified]
+```
+
+### Custom Workflow
+
+```
+1. Load user-defined approval criteria from Design phase notes
+2. Test each criterion
+3. [IF issues found] -> Fix -> Verify
+4. [LOOP until all custom approvals granted]
+```
+
+### After All Types Approved
+
+```
+1. Ensure Regression Items Added to ticket's regression.md
+2. Update stage tracking file:
+   - Mark Automatic Testing phase complete in STAGE-XXX-YYY-ZZZ.md
+   - Update stage status in ticket's TICKET-XXX-YYY.md table (MANDATORY)
+```
+
+## Status Values
+
+During this phase, the stage status in YAML frontmatter will be one of:
+
+- **Automatic Testing** — Agent-driven testing is in progress (current phase)
+- **Manual Testing** — Stage requires user-driven manual testing/approval
+
+The transition between these is managed by the `ticket-stage-workflow` skill based on what the stage needs.
 
 ## Phase Gates Checklist
 
-### Frontend
+The checklist is dynamically constructed from `refinement_type`. All items from all listed types must be checked:
 
+### Frontend Items
 - [ ] Desktop tested and approved by user
 - [ ] Mobile tested and approved by user
-- [ ] **Remember**: Code changes reset OTHER viewport's approval
-- [ ] Tracking documents updated via doc-updater:
-  - Refinement phase marked complete in stage file
-  - Epic stage status updated (MANDATORY)
-  - Regression items added to epic's regression.md
 
-### Backend-Only
+### Backend Items
+- [ ] E2E tests designed, run, and approved
 
-- [ ] e2e-tester designed and ran API/integration tests
-- [ ] All scenarios passed (or issues fixed via debugger → fixer)
-- [ ] Tracking documents updated via doc-updater:
-  - Refinement phase marked complete in stage file
-  - Epic stage status updated (MANDATORY)
-  - Regression items added to epic's regression.md
+### CLI Items
+- [ ] CLI behavior tested and approved by user
+
+### Database Items
+- [ ] Migration verified (up and down)
+- [ ] Data integrity approved
+
+### Infrastructure Items
+- [ ] Deployment verified and approved
+
+### Custom Items
+- [ ] All user-defined approvals granted
+
+### Always Required
+- [ ] Regression items added to ticket's `regression.md`
+- [ ] **Remember**: ANY code change resets ALL approvals for ALL types
+- [ ] Tracking documents updated:
+  - Automatic Testing phase marked complete in stage file
+  - Ticket stage status updated (MANDATORY)
+  - Regression items added to ticket's regression.md
 
 ---
 
@@ -284,9 +383,9 @@ Example: approve → retract → approve → retract → "approve both"
 - Complete ALL exit gate steps in order
 - Invoke lessons-learned skill (even if "nothing to capture")
 - Invoke journal skill (even if brief)
-- Update ALL tracking documents via doc-updater
+- Update ALL tracking documents
 
-**Time pressure is not a workflow exception.** Fast delivery comes from efficient subagent coordination, not from skipping safety checks. Exit gates take 2-3 minutes total.
+**Time pressure is not a workflow exception.** Fast delivery comes from efficient coordination, not from skipping safety checks. Exit gates take 2-3 minutes total.
 
 ---
 
@@ -294,17 +393,19 @@ Example: approve → retract → approve → retract → "approve both"
 
 Before proceeding to Finalize phase, you MUST complete these steps IN ORDER:
 
-1. Update stage tracking file (mark Refinement phase complete)
-2. Update epic tracking file (update stage status in table)
-3. Verify regression items were added to epic's regression.md (from workflow step 9)
-4. Use Skill tool to invoke `lessons-learned`
-5. Use Skill tool to invoke `journal`
+1. Update stage tracking file (mark Automatic Testing phase complete)
+2. Update ticket tracking file (update stage status in table)
+3. Verify regression items were added to ticket's regression.md
+4. Run `kanban-cli sync --stage STAGE-XXX-YYY-ZZZ` to sync state
+5. Use Skill tool to invoke `lessons-learned`
+6. Use Skill tool to invoke `journal`
 
 **Why this order?**
 
 - Steps 1-2: Establish facts (phase done, status updated)
 - Step 3: Verify artifacts were created during workflow
-- Steps 4-5: Capture learnings and feelings based on the now-complete phase
+- Step 4: Sync kanban state with file changes
+- Steps 5-6: Capture learnings and feelings based on the now-complete phase
 
 Lessons and journal need the full phase context, including final status updates. Running them before status updates means they lack complete information.
 
