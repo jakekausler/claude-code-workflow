@@ -1,6 +1,6 @@
 ---
 name: phase-design
-description: Use when entering Design phase of epic-stage-workflow - guides task discovery, context gathering, and approach selection
+description: Use when entering Design phase of ticket-stage-workflow - guides task discovery, context gathering, and approach selection within the epic/ticket/stage hierarchy
 ---
 
 # Design Phase
@@ -12,7 +12,8 @@ The Design phase discovers what to build and selects the approach. It ensures th
 ## Entry Conditions
 
 - `/next_task` has been run and returned a Design phase assignment
-- `epic-stage-workflow` skill has been invoked (shared rules loaded)
+- `ticket-stage-workflow` skill has been invoked (shared rules loaded)
+- Stage YAML frontmatter has been read (status, refinement_type, ticket, epic, etc.)
 
 ## Phase Workflow
 
@@ -40,11 +41,27 @@ The Design phase discovers what to build and selects the approach. It ensures th
 
    **When in doubt, use brainstormer.** Opus is specialized for architecture options. You (Sonnet) coordinate, don't architect.
 
-4. User selects approach (or confirms obvious one)
-5. Delegate to doc-updater (Haiku) to update tracking documents:
-   - Record selected approach in STAGE-XXX-YYY.md
-   - Mark Design phase complete in STAGE-XXX-YYY.md
-   - Update stage status in epic's EPIC-XXX.md table (MANDATORY)
+4. [CONDITIONAL: Auto-Design Mode]
+   Check `WORKFLOW_AUTO_DESIGN` environment variable:
+
+   IF `WORKFLOW_AUTO_DESIGN=true`:
+     → Brainstormer still runs and presents 2-3 approaches
+     → Instead of waiting for user selection, proceed with the brainstormer's recommended option
+     → Log the recommendation and reasoning in the stage file's Design Phase section:
+       - **Auto-Selected Approach**: [name]
+       - **Reasoning**: [why brainstormer recommended this]
+       - **Alternatives Considered**: [brief list of other options]
+     → Note: The user can still override by reviewing the stage file later
+
+   IF `WORKFLOW_AUTO_DESIGN=false` (default):
+     → Existing behavior: present options, wait for user to select
+
+5. User selects approach (or confirms obvious one, or auto-selected in auto-design mode)
+6. Delegate to doc-updater (Haiku) to update tracking documents:
+   - Record selected approach in STAGE-XXX-YYY-ZZZ.md (Design Phase section)
+   - Mark Design phase complete in STAGE-XXX-YYY-ZZZ.md
+   - Update stage status in ticket's TICKET-XXX-YYY.md (MANDATORY)
+   - Update ticket status in epic's EPIC-XXX.md if needed
 ```
 
 ## Skip Brainstormer Criteria
@@ -65,19 +82,48 @@ The Design phase discovers what to build and selects the approach. It ensures th
 - [ ] Architectural decision needed
 - [ ] You're unsure whether to use brainstormer (meta-uncertainty = use it)
 
+## Auto-Design Mode (`WORKFLOW_AUTO_DESIGN`)
+
+When `WORKFLOW_AUTO_DESIGN=true`, the Design phase operates in autonomous mode:
+
+- **Brainstormer still runs** — it is NOT skipped. The brainstormer analyzes the problem, explores approaches, and makes a recommendation.
+- **No user prompt** — instead of presenting options and waiting, the brainstormer's recommended option is accepted automatically.
+- **Logging is mandatory** — the recommendation, reasoning, and alternatives must be recorded in the stage file's Design Phase section so the user has full visibility into what was decided and why.
+- **Default is `false`** — when unset or `false`, the existing interactive behavior applies (user selects from presented options).
+
+This mode is useful for automated/batch processing where a human is not available to make design decisions in real time. The brainstormer's judgment is trusted, but the decision trail is preserved for later review.
+
+## Reading Stage Data
+
+All stage metadata is read from YAML frontmatter in the stage file (`STAGE-XXX-YYY-ZZZ.md`), not from markdown headers. Key fields:
+
+- `id`: Stage identifier (e.g., `STAGE-001-001-001`)
+- `ticket`: Parent ticket (e.g., `TICKET-001-001`)
+- `epic`: Parent epic (e.g., `EPIC-001`)
+- `title`: Stage title
+- `status`: Current status
+- `refinement_type`: List of types (frontend, backend, cli, database, infrastructure, custom)
+- `depends_on`: Dependencies
+- `worktree_branch`: Git worktree branch name
+
+File paths follow the three-level hierarchy:
+```
+epics/EPIC-XXX/TICKET-XXX-YYY/STAGE-XXX-YYY-ZZZ.md
+```
+
 ## Phase Gates Checklist
 
 Before completing Design phase, verify:
 
 - [ ] Task card received from task-navigator
 - [ ] Context gathered via Explore
-- [ ] IF multiple approaches: brainstormer presented 2-3 options, user selected one
+- [ ] IF multiple approaches: brainstormer presented 2-3 options, user selected one (or auto-selected if `WORKFLOW_AUTO_DESIGN=true`)
 - [ ] IF obvious solution: Confirmed approach with user
 - [ ] Seed data requirements confirmed (if applicable)
 - [ ] Tracking documents updated via doc-updater:
-  - Selected approach recorded in stage file
+  - Selected approach recorded in stage file (`STAGE-XXX-YYY-ZZZ.md`)
   - Design phase marked complete
-  - Epic stage status updated (MANDATORY)
+  - Ticket stage status updated (MANDATORY)
 
 ## Time Pressure Does NOT Override Exit Gates
 
@@ -98,15 +144,17 @@ Before completing Design phase, verify:
 
 Before proceeding to Build phase, you MUST complete these steps IN ORDER:
 
-1. Update stage tracking file (mark Design phase complete)
-2. Update epic tracking file (update stage status in table)
-3. Use Skill tool to invoke `lessons-learned`
-4. Use Skill tool to invoke `journal`
+1. Update stage tracking file (mark Design phase complete in `STAGE-XXX-YYY-ZZZ.md`)
+2. Update ticket tracking file (update stage status in `TICKET-XXX-YYY.md`)
+3. Run `kanban-cli sync --stage STAGE-XXX-YYY-ZZZ` to sync changes to the kanban board
+4. Use Skill tool to invoke `lessons-learned`
+5. Use Skill tool to invoke `journal`
 
 **Why this order?**
 
 - Steps 1-2: Establish facts (phase done, status updated)
-- Steps 3-4: Capture learnings and feelings based on the now-complete phase
+- Step 3: Sync state to kanban board so downstream tools see current status
+- Steps 4-5: Capture learnings and feelings based on the now-complete phase
 
 Lessons and journal need the full phase context, including final status updates. Running them before status updates means they lack complete information.
 
