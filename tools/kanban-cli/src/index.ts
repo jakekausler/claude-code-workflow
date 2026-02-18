@@ -9,6 +9,7 @@ export type {
 export {
   RESERVED_STATUSES,
   DONE_TARGET,
+  COMPLETE_STATUS,
   isSkillState,
   isResolverState,
 } from './types/pipeline.js';
@@ -94,3 +95,35 @@ export type { KanbanColumnInput } from './engine/kanban-columns.js';
 // Sync
 export { syncRepo } from './sync/sync.js';
 export type { SyncOptions, SyncResult } from './sync/sync.js';
+
+// CLI Logic (usable as library)
+export { buildBoard, toColumnKey } from './cli/logic/board.js';
+export type {
+  BoardOutput,
+  BoardItem,
+  TicketBoardItem,
+  StageBoardItem,
+  BuildBoardInput,
+  BoardFilters,
+} from './cli/logic/board.js';
+export { buildGraph } from './cli/logic/graph.js';
+export type {
+  GraphOutput,
+  GraphNode,
+  GraphEdge,
+  BuildGraphInput,
+  GraphFilters,
+} from './cli/logic/graph.js';
+export { buildNext, computePriorityScore } from './cli/logic/next.js';
+export type {
+  NextOutput,
+  ReadyStage,
+  BuildNextInput,
+} from './cli/logic/next.js';
+export { validateWorkItems } from './cli/logic/validate.js';
+export type {
+  ValidateOutput,
+  ValidationError,
+  ValidationWarning,
+  ValidateInput,
+} from './cli/logic/validate.js';

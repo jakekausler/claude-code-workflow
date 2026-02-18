@@ -89,6 +89,16 @@ export class DependencyRepository {
   }
 
   /**
+   * List all dependencies for a repo.
+   */
+  listByRepo(repoId: number): DependencyRow[] {
+    return this.db
+      .raw()
+      .prepare('SELECT * FROM dependencies WHERE repo_id = ?')
+      .all(repoId) as DependencyRow[];
+  }
+
+  /**
    * Delete all dependencies for a repo (used for re-sync).
    */
   deleteByRepo(repoId: number): void {
