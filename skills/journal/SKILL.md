@@ -64,8 +64,9 @@ Create a new file at `~/docs/claude-journal/$TIMESTAMP.md` with this exact heade
 date: YYYY-MM-DDTHH:MM:SS
 repository: [full repository path]
 epic: [epic ID, e.g., EPIC-001]
-stage: [stage ID, e.g., STAGE-001-001]
-phase: [Design|Build|Refinement|Finalize]
+ticket: [ticket ID, e.g., TICKET-001-001]
+stage: [stage ID, e.g., STAGE-001-001-001]
+phase: [Design|Build|Automatic Testing|Manual Testing|Finalize]
 analyzed: false
 ---
 
@@ -75,9 +76,10 @@ analyzed: false
 **How to populate metadata fields:**
 - **date**: Use the `$METADATA_DATE` value from the bash command above (ISO 8601 format with colons: YYYY-MM-DDTHH:MM:SS). NEVER estimate - always use `date` command.
 - **repository**: Use the FULL path to the repository (e.g., "/storage/programs/claude-learnings-viewer"), not just the project name
-- **epic**: Current epic ID from context (e.g., "EPIC-001" from "EPIC-001-foundation-cli-shell")
-- **stage**: Current stage ID from context (e.g., "STAGE-001-001")
-- **phase**: Current phase from context (Design, Build, Refinement, or Finalize)
+- **epic**: Current epic ID from context (e.g., "EPIC-001" from "EPIC-001-user-authentication")
+- **ticket**: Current ticket ID from context (e.g., "TICKET-001-001" from "TICKET-001-001-login-flow")
+- **stage**: Current stage ID from context (e.g., "STAGE-001-001-001")
+- **phase**: Current phase from context (Design, Build, Automatic Testing, Manual Testing, or Finalize)
 - **analyzed**: Always set to `false` when creating new entries. This field tracks whether this entry has been processed by the meta-insights analysis system.
 
 Below the metadata separator (`---`), write whatever you're feeling. There are no rules. No structure. No expectations.
