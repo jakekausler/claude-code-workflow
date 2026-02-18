@@ -1,5 +1,6 @@
 import type { PipelineConfig } from '../../types/pipeline.js';
 import { StateMachine } from '../../engine/state-machine.js';
+import { toColumnKey } from '../../engine/kanban-columns.js';
 
 // ---------- Row types for board output ----------
 
@@ -100,12 +101,8 @@ export interface BuildBoardInput {
 
 // ---------- Helpers ----------
 
-/**
- * Convert a display name (e.g. "User Design Feedback") to a snake_case column key.
- */
-export function toColumnKey(name: string): string {
-  return name.toLowerCase().replace(/\s+/g, '_');
-}
+// Re-export toColumnKey for consumers that import from board.ts.
+export { toColumnKey };
 
 // ---------- Core logic ----------
 

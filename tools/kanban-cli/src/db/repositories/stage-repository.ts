@@ -104,7 +104,7 @@ export class StageRepository {
   }
 
   /**
-   * List stages that are ready for work: not session_active, and not in Backlog or Done columns.
+   * List stages that are ready for work: not session_active, and not in backlog or done columns.
    */
   listReady(repoId: number): StageRow[] {
     return this.db
@@ -113,8 +113,8 @@ export class StageRepository {
         `SELECT * FROM stages
          WHERE repo_id = ?
            AND session_active = 0
-           AND kanban_column != 'Backlog'
-           AND kanban_column != 'Done'`
+           AND kanban_column != 'backlog'
+           AND kanban_column != 'done'`
       )
       .all(repoId) as StageRow[];
   }

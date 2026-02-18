@@ -89,7 +89,7 @@ export { discoverWorkItems } from './parser/discovery.js';
 export type { DiscoveredFile } from './parser/discovery.js';
 
 // Kanban Columns
-export { computeKanbanColumn } from './engine/kanban-columns.js';
+export { computeKanbanColumn, toColumnKey } from './engine/kanban-columns.js';
 export type { KanbanColumnInput } from './engine/kanban-columns.js';
 
 // Sync
@@ -97,7 +97,7 @@ export { syncRepo } from './sync/sync.js';
 export type { SyncOptions, SyncResult } from './sync/sync.js';
 
 // CLI Logic (usable as library)
-export { buildBoard, toColumnKey } from './cli/logic/board.js';
+export { buildBoard } from './cli/logic/board.js';
 export type {
   BoardOutput,
   BoardItem,

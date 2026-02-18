@@ -27,67 +27,67 @@ describe('computeKanbanColumn', () => {
   const sm = StateMachine.fromConfig(testConfig);
   const pipelineStatuses = sm.getAllStatuses();
 
-  it('returns Done for status Complete', () => {
+  it('returns done for status Complete', () => {
     const column = computeKanbanColumn({
       status: 'Complete',
       pipelineStatuses,
       hasUnresolvedDeps: false,
     });
-    expect(column).toBe('Done');
+    expect(column).toBe('done');
   });
 
-  it('returns Backlog for a pipeline status with unresolved dependencies', () => {
+  it('returns backlog for a pipeline status with unresolved dependencies', () => {
     const column = computeKanbanColumn({
       status: 'Design',
       pipelineStatuses,
       hasUnresolvedDeps: true,
     });
-    expect(column).toBe('Backlog');
+    expect(column).toBe('backlog');
   });
 
-  it('returns the pipeline column name for a resolved pipeline status', () => {
+  it('returns the snake_case pipeline column name for a resolved pipeline status', () => {
     const column = computeKanbanColumn({
       status: 'Design',
       pipelineStatuses,
       hasUnresolvedDeps: false,
     });
-    expect(column).toBe('Design');
+    expect(column).toBe('design');
   });
 
-  it('returns Ready for Work for status Not Started with resolved deps', () => {
+  it('returns ready_for_work for status Not Started with resolved deps', () => {
     const column = computeKanbanColumn({
       status: 'Not Started',
       pipelineStatuses,
       hasUnresolvedDeps: false,
     });
-    expect(column).toBe('Ready for Work');
+    expect(column).toBe('ready_for_work');
   });
 
-  it('returns Backlog for status Not Started with unresolved deps', () => {
+  it('returns backlog for status Not Started with unresolved deps', () => {
     const column = computeKanbanColumn({
       status: 'Not Started',
       pipelineStatuses,
       hasUnresolvedDeps: true,
     });
-    expect(column).toBe('Backlog');
+    expect(column).toBe('backlog');
   });
 
-  it('returns the pipeline column for Build status', () => {
+  it('returns the snake_case pipeline column for Build status', () => {
     const column = computeKanbanColumn({
       status: 'Build',
       pipelineStatuses,
       hasUnresolvedDeps: false,
     });
-    expect(column).toBe('Build');
+    expect(column).toBe('build');
   });
 
-  it('returns Backlog for an unknown status (not pipeline, not system)', () => {
+  it('returns backlog for an unknown status (not pipeline, not system)', () => {
     const column = computeKanbanColumn({
       status: 'SomeUnknownStatus',
       pipelineStatuses,
       hasUnresolvedDeps: false,
     });
-    expect(column).toBe('Backlog');
+    expect(column).toBe('backlog');
   });
 });
 
@@ -95,13 +95,13 @@ describe('computeKanbanColumn edge cases', () => {
   const sm = StateMachine.fromConfig(testConfig);
   const pipelineStatuses = sm.getAllStatuses();
 
-  it('pipeline status with unresolved deps goes to Backlog even if in pipeline', () => {
+  it('pipeline status with unresolved deps goes to backlog even if in pipeline', () => {
     const column = computeKanbanColumn({
       status: 'Build',
       pipelineStatuses,
       hasUnresolvedDeps: true,
     });
-    expect(column).toBe('Backlog');
+    expect(column).toBe('backlog');
   });
 
   it('Complete status ignores dependency resolution', () => {
@@ -110,6 +110,6 @@ describe('computeKanbanColumn edge cases', () => {
       pipelineStatuses,
       hasUnresolvedDeps: true,
     });
-    expect(column).toBe('Done');
+    expect(column).toBe('done');
   });
 });

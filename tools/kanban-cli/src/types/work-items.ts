@@ -1,18 +1,19 @@
 /**
- * System kanban columns — structural columns that always exist.
- * Pipeline columns (from config) appear between Ready for Work and Done.
+ * System kanban columns — structural columns that always exist (snake_case keys).
+ * Pipeline columns (from config) appear between ready_for_work and done.
  */
 export const SYSTEM_COLUMNS = [
-  'To Convert',
-  'Backlog',
-  'Ready for Work',
-  'Done',
+  'to_convert',
+  'backlog',
+  'ready_for_work',
+  'done',
 ] as const;
 
 export type SystemColumn = (typeof SYSTEM_COLUMNS)[number];
 
 /**
  * A kanban column is either a system column or a pipeline-defined column (string).
+ * All column keys use snake_case.
  */
 export type KanbanColumn = SystemColumn | (string & {});
 

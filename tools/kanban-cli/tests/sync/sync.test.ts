@@ -169,10 +169,10 @@ due_date: null
 
     const stages = new StageRepository(db);
     const stage = stages.findById('STAGE-001-001-001');
-    expect(stage!.kanban_column).toBe('Design');
+    expect(stage!.kanban_column).toBe('design');
   });
 
-  it('computes kanban_column as Ready for Work for Not Started status', () => {
+  it('computes kanban_column as ready_for_work for Not Started status', () => {
     writeEpic('EPIC-001', 'Auth');
     writeTicket('TICKET-001-001', 'EPIC-001', 'Login');
     writeStage('STAGE-001-001-001', 'TICKET-001-001', 'EPIC-001', 'Login Form', 'Not Started');
@@ -181,10 +181,10 @@ due_date: null
 
     const stages = new StageRepository(db);
     const stage = stages.findById('STAGE-001-001-001');
-    expect(stage!.kanban_column).toBe('Ready for Work');
+    expect(stage!.kanban_column).toBe('ready_for_work');
   });
 
-  it('computes kanban_column as Done for Complete status', () => {
+  it('computes kanban_column as done for Complete status', () => {
     writeEpic('EPIC-001', 'Auth');
     writeTicket('TICKET-001-001', 'EPIC-001', 'Login');
     writeStage('STAGE-001-001-001', 'TICKET-001-001', 'EPIC-001', 'Login Form', 'Complete');
@@ -193,10 +193,10 @@ due_date: null
 
     const stages = new StageRepository(db);
     const stage = stages.findById('STAGE-001-001-001');
-    expect(stage!.kanban_column).toBe('Done');
+    expect(stage!.kanban_column).toBe('done');
   });
 
-  it('computes kanban_column as Backlog for stages with unresolved deps', () => {
+  it('computes kanban_column as backlog for stages with unresolved deps', () => {
     writeEpic('EPIC-001', 'Auth');
     writeTicket('TICKET-001-001', 'EPIC-001', 'Login');
     writeStage(
@@ -220,7 +220,7 @@ due_date: null
     const stages = new StageRepository(db);
     const blocked = stages.findById('STAGE-001-001-001');
     // STAGE-001-001-002 is not Complete, so the dependency is unresolved
-    expect(blocked!.kanban_column).toBe('Backlog');
+    expect(blocked!.kanban_column).toBe('backlog');
   });
 
   it('resolves deps when dependency stage is Complete', () => {
@@ -246,7 +246,7 @@ due_date: null
 
     const stages = new StageRepository(db);
     const resolved = stages.findById('STAGE-001-001-001');
-    expect(resolved!.kanban_column).toBe('Design');
+    expect(resolved!.kanban_column).toBe('design');
 
     const deps = new DependencyRepository(db);
     expect(deps.allResolved('STAGE-001-001-001')).toBe(true);

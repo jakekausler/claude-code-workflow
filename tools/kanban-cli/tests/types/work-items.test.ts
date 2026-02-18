@@ -13,12 +13,12 @@ import {
 } from '../../src/types/work-items.js';
 
 describe('Work Item Types', () => {
-  it('SYSTEM_COLUMNS contains the four fixed columns', () => {
+  it('SYSTEM_COLUMNS contains the four fixed columns in snake_case', () => {
     expect(SYSTEM_COLUMNS).toEqual([
-      'To Convert',
-      'Backlog',
-      'Ready for Work',
-      'Done',
+      'to_convert',
+      'backlog',
+      'ready_for_work',
+      'done',
     ]);
   });
 
@@ -87,10 +87,10 @@ describe('Work Item Types', () => {
   });
 
   it('KanbanColumn accepts system columns and string pipeline columns', () => {
-    const col1: KanbanColumn = 'Backlog';
-    const col2: KanbanColumn = 'Design';
-    expect(col1).toBe('Backlog');
-    expect(col2).toBe('Design');
+    const col1: KanbanColumn = 'backlog';
+    const col2: KanbanColumn = 'design';
+    expect(col1).toBe('backlog');
+    expect(col2).toBe('design');
   });
 
   it('RepoRecord interface has required fields', () => {

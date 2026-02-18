@@ -404,7 +404,7 @@ describe('Repositories', () => {
         repo_id: repoId,
         title: 'Stage 1',
         status: 'open',
-        kanban_column: 'Ready for Work',
+        kanban_column: 'ready_for_work',
         refinement_type: 'skill',
         worktree_branch: null,
         priority: 0,
@@ -498,28 +498,28 @@ describe('Repositories', () => {
 
       stages.upsert(makeStageData(repoId, { id: 'stage-1', kanban_column: 'Code Review' }));
       stages.upsert(makeStageData(repoId, { id: 'stage-2', kanban_column: 'Code Review' }));
-      stages.upsert(makeStageData(repoId, { id: 'stage-3', kanban_column: 'Ready for Work' }));
+      stages.upsert(makeStageData(repoId, { id: 'stage-3', kanban_column: 'ready_for_work' }));
 
       expect(stages.listByColumn(repoId, 'Code Review')).toHaveLength(2);
-      expect(stages.listByColumn(repoId, 'Ready for Work')).toHaveLength(1);
-      expect(stages.listByColumn(repoId, 'Done')).toHaveLength(0);
+      expect(stages.listByColumn(repoId, 'ready_for_work')).toHaveLength(1);
+      expect(stages.listByColumn(repoId, 'done')).toHaveLength(0);
     });
 
-    it('listReady returns stages not in Backlog or Done and not session_active', () => {
+    it('listReady returns stages not in backlog or done and not session_active', () => {
       const { stages, repoId } = setupStagePrereqs();
 
-      // Ready: not session_active, not Backlog, not Done
-      stages.upsert(makeStageData(repoId, { id: 'stage-ready', kanban_column: 'Ready for Work', session_active: 0 }));
+      // Ready: not session_active, not backlog, not done
+      stages.upsert(makeStageData(repoId, { id: 'stage-ready', kanban_column: 'ready_for_work', session_active: 0 }));
       stages.upsert(makeStageData(repoId, { id: 'stage-review', kanban_column: 'Code Review', session_active: 0 }));
 
       // Not ready: session_active
-      stages.upsert(makeStageData(repoId, { id: 'stage-active', kanban_column: 'Ready for Work', session_active: 1 }));
+      stages.upsert(makeStageData(repoId, { id: 'stage-active', kanban_column: 'ready_for_work', session_active: 1 }));
 
-      // Not ready: Backlog column
-      stages.upsert(makeStageData(repoId, { id: 'stage-backlog', kanban_column: 'Backlog', session_active: 0 }));
+      // Not ready: backlog column
+      stages.upsert(makeStageData(repoId, { id: 'stage-backlog', kanban_column: 'backlog', session_active: 0 }));
 
-      // Not ready: Done column
-      stages.upsert(makeStageData(repoId, { id: 'stage-done', kanban_column: 'Done', session_active: 0 }));
+      // Not ready: done column
+      stages.upsert(makeStageData(repoId, { id: 'stage-done', kanban_column: 'done', session_active: 0 }));
 
       const ready = stages.listReady(repoId);
       expect(ready).toHaveLength(2);
