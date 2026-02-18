@@ -1,4 +1,5 @@
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
 import { parse as parseYaml } from 'yaml';
 import { pipelineConfigSchema } from './schema.js';
@@ -7,7 +8,7 @@ import type { PipelineConfig } from '../types/pipeline.js';
 
 export const CONFIG_PATHS = {
   globalConfig: path.join(
-    process.env.HOME || process.env.USERPROFILE || '~',
+    os.homedir(),
     '.config',
     'kanban-workflow',
     'config.yaml'
@@ -82,7 +83,9 @@ export function loadConfig(options: LoadConfigOptions = {}): PipelineConfig {
   if (fs.existsSync(repoConfigPath)) {
     const raw = fs.readFileSync(repoConfigPath, 'utf-8');
     const parsed = parseYaml(raw);
-    // Repo config is partial — don't validate against full schema yet
+    // Repo config is intentionally loaded without schema validation.
+    // It may be partial (e.g., only overriding defaults without redefining phases).
+    // The final merged result is validated against the full schema below.
     repoConfig = parsed as Partial<PipelineConfig>;
   }
 
