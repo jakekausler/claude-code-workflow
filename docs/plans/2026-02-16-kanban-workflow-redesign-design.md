@@ -775,7 +775,7 @@ The word "epic" is then reintroduced as the container above tickets. Every skill
 
 **Stage status after finalize**:
 - Local mode: `Complete`
-- Remote mode: `Awaiting Merge`
+- Remote mode: `PR Created`
 
 ### 3.8 New Skill: `review-cycle`
 
@@ -795,7 +795,7 @@ Handles the push → review → address → push cycle for MR/PR code review:
 6. If all comments addressed: notify user that MR is ready for re-review.
 7. Repeat if new round of comments comes in.
 
-**Entry**: Invoked manually (`/review-cycle STAGE-001-001-001`) or detected by the orchestration loop when it sees an `Awaiting Merge` stage with unresolved comments.
+**Entry**: Invoked manually (`/review-cycle STAGE-001-001-001`) or detected by the orchestration loop when it sees a `PR Created` stage with unresolved comments.
 
 ### 3.9 New Skill: `convert-ticket`
 
