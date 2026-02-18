@@ -1,6 +1,6 @@
 ---
 name: phase-finalize
-description: Use when entering Finalize phase of epic-stage-workflow - guides code review, testing, documentation, and final commits
+description: Use when entering Finalize phase of ticket-stage-workflow - guides code review, testing, documentation, and final commits
 ---
 
 # Finalize Phase
@@ -11,12 +11,36 @@ The Finalize phase ensures code quality through review, adds tests if needed, cr
 
 ## Entry Conditions
 
-- Refinement phase is complete (user testing passed)
-- `epic-stage-workflow` skill has been invoked (shared rules loaded)
+- Automatic Testing and Manual Testing phases are complete (user testing passed)
+- `ticket-stage-workflow` skill has been invoked (shared rules loaded)
 
 ## CRITICAL: Every Step Uses Subagents
 
 **Every step in Finalize MUST be delegated to a subagent. Main agent coordinates only.**
+
+## Remote Mode Awareness
+
+The Finalize phase behaves differently depending on the `WORKFLOW_REMOTE_MODE` environment variable:
+
+### Local Mode (default, `WORKFLOW_REMOTE_MODE=false`)
+
+- Unchanged from standard behavior
+- Merges to main and commits directly
+- Stage status set to `Complete` after finalization
+
+### Remote Mode (`WORKFLOW_REMOTE_MODE=true`)
+
+- Creates implementation commit on the worktree branch (not main)
+- Pushes branch to remote (`git push -u origin <worktree_branch>`)
+- Creates MR/PR via `gh pr create` or `glab mr create` (based on `WORKFLOW_GIT_PLATFORM`):
+  - Title: Stage title
+  - Description: Summary of what was built, design decisions, test results
+  - If `jira_key` is set on the ticket: include Jira link in description
+  - If `jira_key` is set on the epic: reference the Jira epic in description
+- Stage status set to `PR Created` (not `Complete`)
+- If `WORKFLOW_SLACK_WEBHOOK` is set, POST notification with MR/PR URL
+
+> **Note:** Remote mode functionality ships in Stage 3. For now, local mode only.
 
 ## Phase Workflow
 
@@ -70,24 +94,26 @@ The Finalize phase ensures code quality through review, adds tests if needed, cr
 
 8. Main agent creates implementation commit:
    - ONLY add implementation files (code, tests, docs): `git add <specific files>`
-   - Include commit hash in message
+   - Include epic/ticket/stage reference in commit message
+     (e.g., "feat(EPIC-001/TICKET-001-001/STAGE-001-001-001): implement login form")
    - **NEVER use `git add -A`** - it picks up uncommitted tracking files
 
 9. Delegate to doc-updater (Haiku) to add commit hash to changelog entry
 
 10. Main agent commits changelog update:
     - ONLY commit changelog: `git add changelog/<date>.changelog.md`
-    - Commit message: "chore: add commit hash to STAGE-XXX-YYY changelog"
+    - Commit message: "chore(TICKET-XXX-YYY): add commit hash to STAGE-XXX-YYY-ZZZ changelog"
 
-11. Delegate to doc-updater (Haiku) to update tracking documents:
-    - Mark Finalize phase complete in STAGE-XXX-YYY.md
-    - Update stage status to "Complete" in STAGE-XXX-YYY.md
-    - Update stage status in epic's EPIC-XXX.md table (MANDATORY - mark as Complete)
-    - Update epic "Current Stage" to next stage
+11. Delegate to doc-updater (Haiku) to update tracking documents via YAML frontmatter:
+    - Update stage YAML frontmatter: set Finalize phase complete, status to "Complete" (local mode) or "PR Created" (remote mode)
+    - Update ticket YAML frontmatter in TICKET-XXX-YYY.md (update stage status)
+    - Update epic YAML frontmatter in EPIC-XXX.md if all tickets in epic are complete
+    - Run `kanban-cli sync --stage STAGE-XXX-YYY-ZZZ` after status changes
 
 12. Main agent commits tracking files:
-    - ONLY commit tracking files: `git add epics/EPIC-XXX/STAGE-XXX-YYY.md epics/EPIC-XXX/EPIC-XXX.md`
-    - Commit message: "chore: mark STAGE-XXX-YYY Complete"
+    - ONLY commit tracking files:
+      `git add epics/EPIC-XXX-name/TICKET-XXX-YYY-name/STAGE-XXX-YYY-ZZZ.md epics/EPIC-XXX-name/TICKET-XXX-YYY-name/TICKET-XXX-YYY.md epics/EPIC-XXX-name/EPIC-XXX.md`
+    - Commit message: "chore(TICKET-XXX-YYY): mark STAGE-XXX-YYY-ZZZ Complete"
     - **NEVER use `git add -A`** - it picks up unrelated uncommitted files
 ```
 
@@ -107,14 +133,14 @@ When doc-updater updates tracking files, it does NOT commit them. If tracking fi
 
 - Changelog entries from previous stages
 - Stage files from previous stages
-- Epic files that should have been committed earlier
+- Epic/ticket files that should have been committed earlier
 - Any other uncommitted files in the repo
 
 **ALWAYS use specific file paths:**
 
 ```bash
-# CORRECT - Tracking files
-git add epics/EPIC-XXX/STAGE-XXX-YYY.md epics/EPIC-XXX/EPIC-XXX.md
+# CORRECT - Tracking files (three-level hierarchy)
+git add epics/EPIC-XXX-name/TICKET-XXX-YYY-name/STAGE-XXX-YYY-ZZZ.md epics/EPIC-XXX-name/TICKET-XXX-YYY-name/TICKET-XXX-YYY.md epics/EPIC-XXX-name/EPIC-XXX.md
 
 # CORRECT - Changelog
 git add changelog/2026-01-13.changelog.md
@@ -126,6 +152,16 @@ git add packages/llm/src/file1.ts packages/llm/src/file2.ts docs/guide.md
 git add -A
 git add .
 git commit -a
+```
+
+## Commit Message Convention
+
+Include epic/ticket/stage references in commit messages for traceability:
+
+```
+feat(EPIC-001/TICKET-001-001/STAGE-001-001-001): implement login form validation
+chore(TICKET-001-001): add commit hash to STAGE-001-001-001 changelog
+chore(TICKET-001-001): mark STAGE-001-001-001 Complete
 ```
 
 ## Phase Gates Checklist
@@ -140,11 +176,12 @@ git commit -a
 - [ ] Implementation commit created with SPECIFIC file paths (NO git add -A)
 - [ ] Commit hash added to changelog via doc-updater
 - [ ] Changelog committed immediately (ONLY changelog file)
-- [ ] Tracking documents updated via doc-updater:
+- [ ] Tracking documents updated via doc-updater (YAML frontmatter):
   - Finalize phase marked complete in stage file
-  - Stage status set to "Complete"
-  - Epic stage status updated to "Complete" (MANDATORY)
-  - Epic "Current Stage" updated to next stage
+  - Stage status set to "Complete" (local mode) or "PR Created" (remote mode)
+  - Ticket status updated if all stages complete
+  - Epic status updated if all tickets complete
+- [ ] `kanban-cli sync --stage STAGE-XXX-YYY-ZZZ` executed after status changes
 
 ## Time Pressure Does NOT Override Exit Gates
 
@@ -186,20 +223,23 @@ Documentation-only or tracking-only stages:
 
 Before completing the stage, you MUST complete these steps IN ORDER:
 
-1. Update stage tracking file (mark Finalize phase complete, stage Complete)
-2. Update epic tracking file (update stage status to Complete, update Current Stage)
-3. **Main agent commits tracking files** (NOT doc-updater):
-   - `git add epics/EPIC-XXX/STAGE-XXX-YYY.md epics/EPIC-XXX/EPIC-XXX.md`
-   - Commit message: "chore: mark STAGE-XXX-YYY Complete"
+1. Update stage tracking file YAML frontmatter (mark Finalize phase complete, stage Complete or PR Created)
+2. Update ticket tracking file YAML frontmatter (update stage status, ticket status if all stages done)
+3. Update epic tracking file YAML frontmatter (update epic status if all tickets done)
+4. Run `kanban-cli sync --stage STAGE-XXX-YYY-ZZZ`
+5. **Main agent commits tracking files** (NOT doc-updater):
+   - `git add epics/EPIC-XXX-name/TICKET-XXX-YYY-name/STAGE-XXX-YYY-ZZZ.md epics/EPIC-XXX-name/TICKET-XXX-YYY-name/TICKET-XXX-YYY.md epics/EPIC-XXX-name/EPIC-XXX.md`
+   - Commit message: "chore(TICKET-XXX-YYY): mark STAGE-XXX-YYY-ZZZ Complete"
    - **NEVER use `git add -A`**
-4. Use Skill tool to invoke `lessons-learned`
-5. Use Skill tool to invoke `journal`
+6. Use Skill tool to invoke `lessons-learned`
+7. Use Skill tool to invoke `journal`
 
 **Why this order?**
 
-- Steps 1-2: Update tracking state
-- Step 3: Commit tracking state (so it persists even if session ends)
-- Steps 4-5: Capture learnings and feelings based on the now-complete stage
+- Steps 1-3: Update tracking state (YAML frontmatter)
+- Step 4: Sync kanban board
+- Step 5: Commit tracking state (so it persists even if session ends)
+- Steps 6-7: Capture learnings and feelings based on the now-complete stage
 
 Committing before lessons/journal ensures tracking state is saved. Lessons and journal need the commit to have happened (they may reference the commit hash).
 
