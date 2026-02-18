@@ -1,6 +1,6 @@
 ---
 name: lessons-learned
-description: Use when completing any phase (Design, Build, Refinement, Finalize) in epic-stage-workflow - captures structured lessons when something noteworthy happened
+description: Use when completing any phase (Design, Build, Automatic Testing, Manual Testing, Finalize) in ticket-stage-workflow - captures structured lessons when something noteworthy happened
 ---
 
 # Lessons Learned
@@ -11,7 +11,7 @@ At the end of each phase, pause and ask: **"Did anything happen this phase worth
 
 ## When to Use
 
-Invoke at the END of every phase in epic-stage-workflow, BEFORE the journal skill.
+Invoke at the END of every phase in ticket-stage-workflow, BEFORE the journal skill.
 
 ## Common Categories (Examples)
 
@@ -115,8 +115,9 @@ METADATA_DATE=$(date +%Y-%m-%dT%H:%M:%S)
 date: YYYY-MM-DDTHH:MM:SS
 repository: [full repository path]
 epic: [epic ID, e.g., EPIC-001]
-stage: [stage ID, e.g., STAGE-001-001]
-phase: [Design|Build|Refinement|Finalize]
+ticket: [ticket ID, e.g., TICKET-001-001]
+stage: [stage ID, e.g., STAGE-001-001-001]
+phase: [Design|Build|Automatic Testing|Manual Testing|Finalize]
 category: [descriptive category value]
 analyzed: false
 ---
@@ -139,9 +140,10 @@ analyzed: false
 **How to populate metadata fields:**
 - **date**: Use the `$METADATA_DATE` value from the bash command above (ISO 8601 format with colons: YYYY-MM-DDTHH:MM:SS). NEVER estimate - always use `date` command.
 - **repository**: Use the FULL absolute path to the repository (e.g., "/storage/programs/claude-learnings-viewer"), not just the project name. This is the current working directory path.
-- **epic**: Current epic ID from context (e.g., "EPIC-001" from "EPIC-001-foundation-cli-shell")
-- **stage**: Current stage ID from context (e.g., "STAGE-001-001")
-- **phase**: Current phase from context (Design, Build, Refinement, or Finalize)
+- **epic**: Current epic ID from context (e.g., "EPIC-001" from "EPIC-001-user-authentication")
+- **ticket**: Current ticket ID from context (e.g., "TICKET-001-001" from "TICKET-001-001-login-flow")
+- **stage**: Current stage ID from context (e.g., "STAGE-001-001-001")
+- **phase**: Current phase from context (Design, Build, Automatic Testing, Manual Testing, or Finalize)
 - **category**: Any descriptive category value. Common examples include "Process Friction", "Self-Correction", "Pattern Discovery", but you can use other categories as appropriate for the lesson.
 - **analyzed**: Always set to `false` when creating new learning entries. This field tracks whether the entry has been processed by the meta-insights analysis system.
 
@@ -170,7 +172,8 @@ If no triggers apply:
 date: 2026-01-13T14:32:00
 repository: /storage/programs/campaign-manager-with-input
 epic: EPIC-043
-stage: STAGE-043-012
+ticket: TICKET-043-012
+stage: STAGE-043-012-001
 phase: Build
 category: Process Friction
 analyzed: false
