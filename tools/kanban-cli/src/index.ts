@@ -39,3 +39,16 @@ export type { SkillFileReader, SkillContentAnalyzer } from './validators/skill-v
 export { validateResolvers } from './validators/resolver-validator.js';
 export { validatePipeline } from './validators/pipeline-validator.js';
 export type { PipelineValidationResult, PipelineValidationOptions } from './validators/pipeline-validator.js';
+
+// Work Item Types
+export type {
+  Epic,
+  Ticket,
+  Stage,
+  Dependency,
+  WorkItemType,
+  RepoRecord,
+  SystemColumn,
+  KanbanColumn,
+} from './types/work-items.js';
+export { SYSTEM_COLUMNS } from './types/work-items.js';
