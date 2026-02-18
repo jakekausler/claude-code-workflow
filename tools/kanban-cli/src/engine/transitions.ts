@@ -1,5 +1,5 @@
 import type { StateMachine } from './state-machine.js';
-import { DONE_TARGET } from '../types/pipeline.js';
+import { DONE_TARGET, COMPLETE_STATUS } from '../types/pipeline.js';
 
 export interface TransitionResult {
   valid: boolean;
@@ -54,7 +54,7 @@ export class TransitionValidator {
     const result = this.validate(fromStatus, toName);
     if (!result.valid) return null;
 
-    if (toName === DONE_TARGET) return 'Complete';
+    if (toName === DONE_TARGET) return COMPLETE_STATUS;
 
     const toState = this.stateMachine.getStateByName(toName);
     return toState?.status ?? null;

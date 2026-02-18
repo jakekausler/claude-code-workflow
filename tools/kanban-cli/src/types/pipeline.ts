@@ -60,6 +60,11 @@ export const RESERVED_STATUSES = ['Not Started', 'Complete'] as const;
 export const DONE_TARGET = 'Done' as const;
 
 /**
+ * The status value that represents the terminal "Done" state in frontmatter.
+ */
+export const COMPLETE_STATUS = 'Complete' as const;
+
+/**
  * Discriminated state types for the orchestration loop.
  */
 export type SkillState = PipelineState & { skill: string; resolver?: undefined };

@@ -44,13 +44,12 @@ describe('ResolverRegistry', () => {
     const fn: ResolverFn = (_stage, _ctx) => 'Done';
     registry.register('always-done', fn);
 
-    const result = await registry.execute('always-done', { id: 'STAGE-001' } as any, {} as any);
+    const result = await registry.execute('always-done', { id: 'test', status: 'test' }, { env: {} });
     expect(result).toBe('Done');
   });
 
-  it('execute returns null for unregistered resolver', async () => {
+  it('throws when executing unregistered resolver', async () => {
     const registry = new ResolverRegistry();
-    const result = await registry.execute('nonexistent', {} as any, {} as any);
-    expect(result).toBeNull();
+    await expect(registry.execute('nonexistent', { id: 'test', status: 'test' }, { env: {} })).rejects.toThrow('not registered');
   });
 });

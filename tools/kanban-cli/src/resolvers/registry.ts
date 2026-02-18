@@ -31,7 +31,7 @@ export class ResolverRegistry {
 
   /**
    * Execute a resolver by name.
-   * @returns The resolver's return value, or null if the resolver is not registered.
+   * @throws If the resolver is not registered.
    */
   async execute(
     name: string,
@@ -39,7 +39,9 @@ export class ResolverRegistry {
     context: ResolverContext
   ): Promise<string | null> {
     const fn = this.resolvers.get(name);
-    if (!fn) return null;
+    if (!fn) {
+      throw new Error(`Resolver "${name}" is not registered`);
+    }
     return fn(stage, context);
   }
 }
