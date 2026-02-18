@@ -23,7 +23,7 @@
 Epic (collection of related tickets — a theme or initiative)
   └── Ticket (a feature/capability — formerly "epic")
         └── Stage (a component/step of the ticket)
-              └── Phase (Design → Build → Refinement → Finalize)
+              └── Phase (Design → Build → Automatic Testing → Finalize)
 ```
 
 Epics and tickets are containers. Stages are where work happens. Phases are the workflow within a stage.
@@ -370,12 +370,12 @@ Scans the `epics/` directory (or reads from SQLite cache), resolves dependencies
     ],
     "ready_for_work": [],
     "design": [],
-    "awaiting_design_decision": [],
+    "user_design_feedback": [],
     "build": [],
-    "refinement": [],
-    "awaiting_refinement": [],
+    "automatic_testing": [],
+    "manual_testing": [],
     "finalize": [],
-    "awaiting_merge": [],
+    "pr_created": [],
     "done": []
   },
   "stats": {
@@ -485,8 +485,8 @@ kanban-cli next --max 3
 ```
 
 **Priority order** (highest first):
-1. **Review comments to address** — stages in `Awaiting Merge` with unresolved MR/PR comments
-2. **Awaiting Refinement** — stages needing user approval (block quickly, address first)
+1. **Review comments to address** — stages in `PR Created` with unresolved MR/PR comments
+2. **Manual Testing** — stages needing user approval (block quickly, address first)
 3. **Refinement ready** — stages that just finished Build
 4. **Build ready** — stages with approved designs, ready for implementation
 5. **Design ready** — stages in Ready for Work, no design yet
@@ -625,6 +625,9 @@ stages (
   worktree_branch TEXT,
   priority INTEGER DEFAULT 0,
   due_date TEXT,
+  session_active BOOLEAN DEFAULT 0,
+  locked_at TEXT,
+  locked_by TEXT,
   file_path TEXT NOT NULL,
   last_synced TEXT NOT NULL
 )
@@ -766,7 +769,7 @@ The word "epic" is then reintroduced as the container above tickets. Every skill
    - If `jira_key` is set on the ticket: include Jira link in description (e.g., `Closes PROJ-1234` or link format per Jira integration).
    - If `jira_key` is set on the epic: reference the Jira epic in description.
    - Labels/tags as appropriate.
-10. **NEW**: Set stage status to `Awaiting Merge`.
+10. **NEW**: Set stage status to `PR Created`.
 11. **NEW**: If `WORKFLOW_SLACK_WEBHOOK` is set, POST notification with MR/PR URL.
 12. **NEW**: Jira transition — if ticket has `jira_key`, move to "In Review" / "In Testing" on Jira (auto unless `WORKFLOW_JIRA_CONFIRM=true`).
 
@@ -778,7 +781,7 @@ The word "epic" is then reintroduced as the container above tickets. Every skill
 
 Handles the push → review → address → push cycle for MR/PR code review:
 
-**Trigger**: Stage is in `Awaiting Merge` and has review comments to address.
+**Trigger**: Stage is in `PR Created` and has review comments to address.
 
 **Workflow**:
 1. Fetch comments from MR/PR via `gh pr view --comments` or `glab mr notes list`.
@@ -988,7 +991,7 @@ See [Section 6: Modularity & Pipeline Configuration](#6-modularity--pipeline-con
 2. `WORKFLOW_GIT_PLATFORM` auto-detection and env var.
 3. MR/PR creation via `gh`/`glab` CLI with descriptive bodies.
 4. Jira key linking in MR/PR descriptions (when `jira_key` present).
-5. `Awaiting Merge` status and kanban column.
+5. `PR Created` status and kanban column.
 6. `review-cycle` skill (fetch comments → address → push → reply).
 
 **Depends on**: Stage 1. Independent of Stage 2.
@@ -1151,13 +1154,14 @@ Stage 0 (Pipeline Configuration)
 | Refinement checklists | Type-driven (frontend/backend/cli/database/infrastructure/custom) |
 | Learnings auto-analysis | Threshold trigger (checked at end of each phase) |
 | Slack notifications | Webhook-based initially, deeper integration explored later |
-| Priority system | Review comments > awaiting refinement > refinement ready > build ready > design ready > explicit priority > due date |
+| Priority system | Review comments > manual testing > refinement ready > build ready > design ready > explicit priority > due date |
 | Where does modularity configuration live? | Global `~/.config/kanban-workflow/config.yaml` + per-repo `.kanban-workflow.yaml`. Phases replace, defaults merge. |
 | How are phases customized? | Flat state machine in YAML. Each state has a skill or resolver, plus transitions_to. |
 | How are integrations handled? | Integration logic lives in skills. Each skill handles its own integrations. |
 | How is the pipeline validated? | `kanban-cli validate-pipeline` — 4 layers: config, graph, skill content (LLM), resolver code. |
 | What are the two kinds of pipeline states? | Skill states (Claude session) and resolver states (TypeScript function). |
 | How is concurrent pickup prevented? | `session_active` field in frontmatter + SQLite. Orchestration loop locks before spawning. |
+| How are custom phases discovered? | Config points to skill names. Skills are Claude Code skills (existing discovery mechanism). |
 
 ### 5.2 Open — Resolve at Stage Start
 
