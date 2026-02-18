@@ -963,6 +963,8 @@ See [Section 6: Modularity & Pipeline Configuration](#6-modularity--pipeline-con
 
 **Why first**: Everything else depends on the file format and CLI being stable. The workflow is functional end-to-end at this point — just single-stage, local-only, manual design decisions.
 
+**Modularity integration**: Stage 1 depends on Stage 0 (Pipeline Configuration). All CLI commands consume the pipeline config system via `loadConfig()` and `StateMachine.fromConfig()`. The CLI `board` command reads columns from the pipeline config, not hardcoded. `kanban-cli next` filters by `session_active = false`. All status changes are validated through `TransitionValidator`. SQLite schema includes `session_active`, `locked_at`, `locked_by` on the stages table. `kanban-cli validate` also runs `validate-pipeline`. See `tools/kanban-cli/docs/integration-spec-stage-1.md` for detailed integration contracts.
+
 ### Stage 2: Migration + Conversion
 
 **Goal**: Existing repos can be migrated. Tickets without stages can be converted.
@@ -974,6 +976,8 @@ See [Section 6: Modularity & Pipeline Configuration](#6-modularity--pipeline-con
 4. `kanban-cli summary` command.
 
 **Depends on**: Stage 1 (file format must be stable).
+
+**Modularity integration**: Migration tool must generate config-compatible status values. When migrating stages, set `session_active: false` in frontmatter. `convert-ticket` skill must set stages to `Not Started` status (the system column entry point).
 
 ### Stage 3: Remote Mode + MR/PR
 
@@ -988,6 +992,8 @@ See [Section 6: Modularity & Pipeline Configuration](#6-modularity--pipeline-con
 6. `review-cycle` skill (fetch comments → address → push → reply).
 
 **Depends on**: Stage 1. Independent of Stage 2.
+
+**Modularity integration**: Remote mode behavior is configured via `WORKFLOW_REMOTE_MODE` in pipeline config defaults. The `pr-status` built-in resolver (created in Stage 0) gets its production code host API integration in this stage. The `review-cycle` skill must transition to `PR Created` using the status from config, not a hardcoded value.
 
 ### Stage 4: Jira Integration
 
@@ -1004,6 +1010,8 @@ See [Section 6: Modularity & Pipeline Configuration](#6-modularity--pipeline-con
 
 **Depends on**: Stage 1 + Stage 2 (convert-ticket). Stage 3 recommended (Jira workflows typically use remote branches/MRs).
 
+**Modularity integration**: Jira integration logic lives in the skills that handle each pipeline state, not in a separate integration layer. Custom pipeline skills handle their own Jira interaction. `WORKFLOW_JIRA_CONFIRM` is set in the pipeline config defaults.
+
 ### Stage 5: Auto-Design + Auto-Analysis
 
 **Goal**: Reduce manual intervention for routine decisions.
@@ -1014,6 +1022,8 @@ See [Section 6: Modularity & Pipeline Configuration](#6-modularity--pipeline-con
 3. Updated phase exit gates to check threshold after lessons-learned.
 
 **Depends on**: Stage 1. Independent of Stages 2-4.
+
+**Modularity integration**: `WORKFLOW_AUTO_DESIGN` and `WORKFLOW_LEARNINGS_THRESHOLD` are set in the pipeline config defaults section. Skills read these from config passed via orchestration context.
 
 ### Stage 6: Parallel Orchestration (Worktrees + External Loop)
 
@@ -1040,6 +1050,8 @@ See [Section 6: Modularity & Pipeline Configuration](#6-modularity--pipeline-con
 
 **Depends on**: Stage 1 + Stage 3 (worktrees need branch management).
 
+**Modularity integration**: The orchestration loop is config-driven. It reads the pipeline config to determine which states are skill vs resolver. For skill states: check `session_active`, lock, spawn session. For resolver states: call the resolver function, apply transition. Priority queue ordering uses pipeline phase index. `WORKFLOW_MAX_PARALLEL` is read from config defaults.
+
 ### Stage 7: Slack Notifications (Stretch)
 
 **Goal**: Team gets notified when MRs are created.
@@ -1052,6 +1064,8 @@ See [Section 6: Modularity & Pipeline Configuration](#6-modularity--pipeline-con
 **Implementation**: Webhook-based initially. More advanced Slack bot integration to be explored when this stage begins.
 
 **Depends on**: Stage 3 (MR/PR creation).
+
+**Modularity integration**: `WORKFLOW_SLACK_WEBHOOK` is set in the pipeline config defaults. Slack notification logic lives in the finalize skill (or custom equivalent). Users with custom pipelines add Slack to their own skills.
 
 ### Stage 8: Global CLI + Multi-Repo
 
@@ -1066,6 +1080,8 @@ See [Section 6: Modularity & Pipeline Configuration](#6-modularity--pipeline-con
 
 **Depends on**: Stage 1. Benefits from all other stages being stable.
 
+**Modularity integration**: Each repo can have its own `.kanban-workflow.yaml` with a different pipeline. The global kanban board shows stages from different repos with different pipelines. Board output includes the pipeline config source for each stage.
+
 ### Stage 9: Web UI
 
 **Goal**: Replace/rebuild Vibe Kanban as a proper web UI for this workflow.
@@ -1073,6 +1089,8 @@ See [Section 6: Modularity & Pipeline Configuration](#6-modularity--pipeline-con
 **What ships**: Full web application consuming the file-based source of truth (or SQLite database synced from it). Separate deep design session needed.
 
 **Depends on**: All previous stages stable.
+
+**Modularity integration**: The web UI reads pipeline config to render columns dynamically. Different repos may have different column sets. Column ordering comes from the pipeline config phase list.
 
 ### Stage 10: Session Monitor Integration
 
@@ -1087,6 +1105,8 @@ See [Section 6: Modularity & Pipeline Configuration](#6-modularity--pipeline-con
 **Leverages**: The session monitor's existing WebSocket infrastructure, secondary server architecture, event query API, and hook-based event capture.
 
 **Depends on**: Stage 9 (Web UI) + claude-session-monitor-efficient.
+
+**Modularity integration**: Session-to-stage mapping uses `session_active` and `locked_by` fields from SQLite. The monitor displays the skill name from config for each active session.
 
 ### Delivery Stage Dependency Graph
 
@@ -1132,6 +1152,12 @@ Stage 0 (Pipeline Configuration)
 | Learnings auto-analysis | Threshold trigger (checked at end of each phase) |
 | Slack notifications | Webhook-based initially, deeper integration explored later |
 | Priority system | Review comments > awaiting refinement > refinement ready > build ready > design ready > explicit priority > due date |
+| Where does modularity configuration live? | Global `~/.config/kanban-workflow/config.yaml` + per-repo `.kanban-workflow.yaml`. Phases replace, defaults merge. |
+| How are phases customized? | Flat state machine in YAML. Each state has a skill or resolver, plus transitions_to. |
+| How are integrations handled? | Integration logic lives in skills. Each skill handles its own integrations. |
+| How is the pipeline validated? | `kanban-cli validate-pipeline` — 4 layers: config, graph, skill content (LLM), resolver code. |
+| What are the two kinds of pipeline states? | Skill states (Claude session) and resolver states (TypeScript function). |
+| How is concurrent pickup prevented? | `session_active` field in frontmatter + SQLite. Orchestration loop locks before spawning. |
 
 ### 5.2 Open — Resolve at Stage Start
 
