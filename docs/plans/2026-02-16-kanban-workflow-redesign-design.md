@@ -11,6 +11,7 @@
 3. [Workflow Skill Changes](#3-workflow-skill-changes)
 4. [Delivery Staging](#4-delivery-staging)
 5. [Open Questions & Deferred Decisions](#5-open-questions--deferred-decisions)
+6. [Modularity & Pipeline Configuration](#6-modularity--pipeline-configuration)
 
 ---
 
@@ -139,9 +140,11 @@ id: STAGE-001-001-001
 ticket: TICKET-001-001
 epic: EPIC-001
 title: Login Form
-status: Not Started        # Not Started | Design | Awaiting Design Decision |
-                           # Build | Refinement | Awaiting Refinement |
-                           # Finalize | Awaiting Merge | Complete | Skipped
+status: Not Started        # Not Started | Design | User Design Feedback |
+                           # Build | Automatic Testing | Manual Testing |
+                           # Finalize | PR Created | Addressing Comments |
+                           # Complete | Skipped
+session_active: false      # false = ready to be picked up, true = session in progress
 refinement_type:
   - frontend               # frontend | backend | cli | database | infrastructure | custom
                             # accepts a list — combined checklists when multiple types
@@ -277,23 +280,42 @@ The viewport/approval reset rule generalizes: ANY code change during refinement 
 
 ### 1.8 Kanban Column Mapping
 
-Stage status maps to kanban columns, with dependency state determining Backlog vs Ready:
+Kanban columns are divided into **system columns** (structural, always present) and **pipeline columns** (defined in the workflow config). System columns are engine-driven; pipeline columns map to skills or resolvers.
 
-| Kanban Column | Condition |
-|--------------|-----------|
-| **To Convert** | Ticket with `stages: []` (needs brainstorming) |
-| **Backlog** | Stage with unresolved `depends_on` |
-| **Ready for Work** | Stage with `status: Not Started` and all dependencies resolved |
-| **Design** | Stage with `status: Design` |
-| **Awaiting Design Decision** | Stage with `status: Awaiting Design Decision` |
-| **Build** | Stage with `status: Build` |
-| **Refinement** | Stage with `status: Refinement` |
-| **Awaiting Refinement** | Stage with `status: Awaiting Refinement` |
-| **Finalize** | Stage with `status: Finalize` |
-| **Awaiting Merge** | Stage with `status: Awaiting Merge` |
-| **Done** | Stage with `status: Complete` |
+**System Columns** (non-configurable):
 
-"To Convert" is a ticket-level column (not stage-level). All other columns are stage-level. The CLI outputs both in the JSON.
+| Kanban Column | Source | Condition |
+|--------------|--------|-----------|
+| **To Convert** | System | Ticket with `stages: []` (needs brainstorming) |
+| **Backlog** | System | Stage with unresolved `depends_on` |
+| **Ready for Work** | System | Stage with `status: Not Started` and all dependencies resolved |
+| **Done** | System | Stage with `status: Complete` |
+
+**Pipeline Columns** (configurable via workflow config):
+
+| Kanban Column | Type | Skill/Resolver |
+|--------------|------|----------------|
+| **Design** | Skill | `phase-design` |
+| **User Design Feedback** | Skill | `user-design-feedback` |
+| **Build** | Skill | `phase-build` |
+| **Automatic Testing** | Skill | `automatic-testing` |
+| **Manual Testing** | Skill | `manual-testing` |
+| **Finalize** | Skill | `phase-finalize` |
+| **PR Created** | Resolver | `pr-status` |
+| **Addressing Comments** | Skill | `review-cycle` |
+
+**Column renames from original design:**
+
+| Old Name | New Name |
+|----------|----------|
+| Awaiting Design Decision | User Design Feedback |
+| Refinement | Automatic Testing |
+| Awaiting Refinement | Manual Testing |
+| Awaiting Merge | PR Created |
+
+Each pipeline column has two internal states: **Ready** (`session_active: false`) and **In Progress** (`session_active: true`). The orchestration loop only picks up stages in Ready state. See [Section 6: Modularity & Pipeline Configuration](#6-modularity--pipeline-configuration) for full details.
+
+"To Convert" is a ticket-level column (not stage-level). All other columns are stage-level. The CLI outputs both in the JSON. Pipeline columns are read from the workflow config file — see Section 6.
 
 ---
 
@@ -311,6 +333,7 @@ kanban-cli graph [options]       # Output dependency graph as JSON
 kanban-cli next [options]        # Output next workable stages (priority-sorted)
 kanban-cli summary <id> [options] # Summarize what happened for a stage/ticket/epic
 kanban-cli validate              # Validate all frontmatter and dependency integrity
+kanban-cli validate-pipeline     # Validate workflow pipeline config (4-layer audit)
 kanban-cli migrate               # Migrate old epic-stage layout to new format
 kanban-cli sync [options]        # Force re-parse of files into SQLite
 ```
@@ -895,6 +918,31 @@ Each repo participating in the workflow must define a worktree isolation strateg
 
 ## 4. Delivery Staging
 
+### Stage 0: Pipeline Configuration (Modularity System)
+
+**Goal**: Config-driven workflow pipeline system established. The kanban workflow is defined by YAML config files, not hardcoded. Users can define their own phases, skills, and resolvers. Pipeline validation ensures correctness.
+
+**What ships**:
+1. Global config file schema (`~/.config/kanban-workflow/config.yaml`).
+2. Per-repo config file schema (`<repo>/.kanban-workflow.yaml`).
+3. Config loading with global + repo override merging (phases replace, defaults merge).
+4. State machine model: states with `skill` (Claude session) or `resolver` (TypeScript function), `transitions_to` declarations.
+5. `session_active` locking mechanism in stage frontmatter + SQLite.
+6. `kanban-cli validate-pipeline` command with four validation layers:
+   - Config validation (static YAML parsing).
+   - Graph validation (reachability, terminability, dead ends).
+   - Skill content validation (LLM verifies skill text matches transitions).
+   - Resolver validation (TypeScript function exists, signature correct, return values match transitions).
+7. Default pipeline config: Design → User Design Feedback → Build → Automatic Testing → Manual Testing → Finalize → PR Created → Addressing Comments → Done.
+8. Resolver function registration and loading.
+9. `entry_phase` routing including resolver-based branching for custom DAG pipelines.
+
+**What does NOT ship**: The skills themselves, CLI board/graph/next commands, the orchestration loop, SQLite cache, integrations. Those remain in Stage 1+.
+
+**Why first**: Everything in Stage 1+ depends on the pipeline being config-driven. Building Stage 1 with hardcoded phases and then retrofitting modularity would require rewriting the CLI, orchestration loop, and all skills. Starting config-driven avoids that rework.
+
+See [Section 6: Modularity & Pipeline Configuration](#6-modularity--pipeline-configuration) for the full design.
+
 ### Stage 1: Foundation (File Format + CLI + Rename + SQLite)
 
 **Goal**: New file format established, CLI tool works, all skills use new terminology, SQLite cache operational. Single-stage sequential workflow still works exactly as before, just with new names and frontmatter.
@@ -1043,17 +1091,18 @@ Each repo participating in the workflow must define a worktree isolation strateg
 ### Delivery Stage Dependency Graph
 
 ```
-Stage 1 (Foundation + SQLite + CLI)
-  ├── Stage 2 (Migration + Conversion)
-  │     └── Stage 4 (Jira + Bidirectional Sync) ── also depends on Stage 3
-  ├── Stage 3 (Remote Mode + MR/PR)
-  │     ├── Stage 6 (Parallel Orchestration + Priority Queue)
-  │     ├── Stage 7 (Slack)
-  │     └── Stage 4 (Jira)
-  ├── Stage 5 (Auto-Design + Auto-Analysis) ── independent
-  └── Stage 8 (Global CLI + Multi-Repo) ── independent
-        └── Stage 9 (Web UI)
-              └── Stage 10 (Session Monitor Integration)
+Stage 0 (Pipeline Configuration)
+  └── Stage 1 (Foundation + SQLite + CLI)
+        ├── Stage 2 (Migration + Conversion)
+        │     └── Stage 4 (Jira + Bidirectional Sync) ── also depends on Stage 3
+        ├── Stage 3 (Remote Mode + MR/PR)
+        │     ├── Stage 6 (Parallel Orchestration + Priority Queue)
+        │     ├── Stage 7 (Slack)
+        │     └── Stage 4 (Jira)
+        ├── Stage 5 (Auto-Design + Auto-Analysis) ── independent
+        └── Stage 8 (Global CLI + Multi-Repo) ── independent
+              └── Stage 9 (Web UI)
+                    └── Stage 10 (Session Monitor Integration)
 ```
 
 **Parallelizable after Stage 1**: Stages 2, 3, 5, and 8 can all be worked on concurrently since they're independent of each other.
@@ -1085,6 +1134,12 @@ Stage 1 (Foundation + SQLite + CLI)
 | Priority system | Review comments > awaiting refinement > refinement ready > build ready > design ready > explicit priority > due date |
 
 ### 5.2 Open — Resolve at Stage Start
+
+**Stage 0 (Pipeline Configuration)**:
+- How should the LLM validation layer handle skills that use conditional logic (e.g., "if WORKFLOW_AUTO_DESIGN is true, skip to Build; otherwise transition to User Design Feedback")? The LLM needs to understand environment-conditional transitions.
+- Should resolver functions be shipped as part of the `kanban-cli` package, or loaded from a separate plugin directory? If plugins, what's the discovery mechanism?
+- How to handle config migration when the default pipeline changes between versions? Repos with no `.kanban-workflow.yaml` would get the new defaults automatically. Repos with explicit configs would not.
+- Should the validator warn about unreachable states that are only reachable via resolver branching (since static analysis can't always trace resolver return values)?
 
 **Stage 1 (Foundation)**:
 - What happens when a stage file is manually edited and SQLite is stale? File mtime check may not catch all cases (e.g., git checkout changes files without updating mtime predictably). May need a content hash.
@@ -1139,3 +1194,429 @@ Stage 1 (Foundation + SQLite + CLI)
 | Branch name collisions | `worktree_branch` is deterministic from ID — unique by construction. Validate uniqueness in `kanban-cli validate`. | 3 |
 | Terminology rename blast radius | Incremental migration (Approach A) — rename first, test, then add layers. Temporary inconsistency is manageable. | 1 |
 | Session monitor bidirectional communication | Requires new input path (dashboard → Claude). May need custom MCP server or hook-based approach. Research needed. | 10 |
+| Skill text ↔ config transition mismatch | LLM validation layer in `validate-pipeline` checks skill content against declared transitions. Runtime enforcement rejects illegal transitions. | 0 |
+| Custom pipeline dead ends | Graph validation ensures all states can reach Done. Users must run `validate-pipeline` before using custom configs. | 0 |
+| Resolver function errors in production | Resolver validation dry-runs with mock data. Runtime catches exceptions and logs errors without transitioning. | 0 |
+
+---
+
+## 6. Modularity & Pipeline Configuration
+
+### 6.1 Architecture Overview
+
+The unit of modularity is the **skill**. The workflow pipeline is a flat state machine defined in a YAML config file. Each state maps to either a **skill** (spawns a Claude session) or a **resolver** (lightweight TypeScript function). The orchestration loop reads the config to know how to route stages through the pipeline.
+
+**Three layers:**
+
+| Layer | Responsibility |
+|-------|---------------|
+| **Config Layer** | YAML files define the pipeline (states, transitions, skills/resolvers) |
+| **Engine Layer** | Orchestration loop + kanban-cli execute the pipeline |
+| **Skill/Resolver Layer** | Skills (Claude sessions) and resolvers (TypeScript functions) do the actual work |
+
+**Config hierarchy:**
+
+```
+~/.config/kanban-workflow/config.yaml     (global defaults)
+    ↓ overridden by
+<repo>/.kanban-workflow.yaml              (per-repo overrides)
+```
+
+Global config sets the user's preferred defaults. Per-repo config overrides any part of it. A repo with no `.kanban-workflow.yaml` uses the global config as-is.
+
+**Two kinds of pipeline states:**
+
+| Kind | Config field | What happens | Example |
+|------|-------------|-------------|---------|
+| **Skill state** | `skill: phase-design` | Orchestration loop spawns a Claude session with this skill. Session runs, does work, sets a new status from `transitions_to`, exits. | Design, Build, Manual Testing |
+| **Resolver state** | `resolver: pr-status` | Orchestration loop calls a lightweight TypeScript function on each tick. Function returns a transition target or null (no change). No Claude session. | PR Created, Router |
+
+**Four system columns** exist outside the pipeline config. They're structural — part of the engine, always present, not configurable:
+
+- **To Convert** — ticket with `stages: []`
+- **Backlog** — stage with unresolved `depends_on`
+- **Ready for Work** — stage with all deps resolved, `status: Not Started`
+- **Done** — terminal state
+
+### 6.2 Config Schema
+
+**Global config** (`~/.config/kanban-workflow/config.yaml`):
+
+```yaml
+workflow:
+  entry_phase: Design
+
+  phases:
+    - name: Design
+      skill: phase-design
+      status: Design
+      transitions_to: [Build, User Design Feedback]
+
+    - name: User Design Feedback
+      skill: user-design-feedback
+      status: User Design Feedback
+      transitions_to: [Build]
+
+    - name: Build
+      skill: phase-build
+      status: Build
+      transitions_to: [Automatic Testing]
+
+    - name: Automatic Testing
+      skill: automatic-testing
+      status: Automatic Testing
+      transitions_to: [Manual Testing]
+
+    - name: Manual Testing
+      skill: manual-testing
+      status: Manual Testing
+      transitions_to: [Finalize]
+
+    - name: Finalize
+      skill: phase-finalize
+      status: Finalize
+      transitions_to: [Done, PR Created]
+
+    - name: PR Created
+      resolver: pr-status
+      status: PR Created
+      transitions_to: [Done, Addressing Comments]
+
+    - name: Addressing Comments
+      skill: review-cycle
+      status: Addressing Comments
+      transitions_to: [PR Created]
+
+  defaults:
+    WORKFLOW_REMOTE_MODE: false
+    WORKFLOW_AUTO_DESIGN: false
+    WORKFLOW_MAX_PARALLEL: 1
+    WORKFLOW_GIT_PLATFORM: auto
+    WORKFLOW_LEARNINGS_THRESHOLD: 10
+```
+
+**Per-repo override** (`<repo>/.kanban-workflow.yaml`):
+
+```yaml
+# Example: a team that replaces the default pipeline
+workflow:
+  phases:
+    - name: Spike
+      skill: my-spike-phase
+      status: Spike
+      transitions_to: [Implement]
+
+    - name: Implement
+      skill: my-implement-phase
+      status: Implement
+      transitions_to: [QA]
+
+    - name: QA
+      skill: my-qa-phase
+      status: QA
+      transitions_to: [Done, QA Failed]
+
+    - name: QA Failed
+      skill: my-qa-fix
+      status: QA Failed
+      transitions_to: [QA]
+
+  entry_phase: Spike
+
+  defaults:
+    WORKFLOW_REMOTE_MODE: false
+```
+
+**Override semantics**: If a repo config defines `phases`, it **replaces** the entire pipeline (not merge). Other fields (`defaults`) merge with global. This prevents confusing partial pipeline merges.
+
+### 6.3 State Machine Model
+
+The pipeline is a **flat directed graph** of states. No nesting, no parent/child relationships. Every state is a peer.
+
+**State shape:**
+
+```
+State {
+  name: string              # display name
+  status: string            # unique status value written to frontmatter
+  skill?: string            # Claude skill reference (mutually exclusive with resolver)
+  resolver?: string         # TypeScript resolver function name (mutually exclusive with skill)
+  transitions_to: string[]  # valid next states (by name) — "Done" is always valid as a target
+}
+```
+
+**Session locking** — every stage in a pipeline state has two internal conditions:
+
+```yaml
+# In stage frontmatter
+status: Design              # which pipeline state
+session_active: false       # false = ready to be picked up, true = session is working
+```
+
+Both are also cached in SQLite for fast queries. File is source of truth.
+
+**Orchestration loop behavior per state kind:**
+
+```
+For skill states:
+  1. Find stages where status matches AND session_active = false
+  2. Set session_active = true (file + SQLite)
+  3. Spawn Claude session with the skill
+  4. Session runs → sets new status → sets session_active = false
+  5. If session crashes → scheduler resets session_active = false after timeout
+
+For resolver states:
+  1. Find stages where status matches AND session_active = false
+  2. Call the resolver function (no session spawned, no lock needed)
+  3. If resolver returns a transition target → set new status
+  4. If resolver returns null → skip, check again next tick
+```
+
+**Resolver function contract:**
+
+```typescript
+type Resolver = (stage: Stage, context: ResolverContext) => string | null;
+```
+
+Returns a valid transition target from `transitions_to`, or `null` for no change.
+
+**Transition rules:**
+
+- A skill sets the new status before exiting. The status must be in its `transitions_to` list.
+- A resolver returns a target from its `transitions_to` list, or null.
+- The engine validates at runtime that any status change is a legal transition. Illegal transitions are logged as errors and rejected.
+- `Done` is a reserved target — any state can list it in `transitions_to`.
+- `Not Started` is a reserved status — means the stage hasn't entered the pipeline yet (it's in Ready for Work).
+
+### 6.4 Branching & Converging Pipelines
+
+The pipeline is a DAG (directed acyclic graph), not necessarily linear. Users can create branching pipelines where stages take different paths based on their metadata (e.g., `refinement_type`).
+
+**Branching** = a state (skill or resolver) with multiple `transitions_to` targets. The skill/resolver picks which one based on stage metadata.
+
+**Converging** = multiple states list the same target in their `transitions_to`.
+
+**Routing** = a resolver state whose sole job is to read metadata and return a transition. No Claude session needed.
+
+**Example: branching pipeline with type-specific testing:**
+
+```yaml
+workflow:
+  entry_phase: Router
+
+  phases:
+    - name: Router
+      resolver: stage-router
+      status: Routing
+      transitions_to: [Frontend Design, Backend Design, DB Design, Design]
+
+    - name: Frontend Design
+      skill: frontend-design
+      status: Frontend Design
+      transitions_to: [Build]
+
+    - name: Backend Design
+      skill: backend-design
+      status: Backend Design
+      transitions_to: [Build]
+
+    - name: DB Design
+      skill: db-design
+      status: DB Design
+      transitions_to: [Build]
+
+    - name: Design
+      skill: phase-design
+      status: Design
+      transitions_to: [Build]
+
+    # Converges
+    - name: Build
+      skill: phase-build
+      status: Build
+      transitions_to: [Testing Router]
+
+    # Branches again
+    - name: Testing Router
+      resolver: testing-router
+      status: Testing Routing
+      transitions_to: [Frontend Testing, Backend Testing, General Testing]
+
+    - name: Frontend Testing
+      skill: frontend-testing
+      status: Frontend Testing
+      transitions_to: [Finalize]
+
+    - name: Backend Testing
+      skill: backend-testing
+      status: Backend Testing
+      transitions_to: [Finalize]
+
+    - name: General Testing
+      skill: general-testing
+      status: General Testing
+      transitions_to: [Finalize]
+
+    # Converges
+    - name: Finalize
+      skill: phase-finalize
+      status: Finalize
+      transitions_to: [Done]
+```
+
+**Router resolver example:**
+
+```typescript
+function stageRouter(stage: Stage, ctx: ResolverContext): string | null {
+  const type = stage.refinement_type;
+  if (type?.includes('frontend')) return 'Frontend Design';
+  if (type?.includes('backend')) return 'Backend Design';
+  if (type?.includes('database')) return 'DB Design';
+  return 'Design';
+}
+```
+
+The default pipeline does not use routing — `entry_phase: Design` enters directly. Branching is opt-in for custom pipelines.
+
+### 6.5 Orchestration Loop Changes
+
+The tick cycle handles skill states, resolver states, and system columns:
+
+```
+On each tick:
+
+  1. RESOLVER states (session_active = false):
+     - Call each resolver function
+     - If returns target → transition stage
+     - If returns null → no change
+
+  2. SKILL states (session_active = false):
+     - Pick up based on priority queue
+     - Respect WORKFLOW_MAX_PARALLEL limit
+     - Set session_active = true
+     - Spawn Claude session with the skill
+
+  3. SYSTEM columns (Backlog):
+     - Check dependency resolution
+     - If all deps resolved → move to Ready for Work
+
+  4. COMPLETION cascade:
+     - Stage reaches Done → check ticket → check epic
+```
+
+**Priority queue** applies only to skill states. Resolvers are instant. Ordering:
+
+1. Stages in Addressing Comments (unblock team reviewers)
+2. Stages in Manual Testing (unblock human approval)
+3. Stages ready for Automatic Testing
+4. Stages ready for Build
+5. Stages ready for Design
+6. Explicit `priority` field in frontmatter
+7. `due_date` proximity
+
+**Session crash handling**: If a session exits without setting a new status, the scheduler resets `session_active = false`. Stage stays in its current status, eligible to be picked up again on the next tick.
+
+### 6.6 Pipeline Validator
+
+`kanban-cli validate-pipeline` audits the full pipeline config. Four validation layers:
+
+**Layer 1: Config validation (static parsing)**
+
+- YAML is well-formed
+- Every state has `name`, `status`, and `transitions_to`
+- Every state has exactly one of `skill` or `resolver` (not both, not neither)
+- `status` values are unique across all states
+- `transitions_to` targets all reference existing state names or `Done`
+- `entry_phase` references an existing state
+- No reserved status values used (`Not Started`, `Complete`)
+
+**Layer 2: Graph validation (traversal)**
+
+- All states reachable from `entry_phase` via `transitions_to` chains
+- All states can reach `Done` via some path
+- No orphaned states
+- No dead ends
+- Cycles allowed only if at least one state in the cycle can reach `Done`
+
+**Layer 3: Skill content validation (LLM)**
+
+- For each skill state, read the skill file content
+- Verify skill text instructs Claude to set a status matching one of the state's `transitions_to` targets
+- Flag mismatches and missing transitions
+
+**Layer 4: Resolver validation (code analysis)**
+
+- Verify TypeScript function exists and is importable
+- Verify function signature matches `(stage, context) => string | null`
+- Static analysis of return values against `transitions_to` where possible
+- Dry-run with mock data to confirm execution without errors
+
+**Output:**
+
+```json
+{
+  "valid": true,
+  "errors": [],
+  "warnings": [
+    {
+      "layer": "skill_content",
+      "state": "User Design Feedback",
+      "message": "Skill text references 'Design' as a transition but config only allows ['Build']"
+    }
+  ]
+}
+```
+
+**When validation runs:**
+
+- `kanban-cli validate-pipeline` — manual invocation
+- Automatically on first `kanban-cli` command after config file changes (detected via file mtime)
+- Automatically when a new skill or resolver is registered
+
+### 6.7 Default Pipeline Reference
+
+The built-in pipeline config that ships with the tool:
+
+| # | Column | Type | Skill/Resolver | Transitions To |
+|---|--------|------|----------------|----------------|
+| 1 | Design | Skill | `phase-design` | Build, User Design Feedback |
+| 2 | User Design Feedback | Skill | `user-design-feedback` | Build |
+| 3 | Build | Skill | `phase-build` | Automatic Testing |
+| 4 | Automatic Testing | Skill | `automatic-testing` | Manual Testing |
+| 5 | Manual Testing | Skill | `manual-testing` | Finalize |
+| 6 | Finalize | Skill | `phase-finalize` | Done, PR Created |
+| 7 | PR Created | Resolver | `pr-status` | Done, Addressing Comments |
+| 8 | Addressing Comments | Skill | `review-cycle` | PR Created |
+
+**Complete column list (system + pipeline):**
+
+| Column | Source | Type |
+|--------|--------|------|
+| To Convert | System | Condition: `stages: []` |
+| Backlog | System | Condition: unresolved deps |
+| Ready for Work | System | Condition: deps resolved, `Not Started` |
+| Design | Pipeline | Skill |
+| User Design Feedback | Pipeline | Skill |
+| Build | Pipeline | Skill |
+| Automatic Testing | Pipeline | Skill |
+| Manual Testing | Pipeline | Skill |
+| Finalize | Pipeline | Skill |
+| PR Created | Pipeline | Resolver |
+| Addressing Comments | Pipeline | Skill |
+| Done | System | Terminal |
+
+**Example trace through default pipeline:**
+
+```
+Ready for Work (Not Started)
+  → Design (skill: phase-design runs)
+    → User Design Feedback (skill: user-design-feedback loops with user)
+      → Build (skill: phase-build runs)
+        → Automatic Testing (skill: automatic-testing runs)
+          → Manual Testing (skill: manual-testing loops with user)
+            → Finalize (skill: phase-finalize runs, creates PR)
+              → PR Created (resolver: pr-status polls)
+                → Addressing Comments (skill: review-cycle runs)
+                  → PR Created (resolver polls again)
+                    → Done (resolver detects merge)
+```
