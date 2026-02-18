@@ -13,6 +13,8 @@
 - **Diamond nodes**: Decision points
 - **Dashed lines**: Optional/conditional paths
 
+> **Note:** The pipeline columns shown in this flowchart represent the default pipeline configuration. Users can define custom pipelines with different columns, phases, and transitions. See the design document Section 6 for details.
+
 ## Complete Flowchart
 
 ```mermaid
@@ -91,7 +93,7 @@ flowchart TD
     subgraph ORCH["5. ORCHESTRATION LOOP"]
         DEP3 --> OL1["kanban-cli next<br/>--max WORKFLOW_MAX_PARALLEL"]
 
-        OL1 --> OL2["Priority sort:<br/>1 Review comments pending<br/>2 Awaiting refinement<br/>3 Refinement ready<br/>4 Build ready<br/>5 Design ready<br/>6 Explicit priority field<br/>7 Due date proximity"]
+        OL1 --> OL2["Priority sort:<br/>1 Review comments pending<br/>2 Manual testing<br/>3 Automatic testing ready<br/>4 Build ready<br/>5 Design ready<br/>6 Explicit priority field<br/>7 Due date proximity"]
 
         OL2 --> OL3{"needs_human?"}
         OL3 -->|Yes| OL4["⏸️ Skip — leave in<br/>Awaiting column"]
@@ -125,7 +127,7 @@ flowchart TD
         D5 --> D7{"WORKFLOW_<br/>AUTO_DESIGN?"}
         D7 -->|true| D8["Accept recommended<br/>approach automatically<br/>log reasoning to stage file"]
         D7 -->|false| D9["Present options<br/>to user"]
-        D9 --> D10["🟠 AWAITING DESIGN<br/>DECISION column<br/>Session exits"]
+        D9 --> D10["🟠 USER DESIGN<br/>FEEDBACK column<br/>Session exits"]
 
         D10 --> D11["🧑 USER: Select<br/>approach from options"]
         D11 --> D12["Log selection<br/>to stage file"]
@@ -180,11 +182,11 @@ flowchart TD
     end
 
     %% ═══════════════════════════════════════
-    %% REFINEMENT PHASE
+    %% AUTOMATIC TESTING PHASE
     %% ═══════════════════════════════════════
 
-    subgraph REFINE["8. REFINEMENT PHASE"]
-        EXIT2 -->|"next phase"| R1["🟢 REFINEMENT column<br/>phase-refinement skill"]
+    subgraph REFINE["8. AUTOMATIC TESTING PHASE"]
+        EXIT2 -->|"next phase"| R1["🟢 AUTOMATIC TESTING column<br/>phase-refinement skill"]
 
         R1 --> R2["Read refinement_type<br/>from frontmatter"]
 
@@ -205,7 +207,7 @@ flowchart TD
         R9 --> R11
         R10 --> R11
 
-        R11 --> R12["🟠 AWAITING REFINEMENT<br/>column"]
+        R11 --> R12["🟠 MANUAL TESTING<br/>column"]
         R12 --> R13["🧑 USER: Formal approval<br/>per checklist item"]
 
         R13 --> R14{"Code changed<br/>during refinement?"}
@@ -214,7 +216,7 @@ flowchart TD
         R14 -->|No| R16{"All items<br/>approved?"}
         R16 -->|No| R17["Address feedback<br/>delegate: debugger/fixer"]
         R17 --> R14
-        R16 -->|Yes| R18["Mark Refinement complete"]
+        R16 -->|Yes| R18["Mark Automatic Testing complete"]
 
         R18 --> R19["Add regression items<br/>to ticket regression.md"]
         R19 --> R20["☐ Regression Items Added"]
@@ -304,10 +306,10 @@ flowchart TD
         RM17 --> RM18{"WORKFLOW_<br/>SLACK_WEBHOOK<br/>set?"}
         RM18 -->|Yes| RM19["POST Slack notification<br/>MR/PR link + title +<br/>summary + Jira key"]
         RM18 -->|No| RM20["Skip Slack"]
-        RM19 --> RM21["Set status:<br/>Awaiting Merge"]
+        RM19 --> RM21["Set status:<br/>PR Created"]
         RM20 --> RM21
 
-        RM21 --> RM22["🟠 AWAITING MERGE<br/>column"]
+        RM21 --> RM22["🟠 PR CREATED<br/>column"]
     end
 
     %% ═══════════════════════════════════════
@@ -356,7 +358,7 @@ flowchart TD
 
     subgraph COMPLETE["12. COMPLETION CASCADE"]
         EG9 --> CC1{"Was this the<br/>Finalize phase?"}
-        CC1 -->|"No — more<br/>phases remain"| CC2["Route to next phase:<br/>Design → Build<br/>Build → Refinement<br/>Refinement → Finalize"]
+        CC1 -->|"No — more<br/>phases remain"| CC2["Route to next phase:<br/>Design → Build<br/>Build → Automatic Testing<br/>Automatic Testing → Finalize"]
         CC2 --> OL14
 
         CC1 -->|Yes| CC3["🟢 DONE column<br/>Stage complete"]
@@ -445,7 +447,7 @@ flowchart TD
 | Orchestration Loop | 14 | 3 |
 | Design Phase | 18 | 4 |
 | Build Phase | 16 | 3 |
-| Refinement Phase | 20 | 3 |
+| Automatic Testing Phase | 20 | 3 |
 | Finalize Phase | 18 | 3 |
 | Local Mode | 4 | 0 |
 | Remote Mode | 22 | 5 |
