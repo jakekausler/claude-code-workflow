@@ -1,0 +1,29 @@
+{
+  "name": "kanban-cli",
+  "version": "0.1.0",
+  "description": "Config-driven kanban workflow CLI for Claude Code",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "kanban-cli": "dist/cli/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/cli/index.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "tsc --noEmit",
+    "verify": "npm run lint && npm run test"
+  },
+  "dependencies": {
+    "commander": "^12.1.0",
+    "yaml": "^2.6.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0",
+    "vitest": "^2.1.0"
+  }
+}
