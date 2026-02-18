@@ -30,3 +30,12 @@ export { ResolverRegistry } from './resolvers/registry.js';
 export { registerBuiltinResolvers } from './resolvers/builtins/index.js';
 export { prStatusResolver } from './resolvers/builtins/pr-status.js';
 export { stageRouterResolver } from './resolvers/builtins/stage-router.js';
+
+// Validators
+export { validateConfig } from './validators/config-validator.js';
+export { validateGraph } from './validators/graph-validator.js';
+export { validateSkillContent } from './validators/skill-validator.js';
+export type { SkillFileReader, SkillContentAnalyzer } from './validators/skill-validator.js';
+export { validateResolvers } from './validators/resolver-validator.js';
+export { validatePipeline } from './validators/pipeline-validator.js';
+export type { PipelineValidationResult, PipelineValidationOptions } from './validators/pipeline-validator.js';
