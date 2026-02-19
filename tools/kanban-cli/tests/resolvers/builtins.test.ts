@@ -8,52 +8,64 @@ import type { ResolverStageInput, ResolverContext } from '../../src/resolvers/ty
 const baseContext: ResolverContext = { env: {} };
 
 describe('prStatusResolver', () => {
-  it('returns Done when PR is merged', async () => {
+  it('returns Done when PR is merged', () => {
     const stage: ResolverStageInput = { id: 'STAGE-001', status: 'PR Created', pr_url: 'https://github.com/org/repo/pull/1' };
     const ctx: ResolverContext = {
       env: {},
       codeHost: {
-        getPRStatus: async () => ({ merged: true, hasNewUnresolvedComments: false, state: 'merged' }),
+        getPRStatus: () => ({ merged: true, hasUnresolvedComments: false, state: 'merged' }),
       },
     };
-    const result = await prStatusResolver(stage, ctx);
+    const result = prStatusResolver(stage, ctx);
     expect(result).toBe('Done');
   });
 
-  it('returns Addressing Comments when PR has new comments', async () => {
+  it('returns Addressing Comments when PR has unresolved comments', () => {
     const stage: ResolverStageInput = { id: 'STAGE-001', status: 'PR Created', pr_url: 'https://github.com/org/repo/pull/1' };
     const ctx: ResolverContext = {
       env: {},
       codeHost: {
-        getPRStatus: async () => ({ merged: false, hasNewUnresolvedComments: true, state: 'open' }),
+        getPRStatus: () => ({ merged: false, hasUnresolvedComments: true, state: 'open' }),
       },
     };
-    const result = await prStatusResolver(stage, ctx);
+    const result = prStatusResolver(stage, ctx);
     expect(result).toBe('Addressing Comments');
   });
 
-  it('returns null when no changes', async () => {
+  it('returns null when no changes', () => {
     const stage: ResolverStageInput = { id: 'STAGE-001', status: 'PR Created', pr_url: 'https://github.com/org/repo/pull/1' };
     const ctx: ResolverContext = {
       env: {},
       codeHost: {
-        getPRStatus: async () => ({ merged: false, hasNewUnresolvedComments: false, state: 'open' }),
+        getPRStatus: () => ({ merged: false, hasUnresolvedComments: false, state: 'open' }),
       },
     };
-    const result = await prStatusResolver(stage, ctx);
+    const result = prStatusResolver(stage, ctx);
     expect(result).toBeNull();
   });
 
-  it('returns null when no code host available', async () => {
+  it('returns null when no code host available', () => {
     const stage: ResolverStageInput = { id: 'STAGE-001', status: 'PR Created', pr_url: 'https://github.com/org/repo/pull/1' };
-    const result = await prStatusResolver(stage, baseContext);
+    const result = prStatusResolver(stage, baseContext);
     expect(result).toBeNull();
   });
 
-  it('returns null when no pr_url on stage', async () => {
+  it('returns null when no pr_url on stage', () => {
     const stage: ResolverStageInput = { id: 'STAGE-001', status: 'PR Created' };
-    const result = await prStatusResolver(stage, baseContext);
+    const result = prStatusResolver(stage, baseContext);
     expect(result).toBeNull();
+  });
+
+  it('prioritizes merged over unresolved comments', () => {
+    const stage: ResolverStageInput = { id: 'STAGE-001', status: 'PR Created', pr_url: 'https://github.com/org/repo/pull/1' };
+    const ctx: ResolverContext = {
+      env: {},
+      codeHost: {
+        getPRStatus: () => ({ merged: true, hasUnresolvedComments: true, state: 'merged' }),
+      },
+    };
+    const result = prStatusResolver(stage, ctx);
+    expect(result).toBe('Done');
   });
 });
 
