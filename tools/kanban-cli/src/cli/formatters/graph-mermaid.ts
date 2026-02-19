@@ -158,7 +158,7 @@ export function formatGraphAsMermaid(graph: GraphOutput): string {
   for (const epic of epicNodes) {
     const children = epicChildMap.get(epic.id) || [];
     const safeEpicId = sanitizeNodeId(epic.id);
-    lines.push(`    subgraph ${safeEpicId} ["${epic.id}: ${epic.title}"]`);
+    lines.push(`    subgraph sub_${safeEpicId} ["${epic.id}: ${epic.title}"]`);
     // Epic node itself inside the subgraph
     lines.push(`        ${nodeDefinition(epic)}`);
     for (const child of children) {

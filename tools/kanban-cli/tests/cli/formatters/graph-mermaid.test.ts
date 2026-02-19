@@ -51,8 +51,8 @@ describe('formatGraphAsMermaid', () => {
       critical_path: [],
     };
     const output = formatGraphAsMermaid(graph);
-    expect(output).toContain('subgraph E001 ["EPIC-001: Auth"]');
-    expect(output).toContain('subgraph E002 ["EPIC-002: Payments"]');
+    expect(output).toContain('subgraph sub_E001 ["EPIC-001: Auth"]');
+    expect(output).toContain('subgraph sub_E002 ["EPIC-002: Payments"]');
     expect(output).toContain('end');
   });
 
@@ -225,7 +225,7 @@ describe('formatGraphAsMermaid', () => {
     };
     const output = formatGraphAsMermaid(graph);
     // The ticket and stage should appear between subgraph and end
-    const subgraphStart = output.indexOf('subgraph E001');
+    const subgraphStart = output.indexOf('subgraph sub_E001');
     const subgraphEnd = output.indexOf('end', subgraphStart);
     const ticketPos = output.indexOf('T001_001[');
     const stagePos = output.indexOf('S001_001_001(');
