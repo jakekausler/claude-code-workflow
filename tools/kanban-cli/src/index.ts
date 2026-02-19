@@ -27,6 +27,7 @@ export type { TransitionResult } from './engine/transitions.js';
 
 // Resolvers
 export type { ResolverFn, ResolverStageInput, ResolverContext } from './resolvers/types.js';
+export type { PRStatus, CodeHostAdapter } from './resolvers/types.js';
 export { ResolverRegistry } from './resolvers/registry.js';
 export { registerBuiltinResolvers } from './resolvers/builtins/index.js';
 export { prStatusResolver } from './resolvers/builtins/pr-status.js';
@@ -127,3 +128,16 @@ export type {
   ValidationWarning,
   ValidateInput,
 } from './cli/logic/validate.js';
+
+// Utils - Git Platform Detection
+export type { GitPlatform, DetectPlatformOptions } from './utils/git-platform.js';
+export { detectGitPlatform, parsePlatformFromUrl, getGitRemoteUrl } from './utils/git-platform.js';
+
+// Utils - Code Host Adapters
+export { createGitHubAdapter } from './utils/code-host-github.js';
+export type { GitHubAdapterOptions } from './utils/code-host-github.js';
+export { parseGitHubPrUrl } from './utils/code-host-github.js';
+export { createGitLabAdapter } from './utils/code-host-gitlab.js';
+export type { GitLabAdapterOptions } from './utils/code-host-gitlab.js';
+export { parseGitLabMrUrl } from './utils/code-host-gitlab.js';
+export { createCodeHostAdapter } from './utils/code-host-factory.js';
