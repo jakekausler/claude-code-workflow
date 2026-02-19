@@ -6,6 +6,7 @@ import { graphCommand } from './commands/graph.js';
 import { nextCommand } from './commands/next.js';
 import { validateCommand } from './commands/validate.js';
 import { syncCommand } from './commands/sync.js';
+import { summaryCommand } from './commands/summary.js';
 
 const program = new Command();
 
@@ -20,5 +21,6 @@ program.addCommand(graphCommand);
 program.addCommand(nextCommand);
 program.addCommand(validateCommand);
 program.addCommand(syncCommand);
+program.addCommand(summaryCommand);
 
 program.parse();
