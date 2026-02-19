@@ -18,31 +18,46 @@ The Finalize phase ensures code quality through review, adds tests if needed, cr
 
 **Every step in Finalize MUST be delegated to a subagent. Main agent coordinates only.**
 
-## Remote Mode Awareness
+## Remote Mode Detection
 
-The Finalize phase behaves differently depending on the `WORKFLOW_REMOTE_MODE` environment variable:
+The Finalize phase behaves differently depending on the `WORKFLOW_REMOTE_MODE` environment variable. Check this value at the start of the phase — it controls whether the final steps merge locally or create a remote MR/PR.
 
-### Local Mode (default, `WORKFLOW_REMOTE_MODE=false`)
+### Platform Detection
 
-- Unchanged from standard behavior
-- Merges to main and commits directly
-- Stage status set to `Complete` after finalization
+When remote mode is active, determine which platform CLI to use:
 
-### Remote Mode (`WORKFLOW_REMOTE_MODE=true`)
+1. Check `WORKFLOW_GIT_PLATFORM` env var:
+   - `github` → use `gh` CLI
+   - `gitlab` → use `glab` CLI
+   - `auto` (default) → auto-detect from git remote URL
 
-- Creates implementation commit on the worktree branch (not main)
-- Pushes branch to remote (`git push -u origin <worktree_branch>`)
-- Creates MR/PR via `gh pr create` or `glab mr create` (based on `WORKFLOW_GIT_PLATFORM`):
-  - Title: Stage title
-  - Description: Summary of what was built, design decisions, test results
-  - If `jira_key` is set on the ticket: include Jira link in description
-  - If `jira_key` is set on the epic: reference the Jira epic in description
-- Stage status set to `PR Created` (not `Complete`)
-- If `WORKFLOW_SLACK_WEBHOOK` is set, POST notification with MR/PR URL
+2. Auto-detection logic (when `WORKFLOW_GIT_PLATFORM=auto`):
+   ```bash
+   REMOTE_URL=$(git remote get-url origin 2>/dev/null || echo "")
+   if echo "$REMOTE_URL" | grep -qi "github"; then
+     PLATFORM="github"
+   elif echo "$REMOTE_URL" | grep -qi "gitlab"; then
+     PLATFORM="gitlab"
+   else
+     # Fallback: check which CLI is available
+     if command -v gh &>/dev/null; then
+       PLATFORM="github"
+     elif command -v glab &>/dev/null; then
+       PLATFORM="gitlab"
+     else
+       echo "ERROR: Cannot detect git platform. Set WORKFLOW_GIT_PLATFORM=github or WORKFLOW_GIT_PLATFORM=gitlab"
+       exit 1
+     fi
+   fi
+   ```
 
-> **Note:** Remote mode functionality ships in Stage 3. For now, local mode only.
+3. Verify the chosen CLI is installed:
+   - GitHub: `gh auth status` (must be authenticated)
+   - GitLab: `glab auth status` (must be authenticated)
 
 ## Phase Workflow
+
+Steps 1-7 are IDENTICAL for local and remote mode. Steps 8+ diverge.
 
 ```
 1. Delegate to code-reviewer (Opus) for pre-test code review
@@ -91,7 +106,11 @@ The Finalize phase behaves differently depending on the `WORKFLOW_REMOTE_MODE` e
      → Delegate to doc-writer-lite (Sonnet) OR skip if minimal
 
 7. Delegate to doc-updater (Haiku) to write to changelog/<date>.changelog.md
+```
 
+### Local Mode (default, `WORKFLOW_REMOTE_MODE=false`)
+
+```
 8. Main agent creates implementation commit:
    - ONLY add implementation files (code, tests, docs): `git add <specific files>`
    - Include epic/ticket/stage reference in commit message
@@ -105,7 +124,7 @@ The Finalize phase behaves differently depending on the `WORKFLOW_REMOTE_MODE` e
     - Commit message: "chore(TICKET-XXX-YYY): add commit hash to STAGE-XXX-YYY-ZZZ changelog"
 
 11. Delegate to doc-updater (Haiku) to update tracking documents via YAML frontmatter:
-    - Update stage YAML frontmatter: set Finalize phase complete, status to "Complete" (local mode) or "PR Created" (remote mode)
+    - Update stage YAML frontmatter: set Finalize phase complete, status to "Complete"
     - Update ticket YAML frontmatter in TICKET-XXX-YYY.md (update stage status)
     - Update epic YAML frontmatter in EPIC-XXX.md if all tickets in epic are complete
     - Run `kanban-cli sync --stage STAGE-XXX-YYY-ZZZ` after status changes
@@ -115,6 +134,168 @@ The Finalize phase behaves differently depending on the `WORKFLOW_REMOTE_MODE` e
       `git add epics/EPIC-XXX-name/TICKET-XXX-YYY-name/STAGE-XXX-YYY-ZZZ.md epics/EPIC-XXX-name/TICKET-XXX-YYY-name/TICKET-XXX-YYY.md epics/EPIC-XXX-name/EPIC-XXX.md`
     - Commit message: "chore(TICKET-XXX-YYY): mark STAGE-XXX-YYY-ZZZ Complete"
     - **NEVER use `git add -A`** - it picks up unrelated uncommitted files
+```
+
+### Remote Mode (`WORKFLOW_REMOTE_MODE=true`)
+
+```
+8. Main agent creates implementation commit on the WORKTREE BRANCH (not main):
+   - Ensure you are on the worktree branch: `git branch --show-current`
+   - Branch should match `worktree_branch` from stage YAML frontmatter
+   - ONLY add implementation files (code, tests, docs): `git add <specific files>`
+   - Include epic/ticket/stage reference in commit message
+     (e.g., "feat(EPIC-001/TICKET-001-001/STAGE-001-001-001): implement login form")
+   - **NEVER use `git add -A`**
+
+9. Delegate to doc-updater (Haiku) to add commit hash to changelog entry
+
+10. Main agent commits changelog update on the worktree branch:
+    - `git add changelog/<date>.changelog.md`
+    - Commit message: "chore(TICKET-XXX-YYY): add commit hash to STAGE-XXX-YYY-ZZZ changelog"
+
+11. Push branch to remote:
+    ```bash
+    git push -u origin <worktree_branch>
+    ```
+    If push fails due to remote rejection, report the error and stop.
+
+12. Create MR/PR via platform CLI:
+
+    **Read stage, ticket, and epic YAML frontmatter** to gather:
+    - Stage title (for PR title)
+    - Stage overview (for description)
+    - Ticket `jira_key` (if set)
+    - Epic `jira_key` (if set)
+    - Test results summary from steps 3-4
+
+    **GitHub (`gh` CLI):**
+    ```bash
+    gh pr create \
+      --title "feat(STAGE-XXX-YYY-ZZZ): <stage title>" \
+      --body "$(cat <<'PRBODY'
+    ## Summary
+
+    **Epic:** EPIC-XXX — <epic title>
+    **Ticket:** TICKET-XXX-YYY — <ticket title>
+    **Stage:** STAGE-XXX-YYY-ZZZ — <stage title>
+
+    <Summary of what was built — 2-4 sentences covering the implementation approach, key design decisions, and what changed.>
+
+    ## Design Decisions
+
+    - <Key decision 1 and rationale>
+    - <Key decision 2 and rationale>
+
+    ## Test Results
+
+    - All unit tests passing
+    - <Specific test coverage notes>
+    - <Refinement type approvals: e.g., Desktop Approved, Mobile Approved>
+
+    ## Jira
+
+    <If ticket jira_key is set:>
+    Closes <TICKET_JIRA_KEY>
+
+    <If epic jira_key is set:>
+    Epic: <EPIC_JIRA_KEY>
+
+    <If no jira_key on either:>
+    No Jira ticket linked.
+
+    ---
+    *Generated by Claude Code workflow — [STAGE-XXX-YYY-ZZZ]*
+    PRBODY
+    )"
+    ```
+
+    **GitLab (`glab` CLI):**
+    ```bash
+    glab mr create \
+      --title "feat(STAGE-XXX-YYY-ZZZ): <stage title>" \
+      --description "$(cat <<'MRBODY'
+    ## Summary
+
+    **Epic:** EPIC-XXX — <epic title>
+    **Ticket:** TICKET-XXX-YYY — <ticket title>
+    **Stage:** STAGE-XXX-YYY-ZZZ — <stage title>
+
+    <Summary of what was built — 2-4 sentences covering the implementation approach, key design decisions, and what changed.>
+
+    ## Design Decisions
+
+    - <Key decision 1 and rationale>
+    - <Key decision 2 and rationale>
+
+    ## Test Results
+
+    - All unit tests passing
+    - <Specific test coverage notes>
+    - <Refinement type approvals: e.g., Desktop Approved, Mobile Approved>
+
+    ## Jira
+
+    <If ticket jira_key is set:>
+    Closes <TICKET_JIRA_KEY>
+
+    <If epic jira_key is set:>
+    Epic: <EPIC_JIRA_KEY>
+
+    <If no jira_key on either:>
+    No Jira ticket linked.
+
+    ---
+    *Generated by Claude Code workflow — [STAGE-XXX-YYY-ZZZ]*
+    MRBODY
+    )"
+    ```
+
+    **Capture the MR/PR URL** from the command output. Store it for use in tracking files and notifications.
+
+13. [CONDITIONAL: Slack Notification]
+    IF `WORKFLOW_SLACK_WEBHOOK` environment variable is set:
+      ```bash
+      curl -s -X POST "$WORKFLOW_SLACK_WEBHOOK" \
+        -H 'Content-Type: application/json' \
+        -d '{
+          "text": "New MR/PR ready for review",
+          "blocks": [
+            {
+              "type": "section",
+              "text": {
+                "type": "mrkdwn",
+                "text": "*New MR/PR Ready for Review*\n\n*Stage:* STAGE-XXX-YYY-ZZZ — <stage title>\n*Ticket:* TICKET-XXX-YYY — <ticket title>\n*Epic:* EPIC-XXX — <epic title>\n*URL:* <MR/PR URL>"
+              }
+            }
+          ]
+        }'
+      ```
+    ELSE:
+      Skip Slack notification silently (no error).
+
+14. [CONDITIONAL: Jira Transition]
+    IF ticket has `jira_key` set:
+      - Transition the Jira issue to "In Review" status
+      - Use available Jira MCP/skill to perform the transition
+      - If `WORKFLOW_JIRA_CONFIRM=true`: ask user before transitioning
+      - If transition fails: log warning but do not block the workflow
+    ELSE:
+      Skip Jira transition.
+
+15. Delegate to doc-updater (Haiku) to update tracking documents via YAML frontmatter:
+    - Update stage YAML frontmatter:
+      - Set Finalize phase complete
+      - Set status to "PR Created" (NOT "Complete")
+      - Record MR/PR URL in stage file (in `## Finalize Phase` section under `**MR/PR URL**:`)
+    - Update ticket YAML frontmatter in TICKET-XXX-YYY.md (update stage status)
+    - Update epic YAML frontmatter in EPIC-XXX.md if needed
+    - Run `kanban-cli sync --stage STAGE-XXX-YYY-ZZZ` after status changes
+
+16. Main agent commits tracking files on the worktree branch:
+    - `git add epics/EPIC-XXX-name/TICKET-XXX-YYY-name/STAGE-XXX-YYY-ZZZ.md epics/EPIC-XXX-name/TICKET-XXX-YYY-name/TICKET-XXX-YYY.md epics/EPIC-XXX-name/EPIC-XXX.md`
+    - Commit message: "chore(TICKET-XXX-YYY): mark STAGE-XXX-YYY-ZZZ PR Created"
+    - Push the tracking commit: `git push origin <worktree_branch>`
+    - **NEVER use `git add -A`**
 ```
 
 ## Code Review Policy
@@ -143,7 +324,7 @@ When doc-updater updates tracking files, it does NOT commit them. If tracking fi
 git add epics/EPIC-XXX-name/TICKET-XXX-YYY-name/STAGE-XXX-YYY-ZZZ.md epics/EPIC-XXX-name/TICKET-XXX-YYY-name/TICKET-XXX-YYY.md epics/EPIC-XXX-name/EPIC-XXX.md
 
 # CORRECT - Changelog
-git add changelog/2026-01-13.changelog.md
+git add changelog/<date>.changelog.md
 
 # CORRECT - Implementation files (list each one)
 git add packages/llm/src/file1.ts packages/llm/src/file2.ts docs/guide.md
@@ -162,10 +343,12 @@ Include epic/ticket/stage references in commit messages for traceability:
 feat(EPIC-001/TICKET-001-001/STAGE-001-001-001): implement login form validation
 chore(TICKET-001-001): add commit hash to STAGE-001-001-001 changelog
 chore(TICKET-001-001): mark STAGE-001-001-001 Complete
+chore(TICKET-001-001): mark STAGE-001-001-001 PR Created
 ```
 
 ## Phase Gates Checklist
 
+### Common (both modes)
 - [ ] code-reviewer (Opus) completed pre-test review
 - [ ] ALL review suggestions implemented via fixer/scribe
 - [ ] IF tests not written in Build: test-writer created tests
@@ -173,15 +356,35 @@ chore(TICKET-001-001): mark STAGE-001-001-001 Complete
 - [ ] IF impl code changed after first review: code-reviewer ran post-test review
 - [ ] Documentation created (doc-writer OR doc-writer-lite based on complexity)
 - [ ] Changelog entry added via doc-updater
+
+### Local Mode
 - [ ] Implementation commit created with SPECIFIC file paths (NO git add -A)
 - [ ] Commit hash added to changelog via doc-updater
 - [ ] Changelog committed immediately (ONLY changelog file)
 - [ ] Tracking documents updated via doc-updater (YAML frontmatter):
   - Finalize phase marked complete in stage file
-  - Stage status set to "Complete" (local mode) or "PR Created" (remote mode)
+  - Stage status set to "Complete"
   - Ticket status updated if all stages complete
   - Epic status updated if all tickets complete
 - [ ] `kanban-cli sync --stage STAGE-XXX-YYY-ZZZ` executed after status changes
+
+### Remote Mode
+- [ ] Implementation commit created on worktree branch (NO git add -A)
+- [ ] Commit hash added to changelog via doc-updater
+- [ ] Changelog committed on worktree branch
+- [ ] Branch pushed to remote (`git push -u origin <branch>`)
+- [ ] MR/PR created via `gh pr create` or `glab mr create`
+- [ ] MR/PR URL captured and recorded
+- [ ] IF `WORKFLOW_SLACK_WEBHOOK` set: Slack notification sent
+- [ ] IF ticket has `jira_key`: Jira issue transitioned to "In Review"
+- [ ] Tracking documents updated via doc-updater (YAML frontmatter):
+  - Finalize phase marked complete in stage file
+  - Stage status set to "PR Created"
+  - MR/PR URL recorded in stage file
+  - Ticket status updated
+  - Epic status updated if needed
+- [ ] `kanban-cli sync --stage STAGE-XXX-YYY-ZZZ` executed after status changes
+- [ ] Tracking commit pushed to remote
 
 ## Time Pressure Does NOT Override Exit Gates
 
@@ -219,18 +422,19 @@ Documentation-only or tracking-only stages:
 - "No code to learn lessons about" → Process lessons exist for all work types
 - "Journal would just say 'updated docs'" → Write about the documentation process itself
 
-**Note:** The exit gate (steps 1-5 below) covers the final stage-completion steps. Implementation commits (workflow steps 8-10) happen BEFORE the exit gate begins.
+**Note:** The exit gate (steps 1-5 below) covers the final stage-completion steps. Implementation commits (workflow steps 8-10/16) happen BEFORE the exit gate begins.
 
 Before completing the stage, you MUST complete these steps IN ORDER:
 
-1. Update stage tracking file YAML frontmatter (mark Finalize phase complete, stage Complete or PR Created)
+1. Update stage tracking file YAML frontmatter (mark Finalize phase complete, stage "Complete" or "PR Created")
 2. Update ticket tracking file YAML frontmatter (update stage status, ticket status if all stages done)
 3. Update epic tracking file YAML frontmatter (update epic status if all tickets done)
 4. Run `kanban-cli sync --stage STAGE-XXX-YYY-ZZZ`
 5. **Main agent commits tracking files** (NOT doc-updater):
    - `git add epics/EPIC-XXX-name/TICKET-XXX-YYY-name/STAGE-XXX-YYY-ZZZ.md epics/EPIC-XXX-name/TICKET-XXX-YYY-name/TICKET-XXX-YYY.md epics/EPIC-XXX-name/EPIC-XXX.md`
-   - Commit message: "chore(TICKET-XXX-YYY): mark STAGE-XXX-YYY-ZZZ Complete"
+   - Commit message: "chore(TICKET-XXX-YYY): mark STAGE-XXX-YYY-ZZZ Complete" (local mode) or "chore(TICKET-XXX-YYY): mark STAGE-XXX-YYY-ZZZ PR Created" (remote mode)
    - **NEVER use `git add -A`**
+   - **Remote mode**: Push this commit to the remote branch as well
 6. Use Skill tool to invoke `lessons-learned`
 7. Use Skill tool to invoke `journal`
 
@@ -243,15 +447,15 @@ Before completing the stage, you MUST complete these steps IN ORDER:
 
 Committing before lessons/journal ensures tracking state is saved. Lessons and journal need the commit to have happened (they may reference the commit hash).
 
-Stage is now complete. No further phase to invoke - the stage workflow is finished.
+Stage is now complete (local mode) or awaiting review (remote mode). No further phase to invoke — the stage workflow is finished.
 
 **DO NOT skip any exit gate step.**
 
 **DO NOT claim the stage is complete until exit gate is done.** This includes:
 
-- Telling user "stage is complete"
+- Telling user "stage is complete" or "PR created"
 - Running `/next_task` for the next stage
 - Starting work on another stage
 - Closing the session as "successful"
 
-**Complete ALL exit gate steps FIRST. Then the stage is truly complete.**
+**Complete ALL exit gate steps FIRST. Then the stage is truly complete (or in PR Created state).**
