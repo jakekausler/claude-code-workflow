@@ -19,6 +19,7 @@
     "better-sqlite3": "^11.0.0",
     "commander": "^12.1.0",
     "gray-matter": "^4.0.3",
+    "xmldom": "^0.6.0",
     "yaml": "^2.6.0",
     "zod": "^3.24.0"
   },
