@@ -8,23 +8,38 @@ export interface ResolverStageInput {
   ticket_id?: string;
   epic_id?: string;
   pr_url?: string;
+  pr_number?: number;
   worktree_branch?: string;
   refinement_type?: string[];
   [key: string]: unknown;
 }
 
 /**
+ * PR/MR status returned by the code host adapter.
+ */
+export interface PRStatus {
+  /** Whether the PR/MR has been merged */
+  merged: boolean;
+  /** Whether there are unresolved review comments */
+  hasUnresolvedComments: boolean;
+  /** Raw state string from the platform (e.g., 'open', 'closed', 'merged') */
+  state: string;
+}
+
+/**
+ * Adapter for querying code host (GitHub/GitLab) PR/MR status.
+ * Implementations can shell out to `gh`/`glab` CLI or call APIs directly.
+ */
+export interface CodeHostAdapter {
+  getPRStatus(prUrl: string): PRStatus;
+}
+
+/**
  * Context provided to resolver functions by the orchestration loop.
  */
 export interface ResolverContext {
-  /** Access to code host API (GitHub/GitLab) — injected by orchestration loop */
-  codeHost?: {
-    getPRStatus(prUrl: string): Promise<{
-      merged: boolean;
-      hasNewUnresolvedComments: boolean;
-      state: string;
-    }>;
-  };
+  /** Access to code host API (GitHub/GitLab) -- injected by orchestration loop */
+  codeHost?: CodeHostAdapter;
   /** Current environment variable values */
   env: Record<string, string | undefined>;
 }
