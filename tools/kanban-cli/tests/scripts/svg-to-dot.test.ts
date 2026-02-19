@@ -1,6 +1,6 @@
 // tests/scripts/svg-to-dot.test.ts
 import { describe, it, expect } from 'vitest';
-import { extractNodes, extractEdges, parseTranslate, getPathStartPoint, getPathEndPoint, matchEdgesToNodes, extractOrphanTexts, assignEdgeLabels } from '../../scripts/svg-to-dot.js';
+import { extractNodes, extractEdges, parseTranslate, getPathStartPoint, getPathEndPoint, matchEdgesToNodes, extractOrphanTexts, assignEdgeLabels, formatDot } from '../../scripts/svg-to-dot.js';
 import type { ParsedNode, ParsedEdge, OrphanText } from '../../scripts/svg-to-dot.js';
 import { DOMParser } from 'xmldom';
 
@@ -140,5 +140,26 @@ describe('extractOrphanTexts', () => {
     const orphans = extractOrphanTexts(doc, nodes);
     expect(orphans.length).toBe(1);
     expect(orphans[0].text).toBe('Yes');
+  });
+});
+
+describe('formatDot', () => {
+  it('produces valid DOT output', () => {
+    const nodes: ParsedNode[] = [
+      { id: 'node_0', label: 'Start', center: { x: 100, y: 100 }, shape: 'box', width: 120, height: 120 },
+      { id: 'node_1', label: 'Decision?', center: { x: 300, y: 100 }, shape: 'diamond', width: 200, height: 120 },
+      { id: 'node_2', label: 'End', center: { x: 500, y: 100 }, shape: 'box', width: 120, height: 40 },
+    ];
+    const edges: ParsedEdge[] = [
+      { startPoint: { x: 160, y: 100 }, endPoint: { x: 200, y: 100 }, sourceId: 'node_0', targetId: 'node_1' },
+      { startPoint: { x: 400, y: 100 }, endPoint: { x: 440, y: 100 }, sourceId: 'node_1', targetId: 'node_2', label: 'Yes' },
+    ];
+    const dot = formatDot(nodes, edges);
+    expect(dot).toContain('digraph');
+    expect(dot).toContain('node_0 [label="Start"');
+    expect(dot).toContain('node_1 [label="Decision?"');
+    expect(dot).toContain('shape=diamond');
+    expect(dot).toContain('node_0 -> node_1');
+    expect(dot).toContain('node_1 -> node_2 [label="Yes"]');
   });
 });

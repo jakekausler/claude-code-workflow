@@ -356,6 +356,31 @@ export function assignEdgeLabels(edges: ParsedEdge[], orphanTexts: OrphanText[])
   }
 }
 
+export function formatDot(nodes: ParsedNode[], edges: ParsedEdge[]): string {
+  const lines: string[] = ['digraph MiroFlow {', '    rankdir=TB;', ''];
+
+  // Nodes
+  for (const node of nodes) {
+    const escapedLabel = node.label.replace(/"/g, '\\"');
+    const shapeAttr = node.shape === 'diamond' ? 'diamond' :
+                      node.shape === 'record' ? 'record' : 'box';
+    lines.push(`    ${node.id} [label="${escapedLabel}" shape=${shapeAttr}];`);
+  }
+
+  lines.push('');
+
+  // Edges
+  for (const edge of edges) {
+    if (!edge.sourceId || !edge.targetId) continue;
+    if (edge.sourceId === edge.targetId) continue; // skip self-loops from mismatches
+    const labelAttr = edge.label ? ` [label="${edge.label.replace(/"/g, '\\"')}"]` : '';
+    lines.push(`    ${edge.sourceId} -> ${edge.targetId}${labelAttr};`);
+  }
+
+  lines.push('}');
+  return lines.join('\n');
+}
+
 function main(): void {
   const svgPath = process.argv[2];
   if (!svgPath) {
