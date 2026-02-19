@@ -1,6 +1,7 @@
 // tests/scripts/svg-to-dot.test.ts
 import { describe, it, expect } from 'vitest';
-import { parseTranslate, getPathStartPoint, getPathEndPoint } from '../../scripts/svg-to-dot.js';
+import { extractNodes, parseTranslate, getPathStartPoint, getPathEndPoint } from '../../scripts/svg-to-dot.js';
+import { DOMParser } from 'xmldom';
 
 describe('parseTranslate', () => {
   it('extracts x,y from translate transform', () => {
@@ -41,5 +42,34 @@ describe('getPathEndPoint', () => {
 
   it('handles vertical path', () => {
     expect(getPathEndPoint('M 0 0 L 0 196.49')).toEqual({ x: 0, y: 196.49 });
+  });
+});
+
+describe('extractNodes', () => {
+  it('extracts a simple rect node with text', () => {
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg">
+      <g>
+        <g>
+          <g width="120px" height="120px" transform="translate(40, 960.74) scale(1) rotate(0, 60, 60)">
+            <svg width="120" height="120" class="shape-background">
+              <clipPath id="test1"><rect x="0" y="0" width="120" height="120"/></clipPath>
+              <g><rect class="shape-element shape-element-rect" stroke="#1a1a1a" x="0" y="0" width="120" height="120"/></g>
+            </svg>
+          </g>
+          <g width="120px" height="120px" transform="translate(40, 960.74) rotate(0, 60, 60)">
+            <g transform="translate(6, 6)">
+              <text x="9.5" y="58">Start Looping</text>
+            </g>
+          </g>
+        </g>
+      </g>
+    </svg>`;
+    const doc = new DOMParser().parseFromString(svg, 'image/svg+xml');
+    const nodes = extractNodes(doc);
+    expect(nodes.length).toBe(1);
+    expect(nodes[0].label).toBe('Start Looping');
+    expect(nodes[0].shape).toBe('box');
+    expect(nodes[0].center.x).toBeCloseTo(100); // 40 + 120/2
+    expect(nodes[0].center.y).toBeCloseTo(1020.74); // 960.74 + 120/2
   });
 });

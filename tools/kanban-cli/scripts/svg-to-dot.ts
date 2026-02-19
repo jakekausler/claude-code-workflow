@@ -7,7 +7,7 @@ export interface Point {
   y: number;
 }
 
-interface ParsedNode {
+export interface ParsedNode {
   id: string;
   label: string;
   center: Point;
@@ -16,7 +16,7 @@ interface ParsedNode {
   height: number;
 }
 
-interface ParsedEdge {
+export interface ParsedEdge {
   startPoint: Point;
   endPoint: Point;
   sourceId?: string;
@@ -24,7 +24,7 @@ interface ParsedEdge {
   label?: string;
 }
 
-interface OrphanText {
+export interface OrphanText {
   text: string;
   center: Point;
 }
@@ -53,6 +53,142 @@ export function getPathEndPoint(d: string): Point {
     return { x: parseFloat(nums[nums.length - 2]), y: parseFloat(nums[nums.length - 1]) };
   }
   throw new Error(`Cannot parse path end: ${d}`);
+}
+
+export function extractNodes(doc: Document): ParsedNode[] {
+  const allGroups = Array.from(doc.getElementsByTagName('g'));
+
+  interface GroupInfo {
+    el: Element;
+    translate: Point;
+    width: number;
+    height: number;
+  }
+
+  const shapeGroups: GroupInfo[] = [];
+  const textGroups: (GroupInfo & { texts: string[] })[] = [];
+
+  for (const g of allGroups) {
+    const transform = g.getAttribute('transform');
+    const widthAttr = g.getAttribute('width');
+    if (!transform || !widthAttr) continue;
+
+    const translate = parseTranslate(transform);
+    if (!translate) continue;
+
+    const width = parseFloat(widthAttr);
+    const heightAttr = g.getAttribute('height');
+    const height = heightAttr ? parseFloat(heightAttr) : 0;
+
+    if (width === 0 && height === 0) continue;
+
+    // Check if this is a shape group
+    const hasShapeRect = hasDescendantWithClass(g, 'rect', 'shape-element');
+    const hasContainerRect = hasStyledRect(g);
+    const hasDiamond = hasDiamondShape(g);
+
+    if (hasShapeRect || hasContainerRect || hasDiamond) {
+      shapeGroups.push({ el: g, translate, width, height });
+      continue;
+    }
+
+    // Check if this is a text group (has text descendants)
+    const textEls = g.getElementsByTagName('text');
+    if (textEls.length > 0) {
+      const texts: string[] = [];
+      for (let i = 0; i < textEls.length; i++) {
+        const t = textEls[i].textContent?.trim();
+        if (t) texts.push(t);
+      }
+      if (texts.length > 0) {
+        textGroups.push({ el: g, translate, width, height, texts });
+      }
+    }
+  }
+
+  // Pair shape groups with text groups at same translate position
+  const nodes: ParsedNode[] = [];
+  const usedTextGroups = new Set<number>();
+
+  for (const shape of shapeGroups) {
+    let label = '';
+    // Find matching text group (same translate within tolerance)
+    for (let i = 0; i < textGroups.length; i++) {
+      if (usedTextGroups.has(i)) continue;
+      const tg = textGroups[i];
+      if (Math.abs(tg.translate.x - shape.translate.x) < 1 &&
+          Math.abs(tg.translate.y - shape.translate.y) < 1) {
+        label = tg.texts.join('\\n');
+        usedTextGroups.add(i);
+        break;
+      }
+    }
+
+    // If no paired text group, check for text within the shape group itself
+    if (!label) {
+      const textEls = shape.el.getElementsByTagName('text');
+      const texts: string[] = [];
+      for (let i = 0; i < textEls.length; i++) {
+        const t = textEls[i].textContent?.trim();
+        if (t) texts.push(t);
+      }
+      label = texts.join('\\n');
+    }
+
+    if (!label) continue; // Skip unlabeled groups
+
+    const shapeType = hasDiamondShape(shape.el) ? 'diamond' :
+                      (shape.height > 150 ? 'record' : 'box');
+
+    nodes.push({
+      id: `node_${nodes.length}`,
+      label,
+      center: {
+        x: shape.translate.x + shape.width / 2,
+        y: shape.translate.y + shape.height / 2,
+      },
+      shape: shapeType,
+      width: shape.width,
+      height: shape.height,
+    });
+  }
+
+  return nodes;
+}
+
+function hasDescendantWithClass(el: Element, tagName: string, className: string): boolean {
+  const elements = el.getElementsByTagName(tagName);
+  for (let i = 0; i < elements.length; i++) {
+    const cls = elements[i].getAttribute('class') || '';
+    if (cls.includes(className)) return true;
+  }
+  return false;
+}
+
+function hasStyledRect(el: Element, depth = 0): boolean {
+  if (depth > 3) return false;
+  const children = el.childNodes;
+  for (let i = 0; i < children.length; i++) {
+    const child = children[i];
+    if (child.nodeType !== 1) continue;
+    const childEl = child as Element;
+    if (childEl.tagName === 'rect') {
+      const style = childEl.getAttribute('style') || '';
+      if (style.includes('fill: #ffffff') || style.includes('fill:#ffffff')) return true;
+    }
+    if (childEl.tagName === 'g' && hasStyledRect(childEl, depth + 1)) return true;
+  }
+  return false;
+}
+
+function hasDiamondShape(el: Element): boolean {
+  const paths = el.getElementsByTagName('path');
+  for (let i = 0; i < paths.length; i++) {
+    const d = paths[i].getAttribute('d') || '';
+    const arcCount = (d.match(/A/g) || []).length;
+    if (arcCount >= 4) return true;
+  }
+  return false;
 }
 
 function main(): void {
