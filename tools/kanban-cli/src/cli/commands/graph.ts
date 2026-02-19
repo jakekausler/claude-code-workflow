@@ -10,6 +10,7 @@ import { DependencyRepository } from '../../db/repositories/dependency-repositor
 import { syncRepo } from '../../sync/sync.js';
 import { buildGraph } from '../logic/graph.js';
 import type { GraphEpicRow, GraphTicketRow, GraphStageRow, GraphDependencyRow } from '../logic/graph.js';
+import { formatGraphAsMermaid } from '../formatters/graph-mermaid.js';
 
 export const graphCommand = new Command('graph')
   .description('Output dependency graph as JSON')
@@ -17,6 +18,7 @@ export const graphCommand = new Command('graph')
   .option('--epic <id>', 'Filter to a specific epic')
   .option('--ticket <id>', 'Filter to a specific ticket')
   .option('--pretty', 'Pretty-print JSON output', false)
+  .option('--mermaid', 'Output as Mermaid diagram instead of JSON', false)
   .action(async (options) => {
     try {
       const repoPath = path.resolve(options.repo);
@@ -84,8 +86,12 @@ export const graphCommand = new Command('graph')
         },
       });
 
-      const indent = options.pretty ? 2 : undefined;
-      process.stdout.write(JSON.stringify(result, null, indent) + '\n');
+      if (options.mermaid) {
+        process.stdout.write(formatGraphAsMermaid(result) + '\n');
+      } else {
+        const indent = options.pretty ? 2 : undefined;
+        process.stdout.write(JSON.stringify(result, null, indent) + '\n');
+      }
       db.close();
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
