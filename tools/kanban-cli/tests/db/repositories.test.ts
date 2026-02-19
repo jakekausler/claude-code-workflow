@@ -9,12 +9,14 @@ import {
   TicketRepository,
   StageRepository,
   DependencyRepository,
+  SummaryRepository,
 } from '../../src/db/repositories/index.js';
 import type {
   EpicRow,
   TicketRow,
   StageRow,
   DependencyRow,
+  SummaryRow,
 } from '../../src/db/repositories/index.js';
 
 describe('Repositories', () => {
@@ -745,6 +747,181 @@ describe('Repositories', () => {
 
       // Other repo's deps remain
       expect(deps.listByTarget('stage-4')).toHaveLength(1);
+    });
+  });
+
+  // ─── SummaryRepository ─────────────────────────────────────────
+
+  describe('SummaryRepository', () => {
+    function setupSummaryPrereqs() {
+      const repos = new RepoRepository(db);
+      const summaries = new SummaryRepository(db);
+      const repoId = insertRepo(repos);
+      return { repos, summaries, repoId };
+    }
+
+    it('upserts a summary and finds it by item', () => {
+      const { summaries, repoId } = setupSummaryPrereqs();
+
+      summaries.upsert({
+        item_id: 'STAGE-001-001-001',
+        item_type: 'stage',
+        content_hash: 'abc123',
+        model: 'haiku',
+        summary: 'This stage implemented login form UI.',
+        repo_id: repoId,
+      });
+
+      const found = summaries.findByItem('STAGE-001-001-001', 'stage', repoId);
+      expect(found).not.toBeNull();
+      expect(found!.item_id).toBe('STAGE-001-001-001');
+      expect(found!.item_type).toBe('stage');
+      expect(found!.content_hash).toBe('abc123');
+      expect(found!.model).toBe('haiku');
+      expect(found!.summary).toBe('This stage implemented login form UI.');
+      expect(found!.created_at).toBeTruthy();
+    });
+
+    it('findByItem returns null for unknown item', () => {
+      const { summaries, repoId } = setupSummaryPrereqs();
+      expect(summaries.findByItem('nonexistent', 'stage', repoId)).toBeNull();
+    });
+
+    it('upsert replaces existing summary on same item_id + item_type + repo_id', () => {
+      const { summaries, repoId } = setupSummaryPrereqs();
+
+      summaries.upsert({
+        item_id: 'STAGE-001-001-001',
+        item_type: 'stage',
+        content_hash: 'abc123',
+        model: 'haiku',
+        summary: 'Old summary.',
+        repo_id: repoId,
+      });
+
+      summaries.upsert({
+        item_id: 'STAGE-001-001-001',
+        item_type: 'stage',
+        content_hash: 'def456',
+        model: 'sonnet',
+        summary: 'New summary.',
+        repo_id: repoId,
+      });
+
+      const found = summaries.findByItem('STAGE-001-001-001', 'stage', repoId);
+      expect(found!.content_hash).toBe('def456');
+      expect(found!.model).toBe('sonnet');
+      expect(found!.summary).toBe('New summary.');
+      expect(summaries.listByRepo(repoId)).toHaveLength(1);
+    });
+
+    it('listByRepo returns all summaries for a repo', () => {
+      const { summaries, repoId } = setupSummaryPrereqs();
+
+      summaries.upsert({
+        item_id: 'STAGE-001-001-001',
+        item_type: 'stage',
+        content_hash: 'abc',
+        model: 'haiku',
+        summary: 'Stage summary.',
+        repo_id: repoId,
+      });
+      summaries.upsert({
+        item_id: 'TICKET-001-001',
+        item_type: 'ticket',
+        content_hash: 'def',
+        model: 'haiku',
+        summary: 'Ticket summary.',
+        repo_id: repoId,
+      });
+
+      expect(summaries.listByRepo(repoId)).toHaveLength(2);
+    });
+
+    it('listByRepo returns empty array for repo with no summaries', () => {
+      const { summaries, repoId } = setupSummaryPrereqs();
+      expect(summaries.listByRepo(repoId)).toHaveLength(0);
+    });
+
+    it('deleteByRepo clears all summaries for a repo but not others', () => {
+      const { summaries, repoId, repos } = setupSummaryPrereqs();
+
+      summaries.upsert({
+        item_id: 'STAGE-001-001-001',
+        item_type: 'stage',
+        content_hash: 'abc',
+        model: 'haiku',
+        summary: 'Summary 1.',
+        repo_id: repoId,
+      });
+
+      const repoId2 = repos.upsert('/other/repo', 'other');
+      summaries.upsert({
+        item_id: 'STAGE-002-001-001',
+        item_type: 'stage',
+        content_hash: 'xyz',
+        model: 'haiku',
+        summary: 'Summary 2.',
+        repo_id: repoId2,
+      });
+
+      summaries.deleteByRepo(repoId);
+
+      expect(summaries.listByRepo(repoId)).toHaveLength(0);
+      expect(summaries.listByRepo(repoId2)).toHaveLength(1);
+    });
+
+    it('deleteByItem removes a specific summary', () => {
+      const { summaries, repoId } = setupSummaryPrereqs();
+
+      summaries.upsert({
+        item_id: 'STAGE-001-001-001',
+        item_type: 'stage',
+        content_hash: 'abc',
+        model: 'haiku',
+        summary: 'Summary.',
+        repo_id: repoId,
+      });
+      summaries.upsert({
+        item_id: 'TICKET-001-001',
+        item_type: 'ticket',
+        content_hash: 'def',
+        model: 'haiku',
+        summary: 'Ticket summary.',
+        repo_id: repoId,
+      });
+
+      summaries.deleteByItem('STAGE-001-001-001', 'stage', repoId);
+
+      expect(summaries.findByItem('STAGE-001-001-001', 'stage', repoId)).toBeNull();
+      expect(summaries.findByItem('TICKET-001-001', 'ticket', repoId)).not.toBeNull();
+    });
+
+    it('distinguishes between different item types with same item_id', () => {
+      const { summaries, repoId } = setupSummaryPrereqs();
+
+      summaries.upsert({
+        item_id: 'ID-001',
+        item_type: 'stage',
+        content_hash: 'abc',
+        model: 'haiku',
+        summary: 'Stage summary.',
+        repo_id: repoId,
+      });
+      summaries.upsert({
+        item_id: 'ID-001',
+        item_type: 'ticket',
+        content_hash: 'def',
+        model: 'haiku',
+        summary: 'Ticket summary.',
+        repo_id: repoId,
+      });
+
+      const stageSummary = summaries.findByItem('ID-001', 'stage', repoId);
+      const ticketSummary = summaries.findByItem('ID-001', 'ticket', repoId);
+      expect(stageSummary!.summary).toBe('Stage summary.');
+      expect(ticketSummary!.summary).toBe('Ticket summary.');
+      expect(summaries.listByRepo(repoId)).toHaveLength(2);
     });
   });
 });

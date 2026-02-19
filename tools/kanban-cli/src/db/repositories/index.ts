@@ -1,4 +1,4 @@
-export type { EpicRow, TicketRow, StageRow, DependencyRow } from './types.js';
+export type { EpicRow, TicketRow, StageRow, DependencyRow, SummaryRow } from './types.js';
 export { RepoRepository } from './repo-repository.js';
 export { EpicRepository } from './epic-repository.js';
 export type { EpicUpsertData } from './epic-repository.js';
@@ -8,3 +8,5 @@ export { StageRepository } from './stage-repository.js';
 export type { StageUpsertData } from './stage-repository.js';
 export { DependencyRepository } from './dependency-repository.js';
 export type { DependencyUpsertData } from './dependency-repository.js';
+export { SummaryRepository } from './summary-repository.js';
+export type { SummaryUpsertData } from './summary-repository.js';

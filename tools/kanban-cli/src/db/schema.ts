@@ -69,10 +69,24 @@ CREATE TABLE IF NOT EXISTS dependencies (
   repo_id INTEGER REFERENCES repos(id)
 )`;
 
+export const CREATE_SUMMARIES_TABLE = `
+CREATE TABLE IF NOT EXISTS summaries (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  item_id TEXT NOT NULL,
+  item_type TEXT NOT NULL,
+  content_hash TEXT NOT NULL,
+  model TEXT NOT NULL,
+  summary TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  repo_id INTEGER REFERENCES repos(id),
+  UNIQUE(item_id, item_type, repo_id)
+)`;
+
 export const ALL_CREATE_STATEMENTS = [
   CREATE_REPOS_TABLE,
   CREATE_EPICS_TABLE,
   CREATE_TICKETS_TABLE,
   CREATE_STAGES_TABLE,
   CREATE_DEPENDENCIES_TABLE,
+  CREATE_SUMMARIES_TABLE,
 ] as const;

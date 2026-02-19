@@ -56,3 +56,14 @@ export interface DependencyRow {
   resolved: number;
   repo_id: number;
 }
+
+export interface SummaryRow {
+  id: number;
+  item_id: string;
+  item_type: string;
+  content_hash: string;
+  model: string;
+  summary: string;
+  created_at: string;
+  repo_id: number;
+}
