@@ -64,34 +64,40 @@ export function computeHash(content: string): string {
 // ---------- Prompt builders ----------
 
 function buildStagePrompt(stage: StageSummaryInput): string {
-  return `Summarize the following stage file content in 2-3 concise sentences. Focus on what was done, key decisions made, and current status.
+  return `You are a summarization tool. Your entire output will be used verbatim as the summary text. Output ONLY a 2-4 sentence summary. No preamble, no follow-up questions, no meta-commentary, no markdown formatting.
+
+Summarize what was accomplished in this development stage. Focus on: what was designed/decided, what was built, issues encountered, and current status.
 
 Stage: ${stage.title} (${stage.id})
 Status: ${stage.status}
 
-File content:
+FILE CONTENT:
 ${stage.file_content}`;
 }
 
 function buildTicketPrompt(ticket: TicketSummaryInput, stageSummaries: string[]): string {
   const stageText = stageSummaries.join('\n\n');
-  return `Summarize the following ticket based on its stage summaries in 2-3 concise sentences. Focus on overall progress, what was accomplished, and what remains.
+  return `You are a summarization tool. Your entire output will be used verbatim as the summary text. Output ONLY a 2-4 sentence summary. No preamble, no follow-up questions, no meta-commentary, no markdown formatting.
+
+Summarize this ticket's progress based on its stage summaries. Focus on: overall goal, what's completed, what remains, and notable decisions or issues.
 
 Ticket: ${ticket.title} (${ticket.id})
 Status: ${ticket.status}
 
-Stage summaries:
+STAGE SUMMARIES:
 ${stageText}`;
 }
 
 function buildEpicPrompt(epic: EpicSummaryInput, ticketSummaries: string[]): string {
   const ticketText = ticketSummaries.join('\n\n');
-  return `Summarize the following epic based on its ticket summaries in 2-3 concise sentences. Focus on overall progress, key achievements, and remaining work.
+  return `You are a summarization tool. Your entire output will be used verbatim as the summary text. Output ONLY a 2-4 sentence summary. No preamble, no follow-up questions, no meta-commentary, no markdown formatting.
+
+Summarize this epic's progress based on its ticket summaries. Focus on: overall objective, progress across tickets, and high-level status.
 
 Epic: ${epic.title} (${epic.id})
 Status: ${epic.status}
 
-Ticket summaries:
+TICKET SUMMARIES:
 ${ticketText}`;
 }
 
