@@ -11,6 +11,7 @@ import { syncRepo } from '../../sync/sync.js';
 import { buildGraph } from '../logic/graph.js';
 import type { GraphEpicRow, GraphTicketRow, GraphStageRow, GraphDependencyRow } from '../logic/graph.js';
 import { formatGraphAsMermaid } from '../formatters/graph-mermaid.js';
+import { writeOutput } from '../utils/output.js';
 
 export const graphCommand = new Command('graph')
   .description('Output dependency graph as JSON')
@@ -19,6 +20,7 @@ export const graphCommand = new Command('graph')
   .option('--ticket <id>', 'Filter to a specific ticket')
   .option('--pretty', 'Pretty-print JSON output', false)
   .option('--mermaid', 'Output as Mermaid diagram instead of JSON', false)
+  .option('-o, --output <file>', 'Write output to file instead of stdout')
   .action(async (options) => {
     try {
       const repoPath = path.resolve(options.repo);
@@ -86,12 +88,14 @@ export const graphCommand = new Command('graph')
         },
       });
 
+      let output: string;
       if (options.mermaid) {
-        process.stdout.write(formatGraphAsMermaid(result) + '\n');
+        output = formatGraphAsMermaid(result) + '\n';
       } else {
         const indent = options.pretty ? 2 : undefined;
-        process.stdout.write(JSON.stringify(result, null, indent) + '\n');
+        output = JSON.stringify(result, null, indent) + '\n';
       }
+      writeOutput(output, options.output);
       db.close();
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);

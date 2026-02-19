@@ -15,11 +15,13 @@ import { ResolverRegistry } from '../../resolvers/registry.js';
 import { registerBuiltinResolvers } from '../../resolvers/builtins/index.js';
 import { StateMachine } from '../../engine/state-machine.js';
 import { RESERVED_STATUSES } from '../../types/pipeline.js';
+import { writeOutput } from '../utils/output.js';
 
 export const validateCommand = new Command('validate')
   .description('Validate all frontmatter and dependency integrity')
   .option('--repo <path>', 'Path to repository', process.cwd())
   .option('--pretty', 'Pretty-print JSON output', false)
+  .option('-o, --output <file>', 'Write output to file instead of stdout')
   .action(async (options) => {
     try {
       const repoPath = path.resolve(options.repo);
@@ -171,7 +173,8 @@ export const validateCommand = new Command('validate')
       };
 
       const indent = options.pretty ? 2 : undefined;
-      process.stdout.write(JSON.stringify(combined, null, indent) + '\n');
+      const output = JSON.stringify(combined, null, indent) + '\n';
+      writeOutput(output, options.output);
       db.close();
       process.exit(combined.valid ? 0 : 1);
     } catch (err) {

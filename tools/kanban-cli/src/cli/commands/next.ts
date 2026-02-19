@@ -9,12 +9,14 @@ import { DependencyRepository } from '../../db/repositories/dependency-repositor
 import { syncRepo } from '../../sync/sync.js';
 import { buildNext } from '../logic/next.js';
 import type { NextStageRow, NextTicketRow, NextDependencyRow } from '../logic/next.js';
+import { writeOutput } from '../utils/output.js';
 
 export const nextCommand = new Command('next')
   .description('Output next workable stages, sorted by priority')
   .option('--repo <path>', 'Path to repository', process.cwd())
   .option('--max <n>', 'Maximum number of stages to return', '5')
   .option('--pretty', 'Pretty-print JSON output', false)
+  .option('-o, --output <file>', 'Write output to file instead of stdout')
   .action(async (options) => {
     try {
       const repoPath = path.resolve(options.repo);
@@ -80,7 +82,8 @@ export const nextCommand = new Command('next')
       });
 
       const indent = options.pretty ? 2 : undefined;
-      process.stdout.write(JSON.stringify(result, null, indent) + '\n');
+      const output = JSON.stringify(result, null, indent) + '\n';
+      writeOutput(output, options.output);
       db.close();
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);

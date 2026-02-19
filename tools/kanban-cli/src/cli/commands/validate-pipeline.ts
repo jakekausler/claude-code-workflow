@@ -3,6 +3,7 @@ import { loadConfig } from '../../config/loader.js';
 import { validatePipeline } from '../../validators/pipeline-validator.js';
 import { ResolverRegistry } from '../../resolvers/registry.js';
 import { registerBuiltinResolvers } from '../../resolvers/builtins/index.js';
+import { writeOutput } from '../utils/output.js';
 
 export const validatePipelineCommand = new Command('validate-pipeline')
   .description('Validate workflow pipeline config (4-layer audit)')
@@ -10,6 +11,7 @@ export const validatePipelineCommand = new Command('validate-pipeline')
   .option('--global-config <path>', 'Path to global config file')
   .option('--dry-run', 'Execute resolver dry-runs', false)
   .option('--pretty', 'Pretty-print JSON output', false)
+  .option('-o, --output <file>', 'Write output to file instead of stdout')
   .action(async (options) => {
     try {
       const config = loadConfig({
@@ -26,7 +28,8 @@ export const validatePipelineCommand = new Command('validate-pipeline')
       });
 
       const indent = options.pretty ? 2 : undefined;
-      process.stdout.write(JSON.stringify(result, null, indent) + '\n');
+      const output = JSON.stringify(result, null, indent) + '\n';
+      writeOutput(output, options.output);
       process.exit(result.valid ? 0 : 1);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
