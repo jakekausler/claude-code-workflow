@@ -191,6 +191,63 @@ function hasDiamondShape(el: Element): boolean {
   return false;
 }
 
+export function extractEdges(doc: Document): ParsedEdge[] {
+  const allGroups = Array.from(doc.getElementsByTagName('g'));
+  const edges: ParsedEdge[] = [];
+
+  for (const g of allGroups) {
+    // Edge groups contain <use xlink:href="#LineHeadArrow2">
+    const useEls = g.getElementsByTagName('use');
+    let hasArrow = false;
+    let arrowTranslate: Point | null = null;
+
+    for (let i = 0; i < useEls.length; i++) {
+      const href = useEls[i].getAttribute('xlink:href') || useEls[i].getAttribute('href') || '';
+      if (href === '#LineHeadArrow2') {
+        hasArrow = true;
+        arrowTranslate = parseTranslate(useEls[i].getAttribute('transform'));
+        break;
+      }
+    }
+
+    if (!hasArrow || !arrowTranslate) continue;
+
+    // Must be a direct group with transform (not a nested child)
+    const transform = g.getAttribute('transform');
+    if (!transform) continue;
+    const groupTranslate = parseTranslate(transform);
+    if (!groupTranslate) continue;
+
+    // Find the main path (direct child, not clipPath children)
+    const children = g.childNodes;
+    let pathD: string | null = null;
+    for (let i = 0; i < children.length; i++) {
+      const child = children[i];
+      if (child.nodeType === 1 && (child as Element).tagName === 'path') {
+        pathD = (child as Element).getAttribute('d');
+        break;
+      }
+    }
+
+    if (!pathD) continue;
+
+    const localStart = getPathStartPoint(pathD);
+
+    edges.push({
+      startPoint: {
+        x: groupTranslate.x + localStart.x,
+        y: groupTranslate.y + localStart.y,
+      },
+      endPoint: {
+        x: groupTranslate.x + arrowTranslate.x,
+        y: groupTranslate.y + arrowTranslate.y,
+      },
+    });
+  }
+
+  return edges;
+}
+
 function main(): void {
   const svgPath = process.argv[2];
   if (!svgPath) {

@@ -1,6 +1,6 @@
 // tests/scripts/svg-to-dot.test.ts
 import { describe, it, expect } from 'vitest';
-import { extractNodes, parseTranslate, getPathStartPoint, getPathEndPoint } from '../../scripts/svg-to-dot.js';
+import { extractNodes, extractEdges, parseTranslate, getPathStartPoint, getPathEndPoint } from '../../scripts/svg-to-dot.js';
 import { DOMParser } from 'xmldom';
 
 describe('parseTranslate', () => {
@@ -71,5 +71,33 @@ describe('extractNodes', () => {
     expect(nodes[0].shape).toBe('box');
     expect(nodes[0].center.x).toBeCloseTo(100); // 40 + 120/2
     expect(nodes[0].center.y).toBeCloseTo(1020.74); // 960.74 + 120/2
+  });
+});
+
+describe('extractEdges', () => {
+  it('extracts an edge with arrow marker', () => {
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+      <defs>
+        <path id="LineHeadArrow2" d="M-12.7,-7.5 L0,0 L-12.7,7.5 Z"/>
+      </defs>
+      <g>
+        <g>
+          <g width="104px" height="0px" transform="translate(160, 1020.74) scale(1) rotate(0, 52, 0)">
+            <path stroke="#333333" stroke-width="2" fill="transparent"
+              d="M 0 0 C 29.6 0 55.2 0 74 0 C 81.9 0 85.9 0 93.8 0"/>
+            <use xlink:href="#LineHeadArrow2" fill="#333333" transform="translate(104, 0) rotate(0)"/>
+          </g>
+        </g>
+      </g>
+    </svg>`;
+    const doc = new DOMParser().parseFromString(svg, 'image/svg+xml');
+    const edges = extractEdges(doc);
+    expect(edges.length).toBe(1);
+    // Global start = translate(160, 1020.74) + path start M 0 0
+    expect(edges[0].startPoint.x).toBeCloseTo(160);
+    expect(edges[0].startPoint.y).toBeCloseTo(1020.74);
+    // Global end = translate(160, 1020.74) + use translate(104, 0)
+    expect(edges[0].endPoint.x).toBeCloseTo(264);
+    expect(edges[0].endPoint.y).toBeCloseTo(1020.74);
   });
 });
