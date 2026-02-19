@@ -20,6 +20,13 @@ describe('parseTranslate', () => {
   it('handles negative coordinates', () => {
     expect(parseTranslate('translate(-10, -20.5)')).toEqual({ x: -10, y: -20.5 });
   });
+
+  it('handles scientific notation (near-zero values)', () => {
+    const result = parseTranslate('translate(104.479, 1.1368683772161603e-13)  rotate(0)');
+    expect(result).not.toBeNull();
+    expect(result!.x).toBeCloseTo(104.479);
+    expect(result!.y).toBeCloseTo(0);
+  });
 });
 
 describe('getPathStartPoint', () => {
@@ -100,6 +107,28 @@ describe('extractEdges', () => {
     // Global end = translate(160, 1020.74) + use translate(104, 0)
     expect(edges[0].endPoint.x).toBeCloseTo(264);
     expect(edges[0].endPoint.y).toBeCloseTo(1020.74);
+  });
+
+  it('extracts edge label from child text group', () => {
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+      <defs>
+        <path id="LineHeadArrow2" d="M-12.7,-7.5 L0,0 L-12.7,7.5 Z"/>
+      </defs>
+      <g><g>
+        <g width="100px" height="0px" transform="translate(100, 200) scale(1) rotate(0, 50, 0)">
+          <path stroke="#333" stroke-width="2" fill="transparent" d="M 0 0 L 89.8 0"/>
+          <use xlink:href="#LineHeadArrow2" fill="#333" transform="translate(100, 0) rotate(0)"/>
+          <clipPath id="mask1"><path d="M -2 -2 L 50 -2 L 50 10 L -2 10"/></clipPath>
+          <g width="23" height="20" transform="translate(40, -10) scale(1) rotate(0)">
+            <text x="0.5" y="14">Yes</text>
+          </g>
+        </g>
+      </g></g>
+    </svg>`;
+    const doc = new DOMParser().parseFromString(svg, 'image/svg+xml');
+    const edges = extractEdges(doc);
+    expect(edges.length).toBe(1);
+    expect(edges[0].label).toBe('Yes');
   });
 });
 

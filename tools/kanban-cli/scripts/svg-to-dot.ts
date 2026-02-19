@@ -31,7 +31,7 @@ export interface OrphanText {
 
 export function parseTranslate(transform: string | null): Point | null {
   if (!transform) return null;
-  const match = transform.match(/translate\(\s*([-\d.]+)\s*,\s*([-\d.]+)\s*\)/);
+  const match = transform.match(/translate\(\s*([-\d.eE+]+)\s*,\s*([-\d.eE+]+)\s*\)/);
   if (!match) return null;
   return { x: parseFloat(match[1]), y: parseFloat(match[2]) };
 }
@@ -176,7 +176,15 @@ function hasStyledRect(el: Element, depth = 0): boolean {
       const style = childEl.getAttribute('style') || '';
       if (style.includes('fill: #ffffff') || style.includes('fill:#ffffff')) return true;
     }
-    if (childEl.tagName === 'g' && hasStyledRect(childEl, depth + 1)) return true;
+    if (childEl.tagName === 'g') {
+      // Check if this <g> has a fill style wrapping a <rect>
+      const gStyle = childEl.getAttribute('style') || '';
+      if (gStyle.includes('fill: #ffffff') || gStyle.includes('fill:#ffffff')) {
+        const rects = childEl.getElementsByTagName('rect');
+        if (rects.length > 0) return true;
+      }
+      if (hasStyledRect(childEl, depth + 1)) return true;
+    }
   }
   return false;
 }
@@ -196,42 +204,56 @@ export function extractEdges(doc: Document): ParsedEdge[] {
   const edges: ParsedEdge[] = [];
 
   for (const g of allGroups) {
-    // Edge groups contain <use xlink:href="#LineHeadArrow2">
-    const useEls = g.getElementsByTagName('use');
-    let hasArrow = false;
+    // Only detect groups with a DIRECT child <use xlink:href="#LineHeadArrow2">
+    // to avoid double-counting parent groups that contain edge subgroups
+    const children = g.childNodes;
     let arrowTranslate: Point | null = null;
+    let pathD: string | null = null;
 
-    for (let i = 0; i < useEls.length; i++) {
-      const href = useEls[i].getAttribute('xlink:href') || useEls[i].getAttribute('href') || '';
-      if (href === '#LineHeadArrow2') {
-        hasArrow = true;
-        arrowTranslate = parseTranslate(useEls[i].getAttribute('transform'));
-        break;
+    for (let i = 0; i < children.length; i++) {
+      const child = children[i];
+      if (child.nodeType !== 1) continue;
+      const childEl = child as Element;
+      if (childEl.tagName === 'use') {
+        const href = childEl.getAttribute('xlink:href') || childEl.getAttribute('href') || '';
+        if (href === '#LineHeadArrow2') {
+          arrowTranslate = parseTranslate(childEl.getAttribute('transform'));
+        }
+      }
+      if (childEl.tagName === 'path') {
+        pathD = childEl.getAttribute('d');
       }
     }
 
-    if (!hasArrow || !arrowTranslate) continue;
+    if (!arrowTranslate || !pathD) continue;
 
-    // Must be a direct group with transform (not a nested child)
     const transform = g.getAttribute('transform');
     if (!transform) continue;
     const groupTranslate = parseTranslate(transform);
     if (!groupTranslate) continue;
 
-    // Find the main path (direct child, not clipPath children)
-    const children = g.childNodes;
-    let pathD: string | null = null;
+    const localStart = getPathStartPoint(pathD);
+
+    // Extract label from child <g> elements that contain text (edge labels in Miro SVGs)
+    let label: string | undefined;
     for (let i = 0; i < children.length; i++) {
       const child = children[i];
-      if (child.nodeType === 1 && (child as Element).tagName === 'path') {
-        pathD = (child as Element).getAttribute('d');
-        break;
+      if (child.nodeType !== 1) continue;
+      const childEl = child as Element;
+      if (childEl.tagName === 'g') {
+        const textEls = childEl.getElementsByTagName('text');
+        if (textEls.length > 0) {
+          const texts: string[] = [];
+          for (let j = 0; j < textEls.length; j++) {
+            const t = textEls[j].textContent?.trim();
+            if (t) texts.push(t);
+          }
+          if (texts.length > 0) {
+            label = texts.join(' ');
+          }
+        }
       }
     }
-
-    if (!pathD) continue;
-
-    const localStart = getPathStartPoint(pathD);
 
     edges.push({
       startPoint: {
@@ -242,6 +264,7 @@ export function extractEdges(doc: Document): ParsedEdge[] {
         x: groupTranslate.x + arrowTranslate.x,
         y: groupTranslate.y + arrowTranslate.y,
       },
+      label,
     });
   }
 
