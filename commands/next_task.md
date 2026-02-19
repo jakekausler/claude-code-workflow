@@ -55,9 +55,6 @@ work can begin.
 
 Action: Run /convert-ticket TICKET-XXX-YYY to brainstorm
         and create stages for this ticket.
-
-Note: convert-ticket ships in Stage 2. For now, manually
-      create stages using /setup stage TICKET-XXX-YYY "Stage Name".
 ═══════════════════════════════════════════════════════════
 ```
 
