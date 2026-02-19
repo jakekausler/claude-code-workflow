@@ -4,7 +4,8 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 const REPO_DIR = '/tmp/kanban-summary-test-repo';
-const CLI_PATH = path.resolve(__dirname, '../../../src/cli/index.ts');
+const PROJECT_DIR = path.resolve(__dirname, '../../..');
+const HARNESS_PATH = path.join(PROJECT_DIR, '_summary-test-harness.ts');
 
 /**
  * Create a minimal test repo with known stage file content for summary testing.
@@ -161,75 +162,100 @@ Create the signup form.
   );
 }
 
+/**
+ * Create a test harness script that uses the summary command with a mock executor.
+ * Placed inside the project directory so node_modules can be resolved.
+ */
+function createTestHarness(): void {
+  fs.writeFileSync(
+    HARNESS_PATH,
+    `import { Command } from 'commander';
+import { createSummaryCommand } from './src/cli/commands/summary.js';
+import type { ClaudeExecutor } from './src/utils/claude-executor.js';
+
+const mockExecutor: ClaudeExecutor = {
+  execute(prompt: string, model: string): string {
+    if (prompt.includes('STAGE-')) return 'Mock stage summary for ' + model;
+    if (prompt.includes('Ticket:')) return 'Mock ticket summary for ' + model;
+    if (prompt.includes('Epic:')) return 'Mock epic summary for ' + model;
+    return 'Mock summary for ' + model;
+  },
+};
+
+const program = new Command();
+program.addCommand(
+  createSummaryCommand({ executorFactory: () => mockExecutor })
+);
+program.parse();
+`,
+  );
+}
+
 describe('summary command integration', () => {
   beforeAll(() => {
     seedTestRepo();
+    createTestHarness();
   });
 
   afterAll(() => {
     if (fs.existsSync(REPO_DIR)) {
       fs.rmSync(REPO_DIR, { recursive: true, force: true });
     }
+    if (fs.existsSync(HARNESS_PATH)) {
+      fs.unlinkSync(HARNESS_PATH);
+    }
   });
 
-  it('summarizes a single stage by ID', () => {
-    const output = execSync(
-      `npx tsx ${CLI_PATH} summary STAGE-001-001-001 --repo ${REPO_DIR}`,
-      { encoding: 'utf-8', cwd: path.resolve(__dirname, '../../..') },
+  function runSummaryCommand(args: string): string {
+    return execSync(
+      `npx tsx ${HARNESS_PATH} summary ${args}`,
+      { encoding: 'utf-8', cwd: PROJECT_DIR },
     );
+  }
+
+  it('summarizes a single stage by ID', () => {
+    const output = runSummaryCommand(`STAGE-001-001-001 --repo ${REPO_DIR}`);
     const result = JSON.parse(output);
     expect(result.items).toHaveLength(1);
     expect(result.items[0].id).toBe('STAGE-001-001-001');
+    expect(result.items[0].type).toBe('stage');
     expect(result.items[0].title).toBe('Login Form UI');
-    expect(result.items[0].status).toBe('Complete');
-    expect(result.items[0].design_decision).toBe('React Hook Form with Zod validation');
-    expect(result.items[0].what_was_built).toContain('LoginModal');
-    expect(result.items[0].commit_hash).toBe('abc1234');
-    expect(result.items[0].mr_pr_url).toBeNull();
+    expect(result.items[0].summary).toContain('Mock stage summary');
+    expect(result.items[0]).toHaveProperty('cached');
   });
 
-  it('summarizes all stages in a ticket', () => {
-    const output = execSync(
-      `npx tsx ${CLI_PATH} summary TICKET-001-001 --repo ${REPO_DIR}`,
-      { encoding: 'utf-8', cwd: path.resolve(__dirname, '../../..') },
-    );
+  it('summarizes a ticket with its stages', () => {
+    const output = runSummaryCommand(`TICKET-001-001 --repo ${REPO_DIR}`);
     const result = JSON.parse(output);
-    expect(result.items).toHaveLength(2);
-    const ids = result.items.map((item: any) => item.id);
-    expect(ids).toContain('STAGE-001-001-001');
-    expect(ids).toContain('STAGE-001-001-002');
-  });
-
-  it('summarizes all stages in an epic', () => {
-    const output = execSync(
-      `npx tsx ${CLI_PATH} summary EPIC-001 --repo ${REPO_DIR}`,
-      { encoding: 'utf-8', cwd: path.resolve(__dirname, '../../..') },
-    );
-    const result = JSON.parse(output);
+    // 2 stages + 1 ticket = 3 items
     expect(result.items).toHaveLength(3);
-    const ids = result.items.map((item: any) => item.id);
-    expect(ids).toContain('STAGE-001-001-001');
-    expect(ids).toContain('STAGE-001-001-002');
-    expect(ids).toContain('STAGE-001-002-001');
+    const types = result.items.map((i: any) => i.type);
+    expect(types.filter((t: string) => t === 'stage')).toHaveLength(2);
+    expect(types.filter((t: string) => t === 'ticket')).toHaveLength(1);
+  });
+
+  it('summarizes an entire epic hierarchy', () => {
+    const output = runSummaryCommand(`EPIC-001 --repo ${REPO_DIR}`);
+    const result = JSON.parse(output);
+    // 3 stages + 2 tickets + 1 epic = 6 items
+    expect(result.items).toHaveLength(6);
+    const types = result.items.map((i: any) => i.type);
+    expect(types.filter((t: string) => t === 'stage')).toHaveLength(3);
+    expect(types.filter((t: string) => t === 'ticket')).toHaveLength(2);
+    expect(types.filter((t: string) => t === 'epic')).toHaveLength(1);
   });
 
   it('summarizes multiple IDs in one call', () => {
-    const output = execSync(
-      `npx tsx ${CLI_PATH} summary STAGE-001-001-001 TICKET-001-002 --repo ${REPO_DIR}`,
-      { encoding: 'utf-8', cwd: path.resolve(__dirname, '../../..') },
-    );
+    const output = runSummaryCommand(`STAGE-001-001-001 STAGE-001-002-001 --repo ${REPO_DIR}`);
     const result = JSON.parse(output);
     expect(result.items).toHaveLength(2);
-    const ids = result.items.map((item: any) => item.id);
+    const ids = result.items.map((i: any) => i.id);
     expect(ids).toContain('STAGE-001-001-001');
     expect(ids).toContain('STAGE-001-002-001');
   });
 
   it('supports --pretty flag', () => {
-    const output = execSync(
-      `npx tsx ${CLI_PATH} summary STAGE-001-001-001 --repo ${REPO_DIR} --pretty`,
-      { encoding: 'utf-8', cwd: path.resolve(__dirname, '../../..') },
-    );
+    const output = runSummaryCommand(`STAGE-001-001-001 --repo ${REPO_DIR} --pretty`);
     // Pretty output has newlines and indentation
     expect(output).toContain('\n  ');
     const result = JSON.parse(output);
@@ -240,10 +266,7 @@ describe('summary command integration', () => {
     const outputFile = '/tmp/kanban-summary-test-output.json';
     if (fs.existsSync(outputFile)) fs.unlinkSync(outputFile);
 
-    execSync(
-      `npx tsx ${CLI_PATH} summary STAGE-001-001-001 --repo ${REPO_DIR} -o ${outputFile}`,
-      { encoding: 'utf-8', cwd: path.resolve(__dirname, '../../..') },
-    );
+    runSummaryCommand(`STAGE-001-001-001 --repo ${REPO_DIR} -o ${outputFile}`);
     expect(fs.existsSync(outputFile)).toBe(true);
     const content = fs.readFileSync(outputFile, 'utf-8');
     const result = JSON.parse(content);
@@ -252,16 +275,29 @@ describe('summary command integration', () => {
     fs.unlinkSync(outputFile);
   });
 
-  it('returns null fields for stage with no phase content', () => {
-    const output = execSync(
-      `npx tsx ${CLI_PATH} summary STAGE-001-001-002 --repo ${REPO_DIR}`,
-      { encoding: 'utf-8', cwd: path.resolve(__dirname, '../../..') },
-    );
+  it('supports --model flag', () => {
+    const output = runSummaryCommand(`STAGE-001-001-001 --repo ${REPO_DIR} --model sonnet`);
     const result = JSON.parse(output);
-    expect(result.items).toHaveLength(1);
-    expect(result.items[0].id).toBe('STAGE-001-001-002');
-    expect(result.items[0].design_decision).toBeNull();
-    expect(result.items[0].what_was_built).toBeNull();
-    expect(result.items[0].commit_hash).toBeNull();
+    expect(result.items[0].summary).toContain('sonnet');
+  });
+
+  it('output uses new format with summary and type fields', () => {
+    const output = runSummaryCommand(`STAGE-001-001-001 --repo ${REPO_DIR}`);
+    const result = JSON.parse(output);
+    const item = result.items[0];
+
+    expect(item).toHaveProperty('id');
+    expect(item).toHaveProperty('type');
+    expect(item).toHaveProperty('title');
+    expect(item).toHaveProperty('summary');
+    expect(item).toHaveProperty('cached');
+
+    // Old format fields should NOT be present
+    expect(item).not.toHaveProperty('design_decision');
+    expect(item).not.toHaveProperty('what_was_built');
+    expect(item).not.toHaveProperty('issues_encountered');
+    expect(item).not.toHaveProperty('commit_hash');
+    expect(item).not.toHaveProperty('mr_pr_url');
+    expect(item).not.toHaveProperty('status');
   });
 });

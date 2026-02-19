@@ -1,163 +1,226 @@
-import matter from 'gray-matter';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import type { KanbanDatabase } from '../../db/database.js';
+import { RepoRepository } from '../../db/repositories/repo-repository.js';
+import { EpicRepository } from '../../db/repositories/epic-repository.js';
+import { TicketRepository } from '../../db/repositories/ticket-repository.js';
+import { StageRepository } from '../../db/repositories/stage-repository.js';
+import { SummaryRepository } from '../../db/repositories/summary-repository.js';
+import { SummaryEngine } from './summary-engine.js';
+import type {
+  SummaryResult,
+  StageSummaryInput,
+  TicketSummaryInput,
+  EpicSummaryInput,
+} from './summary-engine.js';
+import type { ClaudeExecutor } from '../../utils/claude-executor.js';
 
-// ---------- Input data shapes ----------
-
-export interface SummaryStageInput {
-  id: string;
-  title: string;
-  status: string;
-  file_content: string;
-}
+// ---------- Input / Output types ----------
 
 export interface BuildSummaryInput {
-  stages: SummaryStageInput[];
-}
-
-// ---------- Output types ----------
-
-export interface SummaryItem {
-  id: string;
-  title: string;
-  status: string;
-  design_decision: string | null;
-  what_was_built: string | null;
-  issues_encountered: string | null;
-  commit_hash: string | null;
-  mr_pr_url: string | null;
+  db: KanbanDatabase;
+  repoId: number;
+  repoPath: string;
+  ids: string[];
+  executor: ClaudeExecutor;
+  model?: string;
+  noCache?: boolean;
 }
 
 export interface SummaryOutput {
-  items: SummaryItem[];
+  items: SummaryResult[];
 }
 
-// ---------- Markdown body parser ----------
+// ---------- ID classification ----------
 
-export interface ParsedStageBody {
-  design_decision: string | null;
-  what_was_built: string | null;
-  issues_encountered: string | null;
-  commit_hash: string | null;
-  mr_pr_url: string | null;
+function getIdType(id: string): 'epic' | 'ticket' | 'stage' | 'unknown' {
+  if (id.startsWith('STAGE-')) return 'stage';
+  if (id.startsWith('TICKET-')) return 'ticket';
+  if (id.startsWith('EPIC-')) return 'epic';
+  return 'unknown';
 }
 
-/**
- * Split markdown body into sections by ## headings.
- * Returns a map of section name (lowercase) -> section content.
- */
-function splitSections(body: string): Map<string, string> {
-  const sections = new Map<string, string>();
-  const lines = body.split('\n');
-  let currentSection = '';
-  let currentContent: string[] = [];
+// ---------- File content reader ----------
 
-  for (const line of lines) {
-    const match = line.match(/^## (.+)/);
-    if (match) {
-      if (currentSection) {
-        sections.set(currentSection, currentContent.join('\n').trim());
-      }
-      currentSection = match[1].trim().toLowerCase();
-      currentContent = [];
-    } else {
-      currentContent.push(line);
-    }
+function readStageFileContent(stageFilePath: string, repoPath: string): string | null {
+  const filePath = path.isAbsolute(stageFilePath)
+    ? stageFilePath
+    : path.join(repoPath, stageFilePath);
+
+  try {
+    return fs.readFileSync(filePath, 'utf-8');
+  } catch {
+    return null;
   }
-
-  if (currentSection) {
-    sections.set(currentSection, currentContent.join('\n').trim());
-  }
-
-  return sections;
-}
-
-/**
- * Extract a field value from a markdown section.
- * Looks for patterns like "- **Field Name**: value" or "**Field Name**: value".
- * Returns null if not found or if value is empty.
- */
-function extractField(sectionContent: string, fieldName: string): string | null {
-  const patterns = [
-    new RegExp(`^-?[ \\t]*\\*\\*${fieldName}\\*\\*:[ \\t]*(.+)$`, 'mi'),
-    new RegExp(`^\\*\\*${fieldName}\\*\\*:[ \\t]*(.+)$`, 'mi'),
-  ];
-
-  for (const pattern of patterns) {
-    const match = sectionContent.match(pattern);
-    if (match && match[1].trim()) {
-      return match[1].trim();
-    }
-  }
-
-  return null;
-}
-
-/**
- * Extract a multi-line value by collecting labeled bullet points from a section.
- * Collects content from fields like "Components Created", "API Endpoints Added", etc.
- */
-function extractBuildSummary(sectionContent: string): string | null {
-  const fields = ['Components Created', 'API Endpoints Added'];
-  const parts: string[] = [];
-
-  for (const field of fields) {
-    const value = extractField(sectionContent, field);
-    if (value) {
-      parts.push(value);
-    }
-  }
-
-  return parts.length > 0 ? parts.join('; ') : null;
-}
-
-/**
- * Parse the markdown body of a stage file to extract summary fields.
- */
-export function parseStageBody(body: string): ParsedStageBody {
-  const sections = splitSections(body);
-
-  // Design decision from "User Choice" in Design Phase
-  const designSection = sections.get('design phase') ?? '';
-  const designDecision = extractField(designSection, 'User Choice');
-
-  // What was built from Build Phase
-  const buildSection = sections.get('build phase') ?? '';
-  const whatWasBuilt = extractBuildSummary(buildSection);
-
-  // Issues encountered from Session Notes in Build Phase
-  const issuesEncountered = extractField(buildSection, 'Session Notes');
-
-  // Commit hash and MR/PR URL from Finalize Phase
-  const finalizeSection = sections.get('finalize phase') ?? '';
-  const commitHash = extractField(finalizeSection, 'Commit Hash');
-  const mrPrUrl = extractField(finalizeSection, 'MR/PR URL');
-
-  return {
-    design_decision: designDecision,
-    what_was_built: whatWasBuilt,
-    issues_encountered: issuesEncountered,
-    commit_hash: commitHash,
-    mr_pr_url: mrPrUrl,
-  };
 }
 
 // ---------- Core logic ----------
 
 export function buildSummary(input: BuildSummaryInput): SummaryOutput {
-  const items: SummaryItem[] = input.stages.map((stage) => {
-    const { content: body } = matter(stage.file_content);
-    const parsed = parseStageBody(body);
+  const { db, repoId, repoPath, ids, executor, model, noCache } = input;
 
-    return {
-      id: stage.id,
-      title: stage.title,
-      status: stage.status,
-      design_decision: parsed.design_decision,
-      what_was_built: parsed.what_was_built,
-      issues_encountered: parsed.issues_encountered,
-      commit_hash: parsed.commit_hash,
-      mr_pr_url: parsed.mr_pr_url,
-    };
+  const epicRepo = new EpicRepository(db);
+  const ticketRepo = new TicketRepository(db);
+  const stageRepo = new StageRepository(db);
+  const summaryRepo = new SummaryRepository(db);
+
+  const engine = new SummaryEngine({
+    executor,
+    summaryRepo,
+    repoId,
+    model,
+    noCache,
   });
 
-  return { items };
+  // Pre-load repo data for lookups
+  const allTickets = ticketRepo.listByRepo(repoId);
+  const allStages = stageRepo.listByRepo(repoId);
+
+  // Build lookup maps
+  const ticketsByEpic = new Map<string, typeof allTickets>();
+  for (const t of allTickets) {
+    const epicId = t.epic_id ?? '';
+    const existing = ticketsByEpic.get(epicId) ?? [];
+    existing.push(t);
+    ticketsByEpic.set(epicId, existing);
+  }
+
+  const stagesByTicket = new Map<string, typeof allStages>();
+  const stageMap = new Map<string, (typeof allStages)[0]>();
+  for (const s of allStages) {
+    stageMap.set(s.id, s);
+    const ticketId = s.ticket_id ?? '';
+    const existing = stagesByTicket.get(ticketId) ?? [];
+    existing.push(s);
+    stagesByTicket.set(ticketId, existing);
+  }
+
+  const results: SummaryResult[] = [];
+  const processedIds = new Set<string>();
+
+  for (const id of ids) {
+    if (processedIds.has(id)) continue;
+    processedIds.add(id);
+
+    const idType = getIdType(id);
+
+    switch (idType) {
+      case 'stage': {
+        const stageRow = stageMap.get(id);
+        if (!stageRow) {
+          process.stderr.write(`Warning: Stage ${id} not found in database -- skipping\n`);
+          break;
+        }
+
+        const fileContent = readStageFileContent(stageRow.file_path, repoPath);
+        if (fileContent === null) {
+          process.stderr.write(`Warning: Cannot read file for ${id} -- skipping\n`);
+          break;
+        }
+
+        const stageInput: StageSummaryInput = {
+          id: stageRow.id,
+          title: stageRow.title ?? '',
+          status: stageRow.status ?? 'Not Started',
+          file_content: fileContent,
+        };
+
+        results.push(engine.summarizeStage(stageInput));
+        break;
+      }
+
+      case 'ticket': {
+        const ticketRow = allTickets.find((t) => t.id === id);
+        if (!ticketRow) {
+          process.stderr.write(`Warning: Ticket ${id} not found in database -- skipping\n`);
+          break;
+        }
+
+        const ticketStages = stagesByTicket.get(id) ?? [];
+        const stageInputs: StageSummaryInput[] = [];
+
+        for (const s of ticketStages) {
+          const fileContent = readStageFileContent(s.file_path, repoPath);
+          if (fileContent === null) {
+            process.stderr.write(`Warning: Cannot read file for ${s.id} -- skipping\n`);
+            continue;
+          }
+          stageInputs.push({
+            id: s.id,
+            title: s.title ?? '',
+            status: s.status ?? 'Not Started',
+            file_content: fileContent,
+          });
+        }
+
+        const ticketInput: TicketSummaryInput = {
+          id: ticketRow.id,
+          title: ticketRow.title ?? '',
+          status: ticketRow.status ?? 'Not Started',
+          stages: stageInputs,
+        };
+
+        const { ticketResult, stageResults } = engine.summarizeTicket(ticketInput);
+        results.push(...stageResults);
+        results.push(ticketResult);
+        break;
+      }
+
+      case 'epic': {
+        const epicRow = epicRepo.findById(id);
+        if (!epicRow) {
+          process.stderr.write(`Warning: Epic ${id} not found in database -- skipping\n`);
+          break;
+        }
+
+        const epicTickets = ticketsByEpic.get(id) ?? [];
+        const ticketInputs: TicketSummaryInput[] = [];
+
+        for (const t of epicTickets) {
+          const tStages = stagesByTicket.get(t.id) ?? [];
+          const stageInputs: StageSummaryInput[] = [];
+
+          for (const s of tStages) {
+            const fileContent = readStageFileContent(s.file_path, repoPath);
+            if (fileContent === null) {
+              process.stderr.write(`Warning: Cannot read file for ${s.id} -- skipping\n`);
+              continue;
+            }
+            stageInputs.push({
+              id: s.id,
+              title: s.title ?? '',
+              status: s.status ?? 'Not Started',
+              file_content: fileContent,
+            });
+          }
+
+          ticketInputs.push({
+            id: t.id,
+            title: t.title ?? '',
+            status: t.status ?? 'Not Started',
+            stages: stageInputs,
+          });
+        }
+
+        const epicInput: EpicSummaryInput = {
+          id: epicRow.id,
+          title: epicRow.title ?? '',
+          status: epicRow.status ?? 'Not Started',
+          tickets: ticketInputs,
+        };
+
+        const { epicResult, ticketResults, stageResults } = engine.summarizeEpic(epicInput);
+        results.push(...stageResults);
+        results.push(...ticketResults);
+        results.push(epicResult);
+        break;
+      }
+
+      default: {
+        process.stderr.write(`Warning: Unknown ID format "${id}" -- skipping\n`);
+      }
+    }
+  }
+
+  return { items: results };
 }
