@@ -23,15 +23,16 @@ export interface ClaudeExecutorOptions {
    * Function to execute the `claude` CLI. Defaults to execFileSync.
    * Injected for testing.
    */
-  execFn?: (command: string, args: string[]) => string;
+  execFn?: (command: string, args: string[], input?: string) => string;
 }
 
-function defaultExec(command: string, args: string[]): string {
+function defaultExec(command: string, args: string[], input?: string): string {
   return execFileSync(command, args, {
     encoding: 'utf-8',
     timeout: 120000,
     stdio: ['pipe', 'pipe', 'pipe'],
     maxBuffer: 1024 * 1024 * 10, // 10MB
+    ...(input !== undefined ? { input } : {}),
   });
 }
 
@@ -45,7 +46,7 @@ export function createClaudeExecutor(options: ClaudeExecutorOptions = {}): Claud
 
   return {
     execute(prompt: string, model: string): string {
-      const result = exec('claude', ['-p', '--model', model, prompt]);
+      const result = exec('claude', ['-p', '--model', model], prompt);
       return result.trim();
     },
   };

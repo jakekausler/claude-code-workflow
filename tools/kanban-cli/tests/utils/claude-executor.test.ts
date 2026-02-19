@@ -3,14 +3,16 @@ import { createClaudeExecutor } from '../../src/utils/claude-executor.js';
 import type { ClaudeExecutor } from '../../src/utils/claude-executor.js';
 
 describe('createClaudeExecutor', () => {
-  it('calls claude CLI with correct arguments', () => {
+  it('calls claude CLI with correct arguments and pipes prompt via stdin', () => {
     let capturedCommand = '';
     let capturedArgs: string[] = [];
+    let capturedInput: string | undefined;
 
     const executor = createClaudeExecutor({
-      execFn: (cmd, args) => {
+      execFn: (cmd, args, input) => {
         capturedCommand = cmd;
         capturedArgs = args;
+        capturedInput = input;
         return 'mock response';
       },
     });
@@ -18,7 +20,8 @@ describe('createClaudeExecutor', () => {
     executor.execute('Summarize this code', 'haiku');
 
     expect(capturedCommand).toBe('claude');
-    expect(capturedArgs).toEqual(['-p', '--model', 'haiku', 'Summarize this code']);
+    expect(capturedArgs).toEqual(['-p', '--model', 'haiku']);
+    expect(capturedInput).toBe('Summarize this code');
   });
 
   it('returns trimmed response from claude CLI', () => {
@@ -41,10 +44,10 @@ describe('createClaudeExecutor', () => {
     });
 
     executor.execute('prompt', 'sonnet');
-    expect(capturedArgs[2]).toBe('sonnet');
+    expect(capturedArgs).toEqual(['-p', '--model', 'sonnet']);
 
     executor.execute('prompt', 'opus');
-    expect(capturedArgs[2]).toBe('opus');
+    expect(capturedArgs).toEqual(['-p', '--model', 'opus']);
   });
 
   it('throws when the CLI call fails', () => {
@@ -57,19 +60,19 @@ describe('createClaudeExecutor', () => {
     expect(() => executor.execute('prompt', 'haiku')).toThrow('claude: command not found');
   });
 
-  it('handles multi-line prompts', () => {
-    let capturedArgs: string[] = [];
+  it('handles multi-line prompts via stdin', () => {
+    let capturedInput: string | undefined;
 
     const executor = createClaudeExecutor({
-      execFn: (_cmd, args) => {
-        capturedArgs = args;
+      execFn: (_cmd, _args, input) => {
+        capturedInput = input;
         return 'response';
       },
     });
 
     const multiLinePrompt = 'Line 1\nLine 2\nLine 3';
     executor.execute(multiLinePrompt, 'haiku');
-    expect(capturedArgs[3]).toBe(multiLinePrompt);
+    expect(capturedInput).toBe(multiLinePrompt);
   });
 
   it('handles empty response from CLI', () => {
