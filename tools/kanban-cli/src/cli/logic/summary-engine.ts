@@ -35,12 +35,21 @@ export interface EpicSummaryInput {
   tickets: TicketSummaryInput[];
 }
 
+export interface ProgressEvent {
+  phase: SummaryItemType;
+  current: number;
+  total: number;
+  cached: boolean;
+  id: string;
+}
+
 export interface SummaryEngineOptions {
   executor: ClaudeExecutor;
   summaryRepo: SummaryRepository;
   repoId: number;
   model?: string;
   noCache?: boolean;
+  onProgress?: (event: ProgressEvent) => void;
 }
 
 // ---------- Hash computation ----------
@@ -98,6 +107,9 @@ export class SummaryEngine {
   private repoId: number;
   private requestedModel: string | undefined;
   private noCache: boolean;
+  private onProgress: ((event: ProgressEvent) => void) | undefined;
+  private progressCount = 0;
+  private progressTotal = 0;
 
   constructor(options: SummaryEngineOptions) {
     this.executor = options.executor;
@@ -105,6 +117,28 @@ export class SummaryEngine {
     this.repoId = options.repoId;
     this.requestedModel = options.model;
     this.noCache = options.noCache ?? false;
+    this.onProgress = options.onProgress;
+  }
+
+  /**
+   * Set the total number of items that will be summarized.
+   * Must be called before summarization begins for progress tracking.
+   */
+  setProgressTotal(total: number): void {
+    this.progressTotal = total;
+    this.progressCount = 0;
+  }
+
+  private emitProgress(phase: SummaryItemType, cached: boolean, id: string): void {
+    if (!this.onProgress) return;
+    this.progressCount++;
+    this.onProgress({
+      phase,
+      current: this.progressCount,
+      total: this.progressTotal,
+      cached,
+      id,
+    });
   }
 
   /**
@@ -160,13 +194,15 @@ export class SummaryEngine {
     const { useCached, cachedSummary } = this.shouldUseCached(stage.id, 'stage', contentHash);
 
     if (useCached && cachedSummary !== undefined) {
-      return {
+      const result: SummaryResult = {
         id: stage.id,
         type: 'stage',
         title: stage.title,
         summary: cachedSummary,
         cached: true,
       };
+      this.emitProgress('stage', true, stage.id);
+      return result;
     }
 
     const model = this.resolveModel();
@@ -189,13 +225,15 @@ export class SummaryEngine {
       repo_id: this.repoId,
     });
 
-    return {
+    const result: SummaryResult = {
       id: stage.id,
       type: 'stage',
       title: stage.title,
       summary,
       cached: false,
     };
+    this.emitProgress('stage', false, stage.id);
+    return result;
   }
 
   /**
@@ -222,16 +260,15 @@ export class SummaryEngine {
     );
 
     if (useCached && cachedSummary !== undefined) {
-      return {
-        ticketResult: {
-          id: ticket.id,
-          type: 'ticket',
-          title: ticket.title,
-          summary: cachedSummary,
-          cached: true,
-        },
-        stageResults,
+      const ticketResult: SummaryResult = {
+        id: ticket.id,
+        type: 'ticket',
+        title: ticket.title,
+        summary: cachedSummary,
+        cached: true,
       };
+      this.emitProgress('ticket', true, ticket.id);
+      return { ticketResult, stageResults };
     }
 
     const model = this.resolveModel();
@@ -253,16 +290,15 @@ export class SummaryEngine {
       repo_id: this.repoId,
     });
 
-    return {
-      ticketResult: {
-        id: ticket.id,
-        type: 'ticket',
-        title: ticket.title,
-        summary,
-        cached: false,
-      },
-      stageResults,
+    const ticketResult: SummaryResult = {
+      id: ticket.id,
+      type: 'ticket',
+      title: ticket.title,
+      summary,
+      cached: false,
     };
+    this.emitProgress('ticket', false, ticket.id);
+    return { ticketResult, stageResults };
   }
 
   /**
@@ -296,17 +332,15 @@ export class SummaryEngine {
     );
 
     if (useCached && cachedSummary !== undefined) {
-      return {
-        epicResult: {
-          id: epic.id,
-          type: 'epic',
-          title: epic.title,
-          summary: cachedSummary,
-          cached: true,
-        },
-        ticketResults,
-        stageResults: allStageResults,
+      const epicResult: SummaryResult = {
+        id: epic.id,
+        type: 'epic',
+        title: epic.title,
+        summary: cachedSummary,
+        cached: true,
       };
+      this.emitProgress('epic', true, epic.id);
+      return { epicResult, ticketResults, stageResults: allStageResults };
     }
 
     const model = this.resolveModel();
@@ -328,16 +362,14 @@ export class SummaryEngine {
       repo_id: this.repoId,
     });
 
-    return {
-      epicResult: {
-        id: epic.id,
-        type: 'epic',
-        title: epic.title,
-        summary,
-        cached: false,
-      },
-      ticketResults,
-      stageResults: allStageResults,
+    const epicResult: SummaryResult = {
+      id: epic.id,
+      type: 'epic',
+      title: epic.title,
+      summary,
+      cached: false,
     };
+    this.emitProgress('epic', false, epic.id);
+    return { epicResult, ticketResults, stageResults: allStageResults };
   }
 }

@@ -12,6 +12,7 @@ import type {
   StageSummaryInput,
   TicketSummaryInput,
   EpicSummaryInput,
+  ProgressEvent,
 } from './summary-engine.js';
 import type { ClaudeExecutor } from '../../utils/claude-executor.js';
 
@@ -25,6 +26,7 @@ export interface BuildSummaryInput {
   executor: ClaudeExecutor;
   model?: string;
   noCache?: boolean;
+  onProgress?: (event: ProgressEvent) => void;
 }
 
 export interface SummaryOutput {
@@ -57,7 +59,7 @@ function readStageFileContent(stageFilePath: string, repoPath: string): string |
 // ---------- Core logic ----------
 
 export function buildSummary(input: BuildSummaryInput): SummaryOutput {
-  const { db, repoId, repoPath, ids, executor, model, noCache } = input;
+  const { db, repoId, repoPath, ids, executor, model, noCache, onProgress } = input;
 
   const epicRepo = new EpicRepository(db);
   const ticketRepo = new TicketRepository(db);
@@ -70,6 +72,7 @@ export function buildSummary(input: BuildSummaryInput): SummaryOutput {
     repoId,
     model,
     noCache,
+    onProgress,
   });
 
   // Pre-load repo data for lookups
@@ -93,6 +96,39 @@ export function buildSummary(input: BuildSummaryInput): SummaryOutput {
     const existing = stagesByTicket.get(ticketId) ?? [];
     existing.push(s);
     stagesByTicket.set(ticketId, existing);
+  }
+
+  // Count total items for progress tracking
+  if (onProgress) {
+    let totalItems = 0;
+    const countedIds = new Set<string>();
+    for (const id of ids) {
+      if (countedIds.has(id)) continue;
+      countedIds.add(id);
+      const idType = getIdType(id);
+      switch (idType) {
+        case 'stage':
+          totalItems += 1;
+          break;
+        case 'ticket': {
+          const tStages = stagesByTicket.get(id) ?? [];
+          totalItems += tStages.length + 1; // stages + ticket
+          break;
+        }
+        case 'epic': {
+          const eTickets = ticketsByEpic.get(id) ?? [];
+          for (const t of eTickets) {
+            const tStages = stagesByTicket.get(t.id) ?? [];
+            totalItems += tStages.length + 1; // stages + ticket
+          }
+          totalItems += 1; // the epic itself
+          break;
+        }
+        default:
+          break;
+      }
+    }
+    engine.setProgressTotal(totalItems);
   }
 
   const results: SummaryResult[] = [];

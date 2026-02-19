@@ -8,6 +8,75 @@ import { buildSummary } from '../logic/summary.js';
 import { createClaudeExecutor } from '../../utils/claude-executor.js';
 import { writeOutput } from '../utils/output.js';
 import type { ClaudeExecutor } from '../../utils/claude-executor.js';
+import type { ProgressEvent } from '../logic/summary-engine.js';
+
+// ---------- Progress bar renderer ----------
+
+/**
+ * Creates a progress callback that renders a progress bar to stderr.
+ * Returns the onProgress callback and a finish function to clean up.
+ */
+export function createProgressRenderer(): {
+  onProgress: (event: ProgressEvent) => void;
+  finish: () => void;
+} {
+  let cachedCount = 0;
+  let summarizedCount = 0;
+  let total = 0;
+  let headerPrinted = false;
+
+  function renderProgress(): void {
+    const toSummarize = total - cachedCount;
+    if (toSummarize === 0) {
+      // All cached, print final status and return
+      process.stderr.write(`\r\x1b[K${cachedCount} cached, 0 to summarize\n`);
+      return;
+    }
+    const width = 20;
+    const filled = Math.round((summarizedCount / toSummarize) * width);
+    const bar = '\u2588'.repeat(filled) + '\u2591'.repeat(width - filled);
+    const progress = `Summarizing... [${bar}] ${summarizedCount}/${toSummarize}`;
+    process.stderr.write(`\r\x1b[K${progress}`);
+  }
+
+  function printHeader(): void {
+    const toSummarize = total - cachedCount;
+    const parts: string[] = [];
+    if (cachedCount > 0) parts.push(`${cachedCount} cached`);
+    parts.push(`${toSummarize} to summarize`);
+    process.stderr.write(`${parts.join(', ')}\n`);
+  }
+
+  function onProgress(event: ProgressEvent): void {
+    total = event.total;
+    if (event.cached) {
+      cachedCount++;
+    } else {
+      // Print header just before the first non-cached item is reported
+      if (!headerPrinted) {
+        headerPrinted = true;
+        printHeader();
+      }
+      summarizedCount++;
+      renderProgress();
+    }
+  }
+
+  function finish(): void {
+    const toSummarize = total - cachedCount;
+    if (toSummarize === 0 && total > 0) {
+      // Everything was cached — print the summary line
+      process.stderr.write(`${cachedCount} cached, 0 to summarize\n`);
+    } else if (toSummarize > 0) {
+      // Clear the progress line
+      process.stderr.write(`\r\x1b[K`);
+    }
+  }
+
+  return { onProgress, finish };
+}
+
+// ---------- Command ----------
 
 /**
  * Options for creating the summary command.
@@ -26,6 +95,7 @@ export function createSummaryCommand(options: SummaryCommandOptions = {}): Comma
     .option('-o, --output <file>', 'Write output to file instead of stdout')
     .option('--model <model>', 'Claude model to use for summarization')
     .option('--no-cache', 'Bypass summary cache and re-summarize')
+    .option('-q, --quiet', 'Suppress progress output', false)
     .action(async (ids: string[], cmdOptions) => {
       try {
         const repoPath = path.resolve(cmdOptions.repo);
@@ -48,6 +118,10 @@ export function createSummaryCommand(options: SummaryCommandOptions = {}): Comma
           ? options.executorFactory()
           : createClaudeExecutor();
 
+        // Set up progress rendering for multi-item summaries
+        const showProgress = !cmdOptions.quiet && ids.length > 1;
+        const progress = showProgress ? createProgressRenderer() : undefined;
+
         const result = buildSummary({
           db,
           repoId: repo.id,
@@ -56,7 +130,11 @@ export function createSummaryCommand(options: SummaryCommandOptions = {}): Comma
           executor,
           model: cmdOptions.model,
           noCache: !cmdOptions.cache, // commander inverts --no-cache to cache=false
+          onProgress: progress?.onProgress,
         });
+
+        // Clean up progress display
+        progress?.finish();
 
         const indent = cmdOptions.pretty ? 2 : undefined;
         const output = JSON.stringify(result, null, indent) + '\n';

@@ -9,6 +9,7 @@ import type {
   StageSummaryInput,
   TicketSummaryInput,
   EpicSummaryInput,
+  ProgressEvent,
 } from '../../../src/cli/logic/summary-engine.js';
 import type { ClaudeExecutor } from '../../../src/utils/claude-executor.js';
 
@@ -516,6 +517,91 @@ describe('SummaryEngine', () => {
       // Verify it was cached (for future non-noCache calls)
       const cached = summaryRepo.findByItem('STAGE-001-001-001', 'stage', repoId);
       expect(cached).not.toBeNull();
+    });
+  });
+
+  // ─── onProgress callback ──────────────────────────────────
+
+  describe('onProgress callback', () => {
+    it('calls onProgress for each stage with correct current/total', () => {
+      const events: ProgressEvent[] = [];
+      const executor = createMockExecutor();
+      const engine = new SummaryEngine({
+        executor,
+        summaryRepo,
+        repoId,
+        onProgress: (e) => events.push({ ...e }),
+      });
+
+      const ticket = makeTicketInput();
+      // 2 stages + 1 ticket = 3 items
+      engine.setProgressTotal(3);
+      engine.summarizeTicket(ticket);
+
+      expect(events).toHaveLength(3);
+      // First two are stages (not cached)
+      expect(events[0]).toMatchObject({ phase: 'stage', current: 1, total: 3, cached: false });
+      expect(events[1]).toMatchObject({ phase: 'stage', current: 2, total: 3, cached: false });
+      // Third is the ticket
+      expect(events[2]).toMatchObject({ phase: 'ticket', current: 3, total: 3, cached: false });
+    });
+
+    it('reports cached: true for cache hits', () => {
+      const events: ProgressEvent[] = [];
+      const executor = createMockExecutor();
+
+      // First: populate cache
+      const engine1 = new SummaryEngine({ executor, summaryRepo, repoId });
+      engine1.setProgressTotal(1);
+      engine1.summarizeStage(makeStageInput());
+
+      // Second: should hit cache
+      const engine2 = new SummaryEngine({
+        executor,
+        summaryRepo,
+        repoId,
+        onProgress: (e) => events.push({ ...e }),
+      });
+      engine2.setProgressTotal(1);
+      engine2.summarizeStage(makeStageInput());
+
+      expect(events).toHaveLength(1);
+      expect(events[0].cached).toBe(true);
+      expect(events[0].id).toBe('STAGE-001-001-001');
+    });
+
+    it('calls onProgress for epic hierarchy (stages + tickets + epic)', () => {
+      const events: ProgressEvent[] = [];
+      const executor = createMockExecutor();
+      const engine = new SummaryEngine({
+        executor,
+        summaryRepo,
+        repoId,
+        onProgress: (e) => events.push({ ...e }),
+      });
+
+      const epic = makeEpicInput();
+      // 2 stages + 1 ticket + 1 epic = 4 items
+      engine.setProgressTotal(4);
+      engine.summarizeEpic(epic);
+
+      expect(events).toHaveLength(4);
+      expect(events[0].phase).toBe('stage');
+      expect(events[1].phase).toBe('stage');
+      expect(events[2].phase).toBe('ticket');
+      expect(events[3].phase).toBe('epic');
+      expect(events[3].current).toBe(4);
+      expect(events[3].total).toBe(4);
+    });
+
+    it('does not call onProgress when callback is not provided', () => {
+      const executor = createMockExecutor();
+      const engine = new SummaryEngine({ executor, summaryRepo, repoId });
+
+      // Should not throw
+      engine.setProgressTotal(1);
+      const result = engine.summarizeStage(makeStageInput());
+      expect(result.cached).toBe(false);
     });
   });
 });
