@@ -41,6 +41,19 @@ function inferEpicId(node: GraphNode): string | undefined {
   return undefined;
 }
 
+/**
+ * Extract the ticket ID that a stage belongs to, based on ID convention.
+ * STAGE-001-002-003   -> TICKET-001-002
+ * Returns undefined if the ID doesn't follow the convention.
+ */
+function inferTicketId(node: GraphNode): string | undefined {
+  if (node.type === 'stage') {
+    const match = node.id.match(/^STAGE-(\d+)-(\d+)/);
+    if (match) return `TICKET-${match[1]}-${match[2]}`;
+  }
+  return undefined;
+}
+
 /** Map a status string to a fill color for Mermaid style directives. */
 function statusColor(status: string): { fill: string; color: string } {
   const normalized = status.toLowerCase();
@@ -135,7 +148,7 @@ export function formatGraphAsMermaid(graph: GraphOutput): string {
 
   // Group nodes by epic for subgraph rendering
   const epicNodes = nodes.filter((n) => n.type === 'epic');
-  const epicChildMap = new Map<string, GraphNode[]>(); // epicId -> children
+  const epicChildMap = new Map<string, GraphNode[]>(); // epicId -> children (tickets + stages)
   const ungroupedNodes: GraphNode[] = [];
 
   // Initialize epic groups
@@ -154,16 +167,54 @@ export function formatGraphAsMermaid(graph: GraphOutput): string {
     }
   }
 
-  // Render subgraphs for each epic
+  // Render subgraphs for each epic with nested ticket subgraphs
   for (const epic of epicNodes) {
     const children = epicChildMap.get(epic.id) || [];
     const safeEpicId = sanitizeNodeId(epic.id);
     lines.push(`    subgraph sub_${safeEpicId} ["${epic.id}: ${epic.title}"]`);
     // Epic node itself inside the subgraph
     lines.push(`        ${nodeDefinition(epic)}`);
-    for (const child of children) {
-      lines.push(`        ${nodeDefinition(child)}`);
+
+    // Separate children into tickets and stages, group stages by ticket
+    const tickets = children.filter((n) => n.type === 'ticket');
+    const stages = children.filter((n) => n.type === 'stage');
+
+    // Map ticketId -> stages belonging to that ticket
+    const ticketStageMap = new Map<string, GraphNode[]>();
+    const ungroupedStages: GraphNode[] = [];
+
+    // Initialize ticket stage groups
+    for (const ticket of tickets) {
+      ticketStageMap.set(ticket.id, []);
     }
+
+    // Assign stages to their ticket groups
+    for (const stage of stages) {
+      const ticketId = inferTicketId(stage);
+      if (ticketId && ticketStageMap.has(ticketId)) {
+        ticketStageMap.get(ticketId)!.push(stage);
+      } else {
+        ungroupedStages.push(stage);
+      }
+    }
+
+    // Render ticket subgraphs
+    for (const ticket of tickets) {
+      const safeTicketId = sanitizeNodeId(ticket.id);
+      const ticketStages = ticketStageMap.get(ticket.id) || [];
+      lines.push(`        subgraph sub_${safeTicketId} ["${ticket.id}: ${ticket.title}"]`);
+      lines.push(`            ${nodeDefinition(ticket)}`);
+      for (const stage of ticketStages) {
+        lines.push(`            ${nodeDefinition(stage)}`);
+      }
+      lines.push('        end');
+    }
+
+    // Render any stages that couldn't be matched to a ticket
+    for (const stage of ungroupedStages) {
+      lines.push(`        ${nodeDefinition(stage)}`);
+    }
+
     lines.push('    end');
   }
 

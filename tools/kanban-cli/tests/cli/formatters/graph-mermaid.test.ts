@@ -212,7 +212,7 @@ describe('formatGraphAsMermaid', () => {
     expect(output).toContain('%% Cycle detected: S001_001_001 -> S001_001_002');
   });
 
-  it('groups tickets and stages under their epic subgraph', () => {
+  it('groups tickets and stages under their epic subgraph with nested ticket subgraphs', () => {
     const graph: GraphOutput = {
       nodes: [
         { id: 'EPIC-001', type: 'epic', status: 'In Progress', title: 'Auth' },
@@ -224,15 +224,71 @@ describe('formatGraphAsMermaid', () => {
       critical_path: [],
     };
     const output = formatGraphAsMermaid(graph);
-    // The ticket and stage should appear between subgraph and end
-    const subgraphStart = output.indexOf('subgraph sub_E001');
-    const subgraphEnd = output.indexOf('end', subgraphStart);
+    // Epic subgraph should exist
+    expect(output).toContain('subgraph sub_E001 ["EPIC-001: Auth"]');
+    // Ticket subgraph should be nested inside epic subgraph
+    expect(output).toContain('subgraph sub_T001_001 ["TICKET-001-001: Login"]');
+    // The ticket and stage should appear inside the ticket subgraph
+    const ticketSubgraphStart = output.indexOf('subgraph sub_T001_001');
+    const ticketSubgraphEnd = output.indexOf('end', ticketSubgraphStart);
     const ticketPos = output.indexOf('T001_001[');
     const stagePos = output.indexOf('S001_001_001(');
-    expect(ticketPos).toBeGreaterThan(subgraphStart);
-    expect(ticketPos).toBeLessThan(subgraphEnd);
-    expect(stagePos).toBeGreaterThan(subgraphStart);
-    expect(stagePos).toBeLessThan(subgraphEnd);
+    expect(ticketPos).toBeGreaterThan(ticketSubgraphStart);
+    expect(ticketPos).toBeLessThan(ticketSubgraphEnd);
+    expect(stagePos).toBeGreaterThan(ticketSubgraphStart);
+    expect(stagePos).toBeLessThan(ticketSubgraphEnd);
+  });
+
+  it('nests multiple ticket subgraphs inside an epic subgraph', () => {
+    const graph: GraphOutput = {
+      nodes: [
+        { id: 'EPIC-001', type: 'epic', status: 'In Progress', title: 'Auth' },
+        { id: 'TICKET-001-001', type: 'ticket', status: 'In Progress', title: 'Login' },
+        { id: 'TICKET-001-002', type: 'ticket', status: 'Not Started', title: 'Registration' },
+        { id: 'STAGE-001-001-001', type: 'stage', status: 'Design', title: 'Login Form' },
+        { id: 'STAGE-001-001-002', type: 'stage', status: 'Build', title: 'Auth API' },
+        { id: 'STAGE-001-002-001', type: 'stage', status: 'Not Started', title: 'Signup Form' },
+      ],
+      edges: [],
+      cycles: [],
+      critical_path: [],
+    };
+    const output = formatGraphAsMermaid(graph);
+    // Both ticket subgraphs should exist
+    expect(output).toContain('subgraph sub_T001_001 ["TICKET-001-001: Login"]');
+    expect(output).toContain('subgraph sub_T001_002 ["TICKET-001-002: Registration"]');
+    // Login stages should be inside Login ticket subgraph
+    const loginSubStart = output.indexOf('subgraph sub_T001_001');
+    const loginSubEnd = output.indexOf('end', loginSubStart);
+    expect(output.indexOf('S001_001_001(')).toBeGreaterThan(loginSubStart);
+    expect(output.indexOf('S001_001_001(')).toBeLessThan(loginSubEnd);
+    expect(output.indexOf('S001_001_002(')).toBeGreaterThan(loginSubStart);
+    expect(output.indexOf('S001_001_002(')).toBeLessThan(loginSubEnd);
+    // Registration stage should be inside Registration ticket subgraph
+    const regSubStart = output.indexOf('subgraph sub_T001_002');
+    const regSubEnd = output.indexOf('end', regSubStart);
+    expect(output.indexOf('S001_002_001(')).toBeGreaterThan(regSubStart);
+    expect(output.indexOf('S001_002_001(')).toBeLessThan(regSubEnd);
+  });
+
+  it('renders ticket without stages as a subgraph with just the ticket node', () => {
+    const graph: GraphOutput = {
+      nodes: [
+        { id: 'EPIC-001', type: 'epic', status: 'In Progress', title: 'Auth' },
+        { id: 'TICKET-001-001', type: 'ticket', status: 'Not Started', title: 'To Convert' },
+      ],
+      edges: [],
+      cycles: [],
+      critical_path: [],
+    };
+    const output = formatGraphAsMermaid(graph);
+    expect(output).toContain('subgraph sub_T001_001 ["TICKET-001-001: To Convert"]');
+    // Ticket node should be inside its subgraph
+    const ticketSubStart = output.indexOf('subgraph sub_T001_001');
+    const ticketSubEnd = output.indexOf('end', ticketSubStart);
+    const ticketPos = output.indexOf('T001_001[');
+    expect(ticketPos).toBeGreaterThan(ticketSubStart);
+    expect(ticketPos).toBeLessThan(ticketSubEnd);
   });
 
   it('renders nodes without matching epic outside subgraphs', () => {
