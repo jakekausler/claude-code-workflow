@@ -118,8 +118,8 @@ export function createSummaryCommand(options: SummaryCommandOptions = {}): Comma
           ? options.executorFactory()
           : createClaudeExecutor();
 
-        // Set up progress rendering for multi-item summaries
-        const showProgress = !cmdOptions.quiet && ids.length > 1;
+        // Set up progress rendering (a single ticket/epic ID expands to many items)
+        const showProgress = !cmdOptions.quiet;
         const progress = showProgress ? createProgressRenderer() : undefined;
 
         const result = buildSummary({
