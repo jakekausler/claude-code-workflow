@@ -388,6 +388,8 @@ describe('Repositories', () => {
         kanban_column: string | null;
         refinement_type: string | null;
         worktree_branch: string | null;
+        pr_url: string | null;
+        pr_number: number | null;
         priority: number;
         due_date: string | null;
         session_active: number;
@@ -407,6 +409,8 @@ describe('Repositories', () => {
         kanban_column: 'ready_for_work',
         refinement_type: 'skill',
         worktree_branch: null,
+        pr_url: null,
+        pr_number: null,
         priority: 0,
         due_date: null,
         session_active: 0,

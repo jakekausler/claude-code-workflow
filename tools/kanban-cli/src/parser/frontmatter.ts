@@ -91,6 +91,8 @@ export function parseStageFrontmatter(content: string, filePath: string): Stage 
     refinement_type: Array.isArray(data.refinement_type) ? data.refinement_type : [],
     depends_on: Array.isArray(data.depends_on) ? data.depends_on : [],
     worktree_branch: (data.worktree_branch as string) ?? null,
+    pr_url: (data.pr_url as string) ?? null,
+    pr_number: typeof data.pr_number === 'number' ? data.pr_number : null,
     priority: typeof data.priority === 'number' ? data.priority : 0,
     due_date: (data.due_date as string) ?? null,
     file_path: filePath,

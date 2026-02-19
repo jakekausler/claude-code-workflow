@@ -47,6 +47,8 @@ CREATE TABLE IF NOT EXISTS stages (
   kanban_column TEXT,
   refinement_type TEXT,
   worktree_branch TEXT,
+  pr_url TEXT,
+  pr_number INTEGER,
   priority INTEGER DEFAULT 0,
   due_date TEXT,
   session_active BOOLEAN DEFAULT 0,

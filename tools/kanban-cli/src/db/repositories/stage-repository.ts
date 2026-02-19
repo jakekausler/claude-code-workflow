@@ -11,6 +11,8 @@ export interface StageUpsertData {
   kanban_column: string | null;
   refinement_type: string | null;
   worktree_branch: string | null;
+  pr_url: string | null;
+  pr_number: number | null;
   priority: number;
   due_date: string | null;
   session_active: number;
@@ -39,8 +41,8 @@ export class StageRepository {
       .prepare(
         `INSERT OR REPLACE INTO stages
          (id, ticket_id, epic_id, repo_id, title, status, kanban_column, refinement_type,
-          worktree_branch, priority, due_date, session_active, locked_at, locked_by, file_path, last_synced)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          worktree_branch, pr_url, pr_number, priority, due_date, session_active, locked_at, locked_by, file_path, last_synced)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         data.id,
@@ -52,6 +54,8 @@ export class StageRepository {
         data.kanban_column,
         data.refinement_type,
         data.worktree_branch,
+        data.pr_url,
+        data.pr_number,
         data.priority,
         data.due_date,
         data.session_active,

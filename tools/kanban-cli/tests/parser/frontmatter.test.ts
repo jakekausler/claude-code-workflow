@@ -389,6 +389,60 @@ depends_on: []
     expect(result.worktree_branch).toBeNull();
   });
 
+  it('parses pr_url when present', () => {
+    const content = `---
+id: STAGE-001
+ticket: TICKET-001
+epic: EPIC-001
+title: Build feature
+status: PR Created
+pr_url: https://github.com/org/repo/pull/42
+---
+# Stage`;
+    const result = parseStageFrontmatter(content, 'stage.md');
+    expect(result.pr_url).toBe('https://github.com/org/repo/pull/42');
+  });
+
+  it('defaults pr_url to null when absent', () => {
+    const content = `---
+id: STAGE-001
+ticket: TICKET-001
+epic: EPIC-001
+title: Build feature
+status: Build
+---
+# Stage`;
+    const result = parseStageFrontmatter(content, 'stage.md');
+    expect(result.pr_url).toBeNull();
+  });
+
+  it('parses pr_number when present', () => {
+    const content = `---
+id: STAGE-001
+ticket: TICKET-001
+epic: EPIC-001
+title: Build feature
+status: PR Created
+pr_number: 42
+---
+# Stage`;
+    const result = parseStageFrontmatter(content, 'stage.md');
+    expect(result.pr_number).toBe(42);
+  });
+
+  it('defaults pr_number to null when absent', () => {
+    const content = `---
+id: STAGE-001
+ticket: TICKET-001
+epic: EPIC-001
+title: Build feature
+status: Build
+---
+# Stage`;
+    const result = parseStageFrontmatter(content, 'stage.md');
+    expect(result.pr_number).toBeNull();
+  });
+
   it('defaults due_date to null when missing', () => {
     const content = `---
 id: STAGE-001-001-001

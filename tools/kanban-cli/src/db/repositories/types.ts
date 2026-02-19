@@ -36,6 +36,8 @@ export interface StageRow {
   kanban_column: string | null;
   refinement_type: string | null;
   worktree_branch: string | null;
+  pr_url: string | null;
+  pr_number: number | null;
   priority: number;
   due_date: string | null;
   session_active: number;

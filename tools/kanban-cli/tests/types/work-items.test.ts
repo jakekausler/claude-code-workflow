@@ -63,6 +63,8 @@ describe('Work Item Types', () => {
       refinement_type: ['frontend'],
       depends_on: ['STAGE-001-001-002'],
       worktree_branch: 'epic-001/ticket-001-001/stage-001-001-001',
+      pr_url: null,
+      pr_number: null,
       priority: 0,
       due_date: null,
       file_path: '/repo/epics/STAGE-001-001-001.md',

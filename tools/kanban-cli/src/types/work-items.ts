@@ -73,6 +73,8 @@ export interface Stage {
   refinement_type: string[];
   depends_on: string[];
   worktree_branch: string | null;
+  pr_url: string | null;
+  pr_number: number | null;
   priority: number;
   due_date: string | null;
   file_path: string;

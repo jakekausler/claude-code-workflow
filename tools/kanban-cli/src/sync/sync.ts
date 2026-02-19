@@ -255,6 +255,8 @@ export function syncRepo(options: SyncOptions): SyncResult {
         kanban_column: kanbanColumn,
         refinement_type: JSON.stringify(stage.refinement_type),
         worktree_branch: stage.worktree_branch,
+        pr_url: stage.pr_url,
+        pr_number: stage.pr_number,
         priority: stage.priority,
         due_date: stage.due_date,
         session_active: stage.session_active ? 1 : 0,
