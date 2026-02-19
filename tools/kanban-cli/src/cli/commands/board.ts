@@ -10,6 +10,7 @@ import { DependencyRepository } from '../../db/repositories/dependency-repositor
 import { syncRepo } from '../../sync/sync.js';
 import { buildBoard } from '../logic/board.js';
 import type { BoardTicketRow, BoardStageRow, BoardEpicRow, BoardDependencyRow } from '../logic/board.js';
+import { renderBoardHtml } from '../formatters/board-html.js';
 
 export const boardCommand = new Command('board')
   .description('Output kanban board as JSON')
@@ -19,6 +20,7 @@ export const boardCommand = new Command('board')
   .option('--column <name>', 'Filter to a specific column (snake_case)')
   .option('--exclude-done', 'Omit completed stages', false)
   .option('--pretty', 'Pretty-print JSON output', false)
+  .option('--html', 'Output as standalone HTML page', false)
   .action(async (options) => {
     try {
       const repoPath = path.resolve(options.repo);
@@ -102,8 +104,12 @@ export const boardCommand = new Command('board')
         },
       });
 
-      const indent = options.pretty ? 2 : undefined;
-      process.stdout.write(JSON.stringify(result, null, indent) + '\n');
+      if (options.html) {
+        process.stdout.write(renderBoardHtml(result));
+      } else {
+        const indent = options.pretty ? 2 : undefined;
+        process.stdout.write(JSON.stringify(result, null, indent) + '\n');
+      }
       db.close();
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
