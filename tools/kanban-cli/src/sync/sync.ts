@@ -103,15 +103,94 @@ export function syncRepo(options: SyncOptions): SyncResult {
     }
   }
 
-  // 4. Build a map of stage statuses for dependency resolution
+  // 4. Build maps for dependency resolution
   const stageStatusMap = new Map<string, string>();
   for (const stage of parsedStages) {
     stageStatusMap.set(stage.id, stage.status);
   }
 
+  // Build ticket→stages map for resolving ticket-level dependencies
+  const ticketStagesMap = new Map<string, string[]>();
+  for (const stage of parsedStages) {
+    const existing = ticketStagesMap.get(stage.ticket) || [];
+    existing.push(stage.id);
+    ticketStagesMap.set(stage.ticket, existing);
+  }
+
+  // Build epic→tickets map for resolving epic-level dependencies
+  const epicTicketsMap = new Map<string, string[]>();
+  for (const ticket of parsedTickets) {
+    const existing = epicTicketsMap.get(ticket.epic) || [];
+    existing.push(ticket.id);
+    epicTicketsMap.set(ticket.epic, existing);
+  }
+
+  /**
+   * Detect entity type from ID prefix.
+   */
+  function getEntityType(id: string): 'epic' | 'ticket' | 'stage' {
+    if (id.startsWith('EPIC-')) return 'epic';
+    if (id.startsWith('TICKET-')) return 'ticket';
+    return 'stage';
+  }
+
+  /**
+   * Check whether a dependency target is resolved:
+   * - Stage: resolved when its status is Complete
+   * - Ticket: resolved when ALL stages in that ticket are Complete
+   * - Epic: resolved when ALL stages across ALL tickets in that epic are Complete
+   */
+  function isDependencyResolved(targetId: string): boolean {
+    const targetType = getEntityType(targetId);
+
+    if (targetType === 'stage') {
+      return stageStatusMap.get(targetId) === COMPLETE_STATUS;
+    }
+
+    if (targetType === 'ticket') {
+      const stageIds = ticketStagesMap.get(targetId) || [];
+      if (stageIds.length === 0) return false; // no stages = not resolved
+      return stageIds.every((sid) => stageStatusMap.get(sid) === COMPLETE_STATUS);
+    }
+
+    if (targetType === 'epic') {
+      const ticketIds = epicTicketsMap.get(targetId) || [];
+      if (ticketIds.length === 0) return false; // no tickets = not resolved
+      return ticketIds.every((tid) => {
+        const stageIds = ticketStagesMap.get(tid) || [];
+        if (stageIds.length === 0) return false; // ticket with no stages = not resolved
+        return stageIds.every((sid) => stageStatusMap.get(sid) === COMPLETE_STATUS);
+      });
+    }
+
+    return false;
+  }
+
+  /**
+   * Upsert a dependency and resolve it if the target is complete.
+   */
+  function upsertDependency(fromId: string, fromType: string, depId: string): void {
+    const toType = getEntityType(depId);
+    depRepo.upsert({
+      from_id: fromId,
+      to_id: depId,
+      from_type: fromType,
+      to_type: toType,
+      repo_id: repoId,
+    });
+    result.dependencies++;
+
+    if (isDependencyResolved(depId)) {
+      depRepo.resolve(fromId, depId);
+    }
+  }
+
   // 5. Upsert all data into the database within a transaction
   const syncTransaction = db.raw().transaction(() => {
-    // Upsert epics
+    // Clear old dependencies for this repo and rebuild
+    depRepo.deleteByRepo(repoId);
+
+    // Upsert epics and their dependencies
     for (const epic of parsedEpics) {
       epicRepo.upsert({
         id: epic.id,
@@ -122,10 +201,14 @@ export function syncRepo(options: SyncOptions): SyncResult {
         file_path: epic.file_path,
         last_synced: now,
       });
+
+      for (const depId of epic.depends_on) {
+        upsertDependency(epic.id, 'epic', depId);
+      }
     }
     result.epics = parsedEpics.length;
 
-    // Upsert tickets
+    // Upsert tickets and their dependencies
     for (const ticket of parsedTickets) {
       ticketRepo.upsert({
         id: ticket.id,
@@ -139,30 +222,18 @@ export function syncRepo(options: SyncOptions): SyncResult {
         file_path: ticket.file_path,
         last_synced: now,
       });
+
+      for (const depId of ticket.depends_on) {
+        upsertDependency(ticket.id, 'ticket', depId);
+      }
     }
     result.tickets = parsedTickets.length;
 
-    // Clear old dependencies for this repo and rebuild
-    depRepo.deleteByRepo(repoId);
-
     // Upsert stages and create dependencies
     for (const stage of parsedStages) {
-      // Create dependency records
+      // Create dependency records (supports stage→stage, stage→ticket, stage→epic)
       for (const depId of stage.depends_on) {
-        depRepo.upsert({
-          from_id: stage.id,
-          to_id: depId,
-          from_type: 'stage',
-          to_type: 'stage',
-          repo_id: repoId,
-        });
-        result.dependencies++;
-
-        // Resolve dependency if the target is Complete
-        const depStatus = stageStatusMap.get(depId);
-        if (depStatus === COMPLETE_STATUS) {
-          depRepo.resolve(stage.id, depId);
-        }
+        upsertDependency(stage.id, 'stage', depId);
       }
 
       // Compute kanban column

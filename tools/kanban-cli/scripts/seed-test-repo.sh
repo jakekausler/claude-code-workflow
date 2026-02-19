@@ -530,6 +530,7 @@ refinement_type:
   - infrastructure
 depends_on:
   - STAGE-002-001-003
+  - EPIC-001
 priority: 0
 ---
 
@@ -709,7 +710,8 @@ status: Not Started
 source: jira
 jira_key: PAY-456
 stages: []
-depends_on: []
+depends_on:
+  - TICKET-002-001
 ---
 
 ## Overview
@@ -730,7 +732,8 @@ title: Notifications
 status: Not Started
 tickets:
   - TICKET-003-001
-depends_on: []
+depends_on:
+  - EPIC-001
 ---
 
 ## Overview
@@ -775,6 +778,7 @@ refinement_type:
   - frontend
 depends_on:
   - STAGE-001-002-004
+  - TICKET-001-002
 priority: 0
 ---
 
@@ -874,7 +878,7 @@ echo "    - STAGE-002-001-002: Payment Form            [Manual Testing]"
 echo "    - STAGE-002-001-003: Stripe Integration      [Not Started]"
 echo "    - STAGE-002-001-004: Order Confirmation      [Not Started]"
 echo "    - STAGE-002-001-005: Receipt Generation      [Not Started, priority=1]"
-echo "    - STAGE-002-001-006: Payment Webhooks        [Not Started]"
+echo "    - STAGE-002-001-006: Payment Webhooks        [Not Started] (also depends: EPIC-001)"
 echo ""
 echo "  TICKET-002-002: Subscription Management (6 stages)"
 echo "    - STAGE-002-002-001: Plan Selection UI       [Finalize]"
@@ -886,23 +890,32 @@ echo "    - STAGE-002-002-006: Usage Metering          [Not Started]"
 echo ""
 echo "  TICKET-002-003: Refund Processing (no stages - To Convert)"
 echo "    Source: jira, jira_key: PAY-456"
+echo "    Depends on: TICKET-002-001 (ticket→ticket)"
 echo ""
-echo "--- Epic 3: Notifications (EPIC-003) ---"
+echo "--- Epic 3: Notifications (EPIC-003, depends: EPIC-001) ---"
 echo "  TICKET-003-001: Email Notifications (3 stages)"
-echo "    - STAGE-003-001-001: Email Templates           [Not Started] (depends: STAGE-001-002-004 CROSS-EPIC)"
+echo "    - STAGE-003-001-001: Email Templates           [Not Started] (depends: STAGE-001-002-004 CROSS-EPIC, TICKET-001-002 stage→ticket)"
 echo "    - STAGE-003-001-002: Notification Service      [Not Started] (depends: STAGE-003-001-001, STAGE-001-001-003 CROSS-EPIC)"
 echo "    - STAGE-003-001-003: Payment Notifications     [Not Started] (depends: STAGE-003-001-002, STAGE-002-001-005 CROSS-EPIC)"
 echo ""
 echo "--- Cross-boundary Dependencies ---"
-echo "  Cross-ticket (same epic):"
+echo "  Cross-ticket (same epic, stage→stage):"
 echo "    STAGE-001-002-003 (Email Verification) -> STAGE-001-001-002 (Auth API Endpoints)"
 echo "    STAGE-001-002-006 (GDPR Consent) -> STAGE-001-001-001 (Login Form UI)"
-echo "  Cross-epic:"
+echo "  Cross-epic (stage→stage):"
 echo "    STAGE-002-001-003 (Stripe Integration) -> STAGE-001-001-002 (Auth API Endpoints)"
 echo "    STAGE-002-001-004 (Order Confirmation) -> STAGE-001-002-001 (Signup Form UI)"
 echo "    STAGE-003-001-001 (Email Templates) -> STAGE-001-002-004 (Welcome Email)"
 echo "    STAGE-003-001-002 (Notification Service) -> STAGE-001-001-003 (Session Management)"
 echo "    STAGE-003-001-003 (Payment Notifications) -> STAGE-002-001-005 (Receipt Generation)"
+echo "  Stage → Ticket:"
+echo "    STAGE-003-001-001 (Email Templates) -> TICKET-001-002 (Registration Flow)"
+echo "  Stage → Epic:"
+echo "    STAGE-002-001-006 (Payment Webhooks) -> EPIC-001 (User Authentication)"
+echo "  Ticket → Ticket:"
+echo "    TICKET-002-003 (Refund Processing) -> TICKET-002-001 (Checkout Flow)"
+echo "  Epic → Epic:"
+echo "    EPIC-003 (Notifications) -> EPIC-001 (User Authentication)"
 echo ""
 echo "=== Example CLI Commands ==="
 echo ""
