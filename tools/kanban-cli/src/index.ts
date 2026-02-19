@@ -66,16 +66,19 @@ export {
   TicketRepository,
   StageRepository,
   DependencyRepository,
+  SummaryRepository,
 } from './db/repositories/index.js';
 export type {
   EpicRow,
   TicketRow,
   StageRow,
   DependencyRow,
+  SummaryRow,
   EpicUpsertData,
   TicketUpsertData,
   StageUpsertData,
   DependencyUpsertData,
+  SummaryUpsertData,
 } from './db/repositories/index.js';
 
 // Parser
@@ -128,6 +131,20 @@ export type {
   ValidationWarning,
   ValidateInput,
 } from './cli/logic/validate.js';
+export { buildSummary } from './cli/logic/summary.js';
+export type {
+  BuildSummaryInput,
+  SummaryOutput,
+} from './cli/logic/summary.js';
+export { SummaryEngine, computeHash } from './cli/logic/summary-engine.js';
+export type {
+  SummaryResult,
+  SummaryItemType,
+  StageSummaryInput,
+  TicketSummaryInput,
+  EpicSummaryInput,
+  SummaryEngineOptions,
+} from './cli/logic/summary-engine.js';
 
 // Utils - Git Platform Detection
 export type { GitPlatform, DetectPlatformOptions } from './utils/git-platform.js';
@@ -141,3 +158,7 @@ export { createGitLabAdapter } from './utils/code-host-gitlab.js';
 export type { GitLabAdapterOptions } from './utils/code-host-gitlab.js';
 export { parseGitLabMrUrl } from './utils/code-host-gitlab.js';
 export { createCodeHostAdapter } from './utils/code-host-factory.js';
+
+// Utils - Claude Executor
+export { createClaudeExecutor } from './utils/claude-executor.js';
+export type { ClaudeExecutor, ClaudeExecutorOptions } from './utils/claude-executor.js';
