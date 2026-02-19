@@ -45,8 +45,32 @@ export const summaryCommand = new Command('summary')
         return;
       }
 
+      const repoId = repo.id;
       const ticketRepo = new TicketRepository(db);
       const stageRepo = new StageRepository(db);
+
+      // Pre-load all tickets and stages for this repo to scope queries correctly
+      const allRepoTickets = ticketRepo.listByRepo(repoId);
+      const allRepoStages = stageRepo.listByRepo(repoId);
+
+      // Build lookup maps scoped to this repo
+      const ticketsByEpic = new Map<string, string[]>();
+      for (const t of allRepoTickets) {
+        const epicId = t.epic_id ?? '';
+        const existing = ticketsByEpic.get(epicId) ?? [];
+        existing.push(t.id);
+        ticketsByEpic.set(epicId, existing);
+      }
+
+      const stagesByTicket = new Map<string, string[]>();
+      const repoStageIds = new Set<string>();
+      for (const s of allRepoStages) {
+        repoStageIds.add(s.id);
+        const ticketId = s.ticket_id ?? '';
+        const existing = stagesByTicket.get(ticketId) ?? [];
+        existing.push(s.id);
+        stagesByTicket.set(ticketId, existing);
+      }
 
       // Resolve all IDs to stage rows
       const stageIds = new Set<string>();
@@ -56,24 +80,26 @@ export const summaryCommand = new Command('summary')
 
         switch (idType) {
           case 'stage': {
-            stageIds.add(id);
+            if (repoStageIds.has(id)) {
+              stageIds.add(id);
+            }
             break;
           }
           case 'ticket': {
-            // Get all stages for this ticket
-            const ticketStages = stageRepo.listByTicket(id);
-            for (const s of ticketStages) {
-              stageIds.add(s.id);
+            // Get all stages for this ticket within this repo
+            const ticketStages = stagesByTicket.get(id) ?? [];
+            for (const sId of ticketStages) {
+              stageIds.add(sId);
             }
             break;
           }
           case 'epic': {
             // Get all tickets for this epic, then all stages for each ticket
-            const epicTickets = ticketRepo.listByEpic(id);
-            for (const t of epicTickets) {
-              const ticketStages = stageRepo.listByTicket(t.id);
-              for (const s of ticketStages) {
-                stageIds.add(s.id);
+            const epicTickets = ticketsByEpic.get(id) ?? [];
+            for (const tId of epicTickets) {
+              const ticketStages = stagesByTicket.get(tId) ?? [];
+              for (const sId of ticketStages) {
+                stageIds.add(sId);
               }
             }
             break;
