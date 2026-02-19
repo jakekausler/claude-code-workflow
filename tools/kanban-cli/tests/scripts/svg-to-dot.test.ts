@@ -1,6 +1,7 @@
 // tests/scripts/svg-to-dot.test.ts
 import { describe, it, expect } from 'vitest';
-import { extractNodes, extractEdges, parseTranslate, getPathStartPoint, getPathEndPoint } from '../../scripts/svg-to-dot.js';
+import { extractNodes, extractEdges, parseTranslate, getPathStartPoint, getPathEndPoint, matchEdgesToNodes, extractOrphanTexts, assignEdgeLabels } from '../../scripts/svg-to-dot.js';
+import type { ParsedNode, ParsedEdge, OrphanText } from '../../scripts/svg-to-dot.js';
 import { DOMParser } from 'xmldom';
 
 describe('parseTranslate', () => {
@@ -99,5 +100,45 @@ describe('extractEdges', () => {
     // Global end = translate(160, 1020.74) + use translate(104, 0)
     expect(edges[0].endPoint.x).toBeCloseTo(264);
     expect(edges[0].endPoint.y).toBeCloseTo(1020.74);
+  });
+});
+
+describe('matchEdgesToNodes', () => {
+  it('matches edge endpoints to nearest nodes', () => {
+    const nodes: ParsedNode[] = [
+      { id: 'n0', label: 'A', center: { x: 100, y: 100 }, shape: 'box', width: 120, height: 120 },
+      { id: 'n1', label: 'B', center: { x: 400, y: 100 }, shape: 'box', width: 120, height: 120 },
+    ];
+    const edges: ParsedEdge[] = [
+      { startPoint: { x: 160, y: 100 }, endPoint: { x: 340, y: 100 } },
+    ];
+    matchEdgesToNodes(edges, nodes);
+    expect(edges[0].sourceId).toBe('n0');
+    expect(edges[0].targetId).toBe('n1');
+  });
+});
+
+describe('extractOrphanTexts', () => {
+  it('returns text groups not associated with any node', () => {
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg">
+      <g><g>
+        <g width="120px" height="120px" transform="translate(40, 40) scale(1) rotate(0, 60, 60)">
+          <svg width="120" height="120" class="shape-background">
+            <g><rect class="shape-element shape-element-rect" x="0" y="0" width="120" height="120"/></g>
+          </svg>
+        </g>
+        <g width="120px" height="120px" transform="translate(40, 40) rotate(0, 60, 60)">
+          <g><text x="10" y="50">Node A</text></g>
+        </g>
+        <g width="50px" height="20px" transform="translate(200, 90) scale(1) rotate(0)">
+          <text x="0" y="14">Yes</text>
+        </g>
+      </g></g>
+    </svg>`;
+    const doc = new DOMParser().parseFromString(svg, 'image/svg+xml');
+    const nodes = extractNodes(doc);
+    const orphans = extractOrphanTexts(doc, nodes);
+    expect(orphans.length).toBe(1);
+    expect(orphans[0].text).toBe('Yes');
   });
 });

@@ -248,6 +248,114 @@ export function extractEdges(doc: Document): ParsedEdge[] {
   return edges;
 }
 
+function distance(a: Point, b: Point): number {
+  return Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2);
+}
+
+export function matchEdgesToNodes(edges: ParsedEdge[], nodes: ParsedNode[]): void {
+  for (const edge of edges) {
+    let minStartDist = Infinity;
+    let minEndDist = Infinity;
+
+    for (const node of nodes) {
+      const startDist = distance(edge.startPoint, node.center);
+      const endDist = distance(edge.endPoint, node.center);
+
+      if (startDist < minStartDist) {
+        minStartDist = startDist;
+        edge.sourceId = node.id;
+      }
+      if (endDist < minEndDist) {
+        minEndDist = endDist;
+        edge.targetId = node.id;
+      }
+    }
+  }
+}
+
+export function extractOrphanTexts(doc: Document, nodes: ParsedNode[]): OrphanText[] {
+  const allGroups = Array.from(doc.getElementsByTagName('g'));
+  const orphans: OrphanText[] = [];
+
+  // Collect node translate positions for exclusion
+  const nodePositions = new Set(
+    nodes.map(n => `${Math.round((n.center.x - n.width / 2) * 10) / 10},${Math.round((n.center.y - n.height / 2) * 10) / 10}`)
+  );
+
+  for (const g of allGroups) {
+    const transform = g.getAttribute('transform');
+    const widthAttr = g.getAttribute('width');
+    if (!transform || !widthAttr) continue;
+
+    const translate = parseTranslate(transform);
+    if (!translate) continue;
+
+    const width = parseFloat(widthAttr);
+    const heightAttr = g.getAttribute('height');
+    const height = heightAttr ? parseFloat(heightAttr) : 20;
+
+    // Skip if this position matches a known node
+    const posKey = `${Math.round(translate.x * 10) / 10},${Math.round(translate.y * 10) / 10}`;
+    if (nodePositions.has(posKey)) continue;
+
+    // Must have text but no shape elements and no arrow markers
+    const hasShape = hasDescendantWithClass(g, 'rect', 'shape-element') || hasStyledRect(g) || hasDiamondShape(g);
+    const useEls = g.getElementsByTagName('use');
+    let hasArrow = false;
+    for (let i = 0; i < useEls.length; i++) {
+      const href = useEls[i].getAttribute('xlink:href') || useEls[i].getAttribute('href') || '';
+      if (href === '#LineHeadArrow2') { hasArrow = true; break; }
+    }
+
+    if (hasShape || hasArrow) continue;
+
+    const textEls = g.getElementsByTagName('text');
+    if (textEls.length === 0) continue;
+
+    const texts: string[] = [];
+    for (let i = 0; i < textEls.length; i++) {
+      const t = textEls[i].textContent?.trim();
+      if (t) texts.push(t);
+    }
+    if (texts.length === 0) continue;
+
+    // Skip if this is a nested child of a shape or edge group (check parent)
+    const parent = g.parentNode as Element | null;
+    if (parent?.getAttribute?.('width') && parseTranslate(parent.getAttribute('transform'))?.x === translate.x) continue;
+
+    orphans.push({
+      text: texts.join(' '),
+      center: { x: translate.x + width / 2, y: translate.y + height / 2 },
+    });
+  }
+
+  return orphans;
+}
+
+export function assignEdgeLabels(edges: ParsedEdge[], orphanTexts: OrphanText[]): void {
+  for (const orphan of orphanTexts) {
+    let minDist = Infinity;
+    let closestEdge: ParsedEdge | null = null;
+
+    for (const edge of edges) {
+      const midpoint: Point = {
+        x: (edge.startPoint.x + edge.endPoint.x) / 2,
+        y: (edge.startPoint.y + edge.endPoint.y) / 2,
+      };
+      const dist = distance(orphan.center, midpoint);
+      if (dist < minDist) {
+        minDist = dist;
+        closestEdge = edge;
+      }
+    }
+
+    // Only assign if reasonably close (within 200px of midpoint)
+    if (closestEdge && minDist < 200) {
+      closestEdge.label = orphan.text;
+    }
+  }
+}
+
 function main(): void {
   const svgPath = process.argv[2];
   if (!svgPath) {
