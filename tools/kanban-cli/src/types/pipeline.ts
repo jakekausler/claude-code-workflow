@@ -33,6 +33,27 @@ export interface WorkflowDefaults {
 }
 
 /**
+ * Jira status mapping for workflow transitions.
+ */
+export interface JiraStatusMap {
+  first_stage_design?: string;
+  stage_pr_created?: string;
+  all_stages_done?: string;
+}
+
+/**
+ * Jira integration configuration.
+ * When null or undefined, Jira integration is disabled.
+ */
+export interface JiraConfig {
+  reading_script?: string | null;
+  writing_script?: string | null;
+  project?: string | null;
+  assignee?: string | null;
+  status_map?: JiraStatusMap;
+}
+
+/**
  * The complete workflow pipeline configuration.
  * Loaded from YAML, validated by Zod schema.
  */
@@ -47,6 +68,9 @@ export interface PipelineConfig {
     /** Environment variable defaults (overridable by actual env vars) */
     defaults?: WorkflowDefaults;
   };
+
+  /** Jira integration configuration. Null or undefined means disabled. */
+  jira?: JiraConfig | null;
 }
 
 /**

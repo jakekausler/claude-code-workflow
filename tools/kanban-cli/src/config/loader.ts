@@ -28,25 +28,34 @@ export interface LoadConfigOptions {
  * - If repo defines `phases`, it REPLACES global phases entirely (no merge).
  * - If repo defines `entry_phase`, it replaces global entry_phase.
  * - `defaults` are MERGED (repo values override global values, but unset keys are preserved).
+ * - If repo defines `jira`, it REPLACES global jira entirely (no merge).
  */
 export function mergeConfigs(
   global: PipelineConfig,
   repo: Partial<PipelineConfig> | null
 ): PipelineConfig {
-  if (!repo || !repo.workflow) {
+  if (!repo) {
     return global;
   }
 
+  // If repo has no workflow section, only jira may be overridden
   const merged: PipelineConfig = {
     workflow: {
-      entry_phase: repo.workflow.entry_phase ?? global.workflow.entry_phase,
-      phases: repo.workflow.phases ?? global.workflow.phases,
+      entry_phase: repo.workflow?.entry_phase ?? global.workflow.entry_phase,
+      phases: repo.workflow?.phases ?? global.workflow.phases,
       defaults: {
         ...global.workflow.defaults,
-        ...repo.workflow.defaults,
+        ...repo.workflow?.defaults,
       },
     },
   };
+
+  // jira: repo replaces global entirely (same as phases)
+  if ('jira' in repo) {
+    merged.jira = repo.jira;
+  } else {
+    merged.jira = global.jira;
+  }
 
   return merged;
 }

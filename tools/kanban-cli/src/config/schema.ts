@@ -35,12 +35,27 @@ const workflowDefaultsSchema = z.object({
   WORKFLOW_SLACK_WEBHOOK: z.string().url().optional(),
 });
 
+const jiraStatusMapSchema = z.object({
+  first_stage_design: z.string().optional(),
+  stage_pr_created: z.string().optional(),
+  all_stages_done: z.string().optional(),
+}).optional();
+
+const jiraConfigSchema = z.object({
+  reading_script: z.string().nullable().optional(),
+  writing_script: z.string().nullable().optional(),
+  project: z.string().nullable().optional(),
+  assignee: z.string().nullable().optional(),
+  status_map: jiraStatusMapSchema,
+}).nullable().optional();
+
 export const pipelineConfigSchema = z.object({
   workflow: z.object({
     entry_phase: z.string().min(1),
     phases: z.array(pipelineStateSchema).min(1),
     defaults: workflowDefaultsSchema.optional(),
   }),
+  jira: jiraConfigSchema,
 });
 
 export type ValidatedPipelineConfig = z.infer<typeof pipelineConfigSchema>;

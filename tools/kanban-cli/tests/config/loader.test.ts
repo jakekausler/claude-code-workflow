@@ -97,6 +97,81 @@ describe('mergeConfigs', () => {
     expect(result.workflow.defaults?.WORKFLOW_REMOTE_MODE).toBe(false);
     expect(result.workflow.defaults?.WORKFLOW_MAX_PARALLEL).toBe(5);
   });
+
+  it('repo jira overrides global jira entirely', () => {
+    const globalWithJira = {
+      ...globalConfig,
+      jira: {
+        reading_script: './global-read.sh',
+        writing_script: './global-write.sh',
+        project: 'GLOBAL',
+        assignee: 'global@example.com',
+        status_map: {
+          first_stage_design: 'Global Design',
+          stage_pr_created: 'Global PR',
+          all_stages_done: 'Global Done',
+        },
+      },
+    };
+    const repoConfig = {
+      jira: {
+        reading_script: './repo-read.sh',
+        project: 'REPO',
+      },
+    };
+    const result = mergeConfigs(globalWithJira, repoConfig);
+    // Repo jira replaces global jira entirely — no merge of individual fields
+    expect(result.jira).toEqual({
+      reading_script: './repo-read.sh',
+      project: 'REPO',
+    });
+    // writing_script, assignee, status_map are NOT inherited from global
+    expect(result.jira?.writing_script).toBeUndefined();
+    expect(result.jira?.assignee).toBeUndefined();
+    expect(result.jira?.status_map).toBeUndefined();
+  });
+
+  it('preserves global jira when repo does not define jira', () => {
+    const globalWithJira = {
+      ...globalConfig,
+      jira: {
+        reading_script: './global-read.sh',
+        project: 'GLOBAL',
+      },
+    };
+    const repoConfig = {
+      workflow: {
+        defaults: {
+          WORKFLOW_REMOTE_MODE: true,
+        },
+      },
+    };
+    const result = mergeConfigs(globalWithJira, repoConfig);
+    expect(result.jira).toEqual({
+      reading_script: './global-read.sh',
+      project: 'GLOBAL',
+    });
+  });
+
+  it('repo jira: null disables global jira', () => {
+    const globalWithJira = {
+      ...globalConfig,
+      jira: {
+        reading_script: './global-read.sh',
+        project: 'GLOBAL',
+      },
+    };
+    const repoConfig = {
+      jira: null,
+    };
+    const result = mergeConfigs(globalWithJira, repoConfig);
+    expect(result.jira).toBeNull();
+  });
+
+  it('merged config without jira section has undefined jira', () => {
+    const result = mergeConfigs(globalConfig, null);
+    expect(result.jira).toBeUndefined();
+  });
 });
 
 describe('loadConfig', () => {
