@@ -164,3 +164,32 @@ export { createCodeHostAdapter } from './utils/code-host-factory.js';
 // Utils - Claude Executor
 export { createClaudeExecutor } from './utils/claude-executor.js';
 export type { ClaudeExecutor, ClaudeExecutorOptions } from './utils/claude-executor.js';
+
+// Jira Integration
+export { createJiraExecutor, JiraScriptError, JiraTimeoutError, JiraValidationError } from './jira/index.js';
+export type {
+  JiraExecutor,
+  JiraExecutorOptions,
+  JiraTicketData,
+  JiraSearchResult,
+  JiraTransitionResult,
+  JiraAssignResult,
+  JiraCommentResult,
+  GetTicketInput,
+  SearchTicketsInput,
+  TransitionTicketInput,
+  AssignTicketInput,
+  AddCommentInput,
+} from './jira/index.js';
+export {
+  getTicketInputSchema,
+  searchTicketsInputSchema,
+  transitionTicketInputSchema,
+  assignTicketInputSchema,
+  addCommentInputSchema,
+  jiraTicketDataSchema,
+  jiraSearchResultSchema,
+  jiraTransitionResultSchema,
+  jiraAssignResultSchema,
+  jiraCommentResultSchema,
+} from './jira/index.js';
