@@ -3,6 +3,8 @@ export type {
   PipelineConfig,
   PipelineState,
   WorkflowDefaults,
+  JiraConfig,
+  JiraStatusMap,
   SkillState,
   ResolverState,
 } from './types/pipeline.js';

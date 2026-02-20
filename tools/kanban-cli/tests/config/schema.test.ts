@@ -251,6 +251,20 @@ describe('pipelineConfigSchema', () => {
       }
     });
 
+    it('rejects unknown status_map keys', () => {
+      const config = {
+        ...minimalWorkflow,
+        jira: {
+          status_map: {
+            first_stage_design: 'In Progress',
+            unknown_event: 'Bad Status',
+          },
+        },
+      };
+      const result = pipelineConfigSchema.safeParse(config);
+      expect(result.success).toBe(false);
+    });
+
     it('backward compat: existing configs without jira section still parse', () => {
       // This is the same as the minimal config test but explicitly named for backward compat
       const config = {

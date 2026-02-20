@@ -39,7 +39,7 @@ const jiraStatusMapSchema = z.object({
   first_stage_design: z.string().optional(),
   stage_pr_created: z.string().optional(),
   all_stages_done: z.string().optional(),
-}).optional();
+}).strict().optional();
 
 const jiraConfigSchema = z.object({
   reading_script: z.string().nullable().optional(),
