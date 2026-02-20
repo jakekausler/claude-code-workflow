@@ -82,6 +82,9 @@ CREATE TABLE IF NOT EXISTS summaries (
   UNIQUE(item_id, item_type, repo_id)
 )`;
 
+export const CREATE_EPICS_JIRA_KEY_INDEX = `CREATE INDEX IF NOT EXISTS idx_epics_jira_key ON epics(jira_key, repo_id)`;
+export const CREATE_TICKETS_JIRA_KEY_INDEX = `CREATE INDEX IF NOT EXISTS idx_tickets_jira_key ON tickets(jira_key, repo_id)`;
+
 export const ALL_CREATE_STATEMENTS = [
   CREATE_REPOS_TABLE,
   CREATE_EPICS_TABLE,
@@ -89,4 +92,6 @@ export const ALL_CREATE_STATEMENTS = [
   CREATE_STAGES_TABLE,
   CREATE_DEPENDENCIES_TABLE,
   CREATE_SUMMARIES_TABLE,
+  CREATE_EPICS_JIRA_KEY_INDEX,
+  CREATE_TICKETS_JIRA_KEY_INDEX,
 ] as const;

@@ -14,7 +14,11 @@ import { syncRepo } from '../../sync/sync.js';
  * Replaces backslashes first, then double quotes with their escaped forms.
  */
 function yamlEscapeDoubleQuoted(value: string): string {
-  return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  return value
+    .replace(/\\/g, '\\\\')
+    .replace(/"/g, '\\"')
+    .replace(/\n/g, '\\n')
+    .replace(/\t/g, '\\t');
 }
 
 export interface JiraImportOptions {
@@ -157,11 +161,11 @@ export async function jiraImport(
 
     const existingEpic = epicRepo.findByJiraKey(repoId, key);
     if (existingEpic) {
-      throw new Error(`Jira ticket ${key} already imported as ${existingEpic.id}`);
+      throw new Error(`Jira issue ${key} already imported as epic ${existingEpic.id}`);
     }
     const existingTicket = ticketRepo.findByJiraKey(repoId, key);
     if (existingTicket) {
-      throw new Error(`Jira ticket ${key} already imported as ${existingTicket.id}`);
+      throw new Error(`Jira issue ${key} already imported as ticket ${existingTicket.id}`);
     }
 
     // Fetch Jira ticket data

@@ -67,6 +67,11 @@ function spawnScript(
 
 // ─── ADF to text ──────────────────────────────────────────────────────────────
 
+// Known limitation: This simplified ADF-to-text converter only handles text, paragraph,
+// heading, and hardBreak nodes. Complex Jira descriptions with lists, code blocks, tables,
+// or blockquotes will have degraded content. For full ADF conversion, consider using
+// atlassian-tools' adf-converter.ts module directly.
+
 /**
  * Simple ADF-to-text extractor. Walks the ADF node tree and concatenates
  * text nodes, separating block-level nodes with newlines.

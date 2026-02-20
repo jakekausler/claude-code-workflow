@@ -4,6 +4,12 @@ import { jiraSync } from '../logic/jira-sync.js';
 import type { JiraSyncResult } from '../logic/jira-sync.js';
 import { writeOutput } from '../utils/output.js';
 
+// Exit codes:
+// 0 = success (sync completed)
+// 1 = error (Jira not configured, ticket not found, etc.)
+// 2 = confirmation needed (WORKFLOW_JIRA_CONFIRM=true, caller should prompt user)
+// Note: This differs from other commands where exit code 2 means error.
+
 export const jiraSyncCommand = new Command('jira-sync')
   .description('Compute expected Jira state from workflow state and sync status/assignee')
   .argument('<ticket-id>', 'Ticket ID (e.g. TICKET-001-001)')

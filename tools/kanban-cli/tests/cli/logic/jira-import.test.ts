@@ -518,7 +518,7 @@ Body.
 
       await expect(
         jiraImport({ key: 'PROJ-DUP', repoPath: repoDir }, executor, db),
-      ).rejects.toThrow('Jira ticket PROJ-DUP already imported as EPIC-001');
+      ).rejects.toThrow('Jira issue PROJ-DUP already imported as epic EPIC-001');
     });
 
     it('throws on duplicate ticket import', async () => {
@@ -574,7 +574,7 @@ Body.
           db,
         ),
       ).rejects.toThrow(
-        'Jira ticket PROJ-DUP-TICKET already imported as TICKET-001-001',
+        'Jira issue PROJ-DUP-TICKET already imported as ticket TICKET-001-001',
       );
     });
   });
