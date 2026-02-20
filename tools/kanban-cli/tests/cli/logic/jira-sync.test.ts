@@ -252,6 +252,14 @@ describe('computeWorkflowEvent', () => {
     ];
     expect(computeWorkflowEvent(stages)).toBe('first_stage_design');
   });
+
+  it('does not treat null status as in-progress', () => {
+    const stages = [
+      makeStageRow({ status: null }),
+      makeStageRow({ id: 'STAGE-001-001-002', status: 'Not Started' }),
+    ];
+    expect(computeWorkflowEvent(stages)).toBeNull();
+  });
 });
 
 describe('jiraSync', () => {

@@ -6,6 +6,7 @@ import { TicketRepository } from '../../db/repositories/ticket-repository.js';
 import { StageRepository } from '../../db/repositories/stage-repository.js';
 import { syncRepo } from '../../sync/sync.js';
 import type { StageRow } from '../../db/repositories/types.js';
+import type { JiraStatusMap } from '../../types/pipeline.js';
 
 export interface JiraSyncOptions {
   ticketId: string;
@@ -32,8 +33,9 @@ export interface JiraSyncResult {
 
 /**
  * Workflow events in priority order (highest first).
+ * Derived from JiraStatusMap keys to keep in sync with config schema.
  */
-type WorkflowEvent = 'all_stages_done' | 'stage_pr_created' | 'first_stage_design';
+export type WorkflowEvent = keyof JiraStatusMap;
 
 /**
  * Compute the workflow event from stages.
@@ -55,7 +57,9 @@ export function computeWorkflowEvent(stages: StageRow[]): WorkflowEvent | null {
     return 'stage_pr_created';
   }
 
-  const anyInProgress = stages.some((s) => s.status !== 'Not Started' && s.status !== 'Complete');
+  const anyInProgress = stages.some(
+    (s) => s.status != null && s.status !== 'Not Started' && s.status !== 'Complete'
+  );
   if (anyInProgress) {
     return 'first_stage_design';
   }
@@ -141,6 +145,7 @@ export async function jiraSync(
     }
 
     // Look up target Jira status from config
+    // config.jira may be null when executor is injected directly (e.g., in tests)
     const statusMap = config.jira?.status_map;
     const targetStatus = statusMap?.[event];
 
