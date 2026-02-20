@@ -141,9 +141,9 @@ ticket: TICKET-001-001
 epic: EPIC-001
 title: Login Form
 status: Not Started        # Not Started | Design | User Design Feedback |
-                           # Build | Automatic Testing | Manual Testing |
-                           # Finalize | PR Created | Addressing Comments |
-                           # Complete | Skipped
+                           # Build | Automatic Testing | Testing Router |
+                           # Manual Testing | Finalize | PR Created |
+                           # Addressing Comments | Complete | Skipped
 session_active: false      # false = ready to be picked up, true = session in progress
 refinement_type:
   - frontend               # frontend | backend | cli | database | infrastructure | custom
@@ -158,6 +158,7 @@ depends_on:
 worktree_branch: epic-001/ticket-001-001/stage-001-001-001
 priority: 0                # 0 = normal, 1+ = elevated (optional)
 due_date: null             # ISO date if deadline exists (optional)
+pr_url: null               # URL of the MR/PR created during Finalize (set by finalize skill)
 ---
 ## Overview
 [What this stage implements]
@@ -295,14 +296,15 @@ Kanban columns are divided into **system columns** (structural, always present) 
 
 | Kanban Column | Type | Skill/Resolver |
 |--------------|------|----------------|
-| **Design** | Skill | `phase-design` |
-| **User Design Feedback** | Skill | `user-design-feedback` |
-| **Build** | Skill | `phase-build` |
-| **Automatic Testing** | Skill | `automatic-testing` |
-| **Manual Testing** | Skill | `manual-testing` |
-| **Finalize** | Skill | `phase-finalize` |
-| **PR Created** | Resolver | `pr-status` |
-| **Addressing Comments** | Skill | `review-cycle` |
+| **Design** | Session | `phase-design` |
+| **User Design Feedback** | Session | `user-design-feedback` |
+| **Build** | Session | `phase-build` |
+| **Automatic Testing** | Session | `automatic-testing` |
+| **Testing Router** | Resolver | `testing-router` (instant, no column dwell) |
+| **Manual Testing** | Session | `manual-testing` |
+| **Finalize** | Session | `phase-finalize` |
+| **PR Created** | Resolver | `pr-status` (cron-assisted) |
+| **Addressing Comments** | Session | `review-cycle` |
 
 **Column renames from original design:**
 
@@ -313,7 +315,7 @@ Kanban columns are divided into **system columns** (structural, always present) 
 | Awaiting Refinement | Manual Testing |
 | Awaiting Merge | PR Created |
 
-Each pipeline column has two internal states: **Ready** (`session_active: false`) and **In Progress** (`session_active: true`). The orchestration loop only picks up stages in Ready state. See [Section 6: Modularity & Pipeline Configuration](#6-modularity--pipeline-configuration) for full details.
+Each pipeline column has two internal states: **Ready** (`session_active: false`) and **In Progress** (`session_active: true`). The orchestrator's main work loop only picks up stages in Ready state. Resolver columns (Testing Router, PR Created) execute instantly and don't use `session_active` locking. See [Section 6: Modularity & Pipeline Configuration](#6-modularity--pipeline-configuration) for full details.
 
 "To Convert" is a ticket-level column (not stage-level). All other columns are stage-level. The CLI outputs both in the JSON. Pipeline columns are read from the workflow config file — see Section 6.
 
@@ -628,6 +630,7 @@ stages (
   session_active BOOLEAN DEFAULT 0,
   locked_at TEXT,
   locked_by TEXT,
+  pr_url TEXT,                -- MR/PR URL set by finalize skill, cached for cron polling
   file_path TEXT NOT NULL,
   last_synced TEXT NOT NULL
 )
@@ -872,7 +875,7 @@ Worktree:     epic-001/ticket-001-001/stage-001-001-001
 
 **Changes**:
 - Terminology updates.
-- New trigger: auto-invoked when unanalyzed learnings count exceeds `WORKFLOW_LEARNINGS_THRESHOLD`. Checked at the end of each phase (after lessons-learned runs). If threshold exceeded, meta-insights runs automatically instead of waiting for manual `/analyze_learnings`.
+- New trigger: auto-invoked by the insights threshold cron (Stage 6E) when unanalyzed learnings count exceeds `WORKFLOW_LEARNINGS_THRESHOLD`. This is a time-based poll, not checked at the end of each phase. The cron spawns a meta-insights Claude session when the threshold is exceeded.
 
 ### 3.14 Jira Bidirectional Sync
 
@@ -1021,39 +1024,148 @@ See [Section 6: Modularity & Pipeline Configuration](#6-modularity--pipeline-con
 
 **What ships**:
 1. `WORKFLOW_AUTO_DESIGN` env var — brainstormer runs, recommends, proceeds without prompting.
-2. `WORKFLOW_LEARNINGS_THRESHOLD` env var — auto-triggers meta-insights when threshold exceeded.
-3. Updated phase exit gates to check threshold after lessons-learned.
+2. `WORKFLOW_LEARNINGS_THRESHOLD` env var — configures the insights threshold cron (Stage 6E) to auto-trigger meta-insights when unanalyzed learnings count exceeds this value.
 
-**Depends on**: Stage 1. Independent of Stages 2-4.
+**Depends on**: Stage 1. Independent of Stages 2-4. Insights threshold cron infrastructure ships in Stage 6E.
 
-**Modularity integration**: `WORKFLOW_AUTO_DESIGN` and `WORKFLOW_LEARNINGS_THRESHOLD` are set in the pipeline config defaults section. Skills read these from config passed via orchestration context.
+**Modularity integration**: `WORKFLOW_AUTO_DESIGN` and `WORKFLOW_LEARNINGS_THRESHOLD` are set in the pipeline config defaults section. Skills read `WORKFLOW_AUTO_DESIGN` from config. `WORKFLOW_LEARNINGS_THRESHOLD` is read by the insights cron loop (Stage 6E), not by individual phase skills.
 
-### Stage 6: Parallel Orchestration (Worktrees + External Loop)
+### Stage 6: Orchestrator (3-System Architecture)
 
-**Goal**: Multiple stages worked on simultaneously via isolated worktrees and an external scheduling loop.
-
-**What ships**:
-1. Worktree creation/cleanup tied to stage lifecycle.
-2. `WORKFLOW_MAX_PARALLEL` env var.
-3. Worktree isolation strategy validation (checks repo CLAUDE.md).
-4. `$WORKTREE_INDEX` assignment and port/database isolation.
-5. Priority queue in `kanban-cli next` (review comments → awaiting refinement → refinement ready → build ready → design ready → explicit priority → due date).
-6. `needs_human` flag on returned stages.
-7. External scheduling script (TypeScript):
-   - Calls `kanban-cli next --max N`.
-   - Spawns Claude sessions in worktrees (Ralph-loop style, one per stage).
-   - Monitors completion (watches stage status in files).
-   - Picks up next ready stages when workers finish.
-   - Parks stages needing human input in appropriate "Awaiting" columns.
-8. Human-in-the-loop handling: stages requiring decisions are flagged, loop continues with other stages.
-
-**Note**: This stage requires its own deep design session. The external loop architecture (hybrid: external TS scheduler + Claude worker sessions) needs detailed specification for: failure handling, session lifecycle, state synchronization, and cost control.
+**Goal**: An external orchestrator that manages stage lifecycle through three concurrent systems: a main work loop, an MR comment cron, and an insights threshold cron.
 
 **Background — Ralph Loops**: The worker sessions follow the Ralph Loop pattern created by Geoffrey Huntley. Each Claude session is spawned fresh with a clean context window, reads the current state from files (stage file, spec, codebase), does one unit of work, commits, and exits. The external loop respawns as needed. This avoids context rot (degraded performance as context fills up) by giving each iteration the full specification. The official Ralph Loop plugin for Claude Code is already installed and could be leveraged for the worker sessions.
 
+**Architecture overview**: The orchestrator is NOT a single loop. It's three concurrent systems:
+
+1. **Main work loop** — picks up stages, spawns Claude sessions (skills), runs resolvers, handles exit gates
+2. **MR comment cron** — periodically polls for new MR/PR comments and merged status
+3. **Insights threshold cron** — periodically checks if unanalyzed learnings exceed threshold
+
+Each system operates independently. The main loop handles the pipeline state machine. The crons handle time-based checks that don't belong in the tick cycle.
+
+**Key architectural decisions**:
+- **Session states set their own status**: When a Claude session (skill) completes, it updates the stage frontmatter `status` field before exiting. The loop verifies this but does not drive it.
+- **Resolvers rely on the loop**: Resolver functions return a transition target; the loop updates stage status + ticket + epic + sync.
+- **Exit gates are loop behavior**: After a session exits, the loop runs a deterministic sequence (verify status, set `session_active = false`, update ticket/epic, sync). Not configurable, not in pipeline config.
+- **Journal and lessons-learned are skill-internal**: Each phase skill calls journal and lessons-learned before exiting. The loop never sees them.
+- **Backlog re-evaluation only on Done**: Dependencies can only be resolved when a stage reaches Done. The loop checks backlog only after completion cascade, not on every tick.
+- **`pr_url` in frontmatter + SQLite**: The finalize skill writes `pr_url` to stage frontmatter. Synced to SQLite for fast cron queries.
+
 **Depends on**: Stage 1 + Stage 3 (worktrees need branch management).
 
-**Modularity integration**: The orchestration loop is config-driven. It reads the pipeline config to determine which states are skill vs resolver. For skill states: check `session_active`, lock, spawn session. For resolver states: call the resolver function, apply transition. Priority queue ordering uses pipeline phase index. `WORKFLOW_MAX_PARALLEL` is read from config defaults.
+**Modularity integration**: The orchestration loop is config-driven. It reads the pipeline config to determine which states are session (skill) vs resolver. For session states: check `session_active`, lock, spawn session. For resolver states: call the resolver function, apply transition. Priority queue ordering uses pipeline phase index. `WORKFLOW_MAX_PARALLEL` is read from config defaults. Cron jobs are hardcoded but toggleable via the `cron` config section.
+
+Stage 6 is decomposed into five sub-stages:
+
+#### Stage 6A: Orchestrator Infrastructure & Session Management
+
+**Goal**: The base orchestrator script exists, can discover stages, spawn Claude sessions, and manage session lifecycle. No routing logic, no crons — just the scaffolding.
+
+**What ships**:
+1. TypeScript orchestrator entry point (`tools/orchestrator/`).
+2. Config loading (reads pipeline config + `WORKFLOW_MAX_PARALLEL`).
+3. Stage discovery: calls `kanban-cli next --max N` to find workable stages.
+4. Session spawning: creates Claude Code sessions with skill prompt + stage file path.
+5. `session_active` locking: sets `true` before spawn, `false` on exit/crash/timeout.
+6. Crash recovery: detects session exit without status change, resets `session_active`.
+7. Worktree creation: `git worktree add` with `worktree_branch` from frontmatter.
+8. Worktree cleanup: removes worktree after stage reaches Done.
+9. `$WORKTREE_INDEX` assignment and communication to session (env var).
+10. Worktree isolation strategy validation (checks repo CLAUDE.md has the section).
+11. Idle behavior: if no stages available, wait N seconds and retry.
+12. Graceful shutdown: SIGINT/SIGTERM handling, waits for active sessions to finish.
+
+**Does NOT include**: Exit gate logic, ticket/epic updates, backlog re-evaluation, cron loops.
+
+#### Stage 6B: Main Work Loop — Exit Gates & Status Propagation
+
+**Goal**: When a session exits, the loop performs the deterministic exit gate: verifies stage status, updates ticket/epic, syncs SQLite, and handles resolver state transitions.
+
+**What ships**:
+1. Exit gate sequence:
+   - Read stage file, confirm status was updated by session.
+   - Set `session_active = false` in frontmatter + SQLite.
+   - Update ticket file (stage status table in ticket frontmatter).
+   - Update epic file (ticket status).
+   - `kanban-cli sync --stage STAGE-XXX`.
+2. Resolver execution on each tick:
+   - Find all stages in resolver states with `session_active = false`.
+   - Call resolver function.
+   - If returns target: update stage status + ticket + epic + sync.
+   - If returns null: skip.
+3. `testing-router` resolver (new builtin):
+   - Reads `refinement_type` and config to decide Manual Testing vs Finalize.
+4. Updated `pr-status` resolver:
+   - Simpler check (is PR merged?) — comment detection moves to cron.
+   - Reads `pr_url` from frontmatter/SQLite.
+
+**Depends on**: Stage 6A (session management must exist).
+
+#### Stage 6C: Main Work Loop — Completion Cascade & Backlog Resolution
+
+**Goal**: When a stage reaches Done, the loop cascades completion upward (ticket → epic) and resolves dependencies downward (unblocks waiting stages).
+
+**What ships**:
+1. Completion cascade:
+   - Stage → Done: check all stages in ticket.
+   - All stages Done → mark ticket Complete.
+   - All tickets Complete → mark epic Complete.
+2. Backlog re-evaluation (triggered only by stage → Done):
+   - Query `dependencies` table for edges pointing TO the completed stage/ticket/epic.
+   - For each dependent stage: check if ALL its dependencies are now resolved.
+   - If all resolved: move from Backlog to Ready for Work (update status + sync).
+3. Ticket-level completion check:
+   - When ticket completes, also check if it was a dependency for other stages/tickets.
+   - Recursive: ticket completion can unblock stages that depended on the ticket.
+4. Epic-level completion check:
+   - Same recursive logic at epic level.
+
+**Depends on**: Stage 6B (exit gates must update status before cascade can check).
+
+#### Stage 6D: Cron Loop — MR Comment Poller
+
+**Goal**: Periodically polls for new MR/PR comments and merged status, transitions stages accordingly.
+
+**What ships**:
+1. Cron scheduler: timer-based execution at configurable interval.
+2. `cron` config section in workflow YAML (schema + loader + validation).
+3. MR comment polling:
+   - Query SQLite for all stages where `status = 'PR Created'`.
+   - Read `pr_url` from SQLite (cached from frontmatter).
+   - Fetch comments via `gh pr view` / `glab mr notes list`.
+   - Track seen comments (store last-seen comment ID or timestamp in SQLite).
+   - New actionable comments → transition to Addressing Comments (update stage + ticket + epic + sync).
+   - PR merged → transition to Done + trigger completion cascade (6C).
+4. `pr_url` field:
+   - Added to stage frontmatter schema.
+   - Added to SQLite `stages` table.
+   - Written by finalize skill when creating PR.
+   - Synced to DB by `kanban-cli sync`.
+
+**Depends on**: Stage 6B (needs the status propagation logic), Stage 6C (merged PR triggers completion cascade).
+
+#### Stage 6E: Cron Loop — Insights Threshold Checker
+
+**Goal**: Periodically checks if unanalyzed learnings exceed threshold, spawns meta-insights session if so.
+
+**What ships**:
+1. Learnings counter: queries learnings files (or SQLite if indexed) for unanalyzed count.
+2. Threshold comparison against `WORKFLOW_LEARNINGS_THRESHOLD` from config.
+3. Meta-insights session spawning: uses same session infrastructure as 6A.
+4. Shares the cron scheduler from 6D (same timer infrastructure, different job).
+
+**Depends on**: Stage 6A (session spawning), Stage 6D (cron infrastructure).
+
+#### Stage 6 Internal Dependency Graph
+
+```
+Stage 6A (Infrastructure & Sessions)
+  ├── Stage 6B (Exit Gates & Resolvers)
+  │     └── Stage 6C (Completion Cascade & Backlog)
+  │           └── Stage 6D (MR Comment Cron) — also depends on 6B
+  └── Stage 6E (Insights Cron) — depends on 6A + 6D's cron infrastructure
+```
 
 ### Stage 7: Slack Notifications (Stretch)
 
@@ -1114,21 +1226,25 @@ See [Section 6: Modularity & Pipeline Configuration](#6-modularity--pipeline-con
 ### Delivery Stage Dependency Graph
 
 ```
-Stage 0 (Pipeline Configuration)
-  └── Stage 1 (Foundation + SQLite + CLI)
-        ├── Stage 2 (Migration + Conversion)
+Stage 0 (Pipeline Configuration) ✅
+  └── Stage 1 (Foundation + SQLite + CLI) ✅
+        ├── Stage 2 (Migration + Conversion) ✅
         │     └── Stage 4 (Jira + Bidirectional Sync) ── also depends on Stage 3
-        ├── Stage 3 (Remote Mode + MR/PR)
-        │     ├── Stage 6 (Parallel Orchestration + Priority Queue)
+        ├── Stage 3 (Remote Mode + MR/PR) ✅
+        │     ├── Stage 6A (Orchestrator Infrastructure & Sessions)
+        │     │     ├── Stage 6B (Exit Gates & Resolvers)
+        │     │     │     └── Stage 6C (Completion Cascade & Backlog)
+        │     │     │           └── Stage 6D (MR Comment Cron) ── also depends on 6B
+        │     │     └── Stage 6E (Insights Cron) ── depends on 6A + 6D cron infra
         │     ├── Stage 7 (Slack)
         │     └── Stage 4 (Jira)
-        ├── Stage 5 (Auto-Design + Auto-Analysis) ── independent
+        ├── Stage 5 (Auto-Design + Auto-Analysis) ── independent, insights cron in 6E
         └── Stage 8 (Global CLI + Multi-Repo) ── independent
               └── Stage 9 (Web UI)
                     └── Stage 10 (Session Monitor Integration)
 ```
 
-**Parallelizable after Stage 1**: Stages 2, 3, 5, and 8 can all be worked on concurrently since they're independent of each other.
+**Parallelizable after Stage 3**: Stages 4, 5, 6A, 7, and 8 can all be started concurrently. Within Stage 6, sub-stages are serial (6A → 6B → 6C → 6D, with 6E branching from 6A + 6D).
 
 ---
 
@@ -1152,7 +1268,7 @@ Stage 0 (Pipeline Configuration)
 | Jira epic transitions | Read-only link, no auto transitions |
 | Parallel loop architecture | Hybrid: external TS script + Claude workers |
 | Refinement checklists | Type-driven (frontend/backend/cli/database/infrastructure/custom) |
-| Learnings auto-analysis | Threshold trigger (checked at end of each phase) |
+| Learnings auto-analysis | Threshold trigger via dedicated cron loop (not checked at end of each phase) |
 | Slack notifications | Webhook-based initially, deeper integration explored later |
 | Priority system | Review comments > manual testing > refinement ready > build ready > design ready > explicit priority > due date |
 | Where does modularity configuration live? | Global `~/.config/kanban-workflow/config.yaml` + per-repo `.kanban-workflow.yaml`. Phases replace, defaults merge. |
@@ -1162,6 +1278,15 @@ Stage 0 (Pipeline Configuration)
 | What are the two kinds of pipeline states? | Skill states (Claude session) and resolver states (TypeScript function). |
 | How is concurrent pickup prevented? | `session_active` field in frontmatter + SQLite. Orchestration loop locks before spawning. |
 | How are custom phases discovered? | Config points to skill names. Skills are Claude Code skills (existing discovery mechanism). |
+| Where do exit gates live? | In the orchestration loop (hardcoded, not configurable). After a session exits: verify status, set `session_active = false`, update ticket/epic, sync. |
+| Where do journal and lessons-learned run? | Inside each phase skill session (skill-internal). The loop never sees them. |
+| Where does meta-insights auto-trigger live? | In a dedicated cron loop (insights threshold cron), not in exit gates. Polls on a timer. |
+| Where does MR comment detection live? | In a dedicated cron loop (MR comment cron), not in the `pr-status` resolver tick. Polls on a timer. |
+| How does the orchestrator handle Manual Testing skip? | `testing-router` resolver after Automatic Testing. Reads `refinement_type` and config to decide Manual Testing vs Finalize. |
+| Where is the PR URL stored? | `pr_url` field in stage frontmatter + `pr_url` column in SQLite `stages` table. Written by finalize skill, read by MR comment cron. |
+| When does backlog re-evaluation happen? | Only when a stage reaches Done (completion cascade). Not on every tick — dependencies can only be resolved by a completion event. |
+| Who sets stage status after work? | Session states set their own status in frontmatter before exiting. Resolvers and crons rely on the loop to update status. |
+| Is the orchestrator a single loop? | No. Three concurrent systems: main work loop, MR comment cron, insights threshold cron. |
 
 ### 5.2 Open — Resolve at Stage Start
 
@@ -1190,13 +1315,28 @@ Stage 0 (Pipeline Configuration)
 - Which Jira fields to populate beyond status? Assignee, sprint, story points, labels?
 - Should the "To Convert" column support non-Jira sources (e.g., GitHub Issues, Linear tickets)?
 
-**Stage 6 (Parallel Orchestration)**:
-- How does the external loop handle Claude session failures (crash, timeout, token limit)? Retry? Mark stage as blocked? Alert user?
-- How does it detect that a stage needs human input vs. is actively being worked on? File polling for status changes? Or a more active signal?
-- Should the loop run indefinitely (daemon) or as a bounded batch (`--rounds N`)?
-- Worktree cleanup: when should worktrees be removed? After merge? After a TTL? Manual cleanup command?
+**Stage 6A (Orchestrator Infrastructure)**:
+- How does the orchestrator handle Claude session failures (crash, timeout, token limit)? Retry immediately? Exponential backoff? Mark stage as blocked after N failures? Alert user?
+- Should the orchestrator run indefinitely (daemon) or as a bounded batch (`--rounds N`)?
 - How does `$WORKTREE_INDEX` get assigned and communicated to the Claude session? Env var? Written to a file in the worktree?
+- Worktree cleanup: when should worktrees be removed? After merge? After a TTL? Manual cleanup command?
 - Detailed cost control: per-stage token budgets, automatic pause thresholds, reporting.
+
+**Stage 6B (Exit Gates & Resolvers)**:
+- What happens if the exit gate finds the session didn't update the stage status? Retry the session? Mark the stage as failed? Log and skip?
+- Should the `testing-router` resolver be configurable (e.g., a config flag to always require manual testing) or purely metadata-driven?
+
+**Stage 6C (Completion Cascade)**:
+- How deep should recursive cascade go? If completing a stage unblocks a stage that auto-completes (e.g., all its sub-dependencies are met), should that trigger another cascade immediately?
+- Performance: for large dependency graphs, should cascade be batched or run synchronously?
+
+**Stage 6D (MR Comment Cron)**:
+- How to track "seen" comments? Last-seen comment ID in SQLite? Timestamp-based? Full comment hash?
+- How to distinguish actionable comments from discussion/resolved threads? Heuristic or explicit "actionable" label?
+- Rate limiting: how to handle GitHub/GitLab API rate limits when polling many PRs?
+
+**Stage 6E (Insights Cron)**:
+- How to count "unanalyzed" learnings? A flag in each learning file? A separate index? Timestamp-based (learnings newer than last meta-insights run)?
 
 **Stage 8 (Global CLI)**:
 - Repo registration format: a config file at `~/.config/kanban-workflow/repos.yaml`? Auto-discovery by scanning common paths?
@@ -1217,10 +1357,13 @@ Stage 0 (Pipeline Configuration)
 |------|-----------|-------|
 | File ↔ SQLite desync | Content hash comparison, sync on every CLI call, file watchers in web UI | 1, 9 |
 | Circular dependencies across repos | `kanban-cli validate` with cycle detection spanning all registered repos | 8 |
-| Worktree port collisions | CLAUDE.md isolation strategy is enforceable but depends on project cooperation. Validation script can check port usage before spawning. | 6 |
-| Ralph loop cost accumulation | `WORKFLOW_MAX_PARALLEL` cap, per-stage token budget, automatic pause if spend exceeds threshold | 6 |
+| Worktree port collisions | CLAUDE.md isolation strategy is enforceable but depends on project cooperation. Validation script can check port usage before spawning. | 6A |
+| Ralph loop cost accumulation | `WORKFLOW_MAX_PARALLEL` cap, per-stage token budget, automatic pause if spend exceeds threshold | 6A |
 | Jira API rate limits | Batch transitions, cache Jira state, rate-limit outbound calls | 4 |
-| Git merge conflicts between parallel stages | Stages should touch different files. If conflict detected, park the later stage and alert user. | 6 |
+| Git merge conflicts between parallel stages | Stages should touch different files. If conflict detected, park the later stage and alert user. | 6A |
+| MR comment cron API rate limits | Configurable poll interval, batch queries, respect GitHub/GitLab rate limit headers | 6D |
+| Cron and main loop race condition | Both systems can transition the same stage (e.g., cron detects merge while main loop processes resolver). Use file-level locking or SQLite transactions to prevent double-transition. | 6B, 6D |
+| Session exits without updating status | Exit gate detects this and resets `session_active = false`. Stage stays in current status, eligible for retry on next tick. | 6B |
 | Branch name collisions | `worktree_branch` is deterministic from ID — unique by construction. Validate uniqueness in `kanban-cli validate`. | 3 |
 | Terminology rename blast radius | Incremental migration (Approach A) — rename first, test, then add layers. Temporary inconsistency is manageable. | 1 |
 | Session monitor bidirectional communication | Requires new input path (dashboard → Claude). May need custom MCP server or hook-based approach. Research needed. | 10 |
@@ -1234,15 +1377,15 @@ Stage 0 (Pipeline Configuration)
 
 ### 6.1 Architecture Overview
 
-The unit of modularity is the **skill**. The workflow pipeline is a flat state machine defined in a YAML config file. Each state maps to either a **skill** (spawns a Claude session) or a **resolver** (lightweight TypeScript function). The orchestration loop reads the config to know how to route stages through the pipeline.
+The workflow pipeline is a flat state machine defined in a YAML config file. Each state maps to either a **session state** (spawns a Claude Code session with a skill prompt) or a **resolver state** (lightweight TypeScript function). The orchestrator reads the config to know how to route stages through the pipeline.
 
 **Three layers:**
 
 | Layer | Responsibility |
 |-------|---------------|
-| **Config Layer** | YAML files define the pipeline (states, transitions, skills/resolvers) |
-| **Engine Layer** | Orchestration loop + kanban-cli execute the pipeline |
-| **Skill/Resolver Layer** | Skills (Claude sessions) and resolvers (TypeScript functions) do the actual work |
+| **Config Layer** | YAML files define the pipeline (states, transitions, sessions/resolvers) + cron settings |
+| **Engine Layer** | Orchestrator (3 concurrent systems: main loop + 2 crons) + kanban-cli |
+| **Session/Resolver Layer** | Sessions (Claude Code + skill prompt) and resolvers (TypeScript functions) do the actual work |
 
 **Config hierarchy:**
 
@@ -1258,8 +1401,8 @@ Global config sets the user's preferred defaults. Per-repo config overrides any 
 
 | Kind | Config field | What happens | Example |
 |------|-------------|-------------|---------|
-| **Skill state** | `skill: phase-design` | Orchestration loop spawns a Claude session with this skill. Session runs, does work, sets a new status from `transitions_to`, exits. | Design, Build, Manual Testing |
-| **Resolver state** | `resolver: pr-status` | Orchestration loop calls a lightweight TypeScript function on each tick. Function returns a transition target or null (no change). No Claude session. | PR Created, Router |
+| **Session state** | `skill: phase-design` | Main work loop spawns a Claude Code session with this skill prompt + stage file. Session runs, does work (including journal + lessons-learned), sets new status in frontmatter, exits. Loop then runs exit gate (update ticket/epic, sync). | Design, Build, Manual Testing, Finalize, Addressing Comments |
+| **Resolver state** | `resolver: pr-status` | Main work loop calls a lightweight TypeScript function on each tick. Function returns a transition target or null (no change). Loop updates stage status + ticket/epic/sync. No Claude session. | Testing Router, PR Created |
 
 **Four system columns** exist outside the pipeline config. They're structural — part of the engine, always present, not configurable:
 
@@ -1295,7 +1438,12 @@ workflow:
     - name: Automatic Testing
       skill: automatic-testing
       status: Automatic Testing
-      transitions_to: [Manual Testing]
+      transitions_to: [Testing Router]
+
+    - name: Testing Router
+      resolver: testing-router
+      status: Testing Router
+      transitions_to: [Manual Testing, Finalize]
 
     - name: Manual Testing
       skill: manual-testing
@@ -1323,7 +1471,17 @@ workflow:
     WORKFLOW_MAX_PARALLEL: 1
     WORKFLOW_GIT_PLATFORM: auto
     WORKFLOW_LEARNINGS_THRESHOLD: 10
+
+  cron:
+    mr_comment_poll:
+      enabled: true            # Toggle MR/PR comment polling on/off
+      interval_seconds: 300    # Poll every 5 minutes
+    insights_threshold:
+      enabled: true            # Toggle insights threshold checking on/off
+      interval_seconds: 600    # Check every 10 minutes
 ```
+
+**Cron section**: Configures the orchestrator's time-based polling loops. These are hardcoded jobs (not user-extensible) but toggleable and interval-configurable. The `mr_comment_poll` cron finds stages in PR Created and checks for new comments or merge status. The `insights_threshold` cron counts unanalyzed learnings and spawns meta-insights if the count exceeds `WORKFLOW_LEARNINGS_THRESHOLD`.
 
 **Per-repo override** (`<repo>/.kanban-workflow.yaml`):
 
@@ -1388,19 +1546,39 @@ Both are also cached in SQLite for fast queries. File is source of truth.
 **Orchestration loop behavior per state kind:**
 
 ```
-For skill states:
+For session states (skill):
   1. Find stages where status matches AND session_active = false
   2. Set session_active = true (file + SQLite)
-  3. Spawn Claude session with the skill
-  4. Session runs → sets new status → sets session_active = false
-  5. If session crashes → scheduler resets session_active = false after timeout
+  3. Spawn Claude session with the skill prompt + stage file
+  4. Session runs → does work → calls journal/lessons-learned → sets new status in frontmatter
+  5. On session exit → EXIT GATE:
+     a. Verify stage status was updated (expected behavior)
+     b. Set session_active = false (file + SQLite)
+     c. Update ticket file (stage status table)
+     d. Update epic file (ticket status)
+     e. kanban-cli sync --stage STAGE-XXX
+     f. If stage moved to Done → trigger COMPLETION CASCADE
+  6. If session crashes (exits without status change) → reset session_active = false, stage stays in current status
 
 For resolver states:
   1. Find stages where status matches AND session_active = false
   2. Call the resolver function (no session spawned, no lock needed)
-  3. If resolver returns a transition target → set new status
+  3. If resolver returns a transition target → update stage status + ticket + epic + sync
   4. If resolver returns null → skip, check again next tick
+  5. If stage moved to Done → trigger COMPLETION CASCADE
+
+COMPLETION CASCADE (triggered only when a stage reaches Done):
+  1. Check all stages in ticket → if all Done, mark ticket Complete
+  2. Check all tickets in epic → if all Done, mark epic Complete
+  3. Query dependencies table for edges pointing TO completed stage/ticket/epic
+  4. For each dependent: check if ALL its dependencies are now resolved
+  5. Newly-unblocked stages: move from Backlog to Ready for Work
 ```
+
+**Status update ownership**:
+- **Session states**: The session sets the stage `status` in frontmatter before exiting. The loop sets `session_active = false` and propagates to ticket/epic/sync.
+- **Resolver states**: The resolver returns a transition target. The loop updates stage `status` + ticket/epic/sync.
+- **Cron transitions**: The cron updates stage `status` + ticket/epic/sync (same as resolvers).
 
 **Resolver function contract:**
 
@@ -1506,35 +1684,46 @@ function stageRouter(stage: Stage, ctx: ResolverContext): string | null {
 }
 ```
 
-The default pipeline does not use routing — `entry_phase: Design` enters directly. Branching is opt-in for custom pipelines.
+The default pipeline uses a `testing-router` resolver to conditionally skip Manual Testing. More complex routing (type-specific design/testing phases) is opt-in for custom pipelines.
 
-### 6.5 Orchestration Loop Changes
+### 6.5 Orchestrator Architecture (3-System Design)
 
-The tick cycle handles skill states, resolver states, and system columns:
+The orchestrator is three concurrent systems, not a single loop:
+
+#### System 1: Main Work Loop (tick cycle)
 
 ```
 On each tick:
 
   1. RESOLVER states (session_active = false):
+     - Find all stages in resolver states
      - Call each resolver function
-     - If returns target → transition stage
+     - If returns target → update stage status + ticket + epic + sync
+     - If stage moved to Done → COMPLETION CASCADE
      - If returns null → no change
 
-  2. SKILL states (session_active = false):
+  2. SESSION states (session_active = false):
      - Pick up based on priority queue
      - Respect WORKFLOW_MAX_PARALLEL limit
-     - Set session_active = true
-     - Spawn Claude session with the skill
+     - Set session_active = true (file + SQLite)
+     - Spawn Claude session with skill prompt + stage file
+     - Session handles: work + journal + lessons-learned + sets new status
+     - On session exit → EXIT GATE:
+       a. Verify stage status was updated
+       b. Set session_active = false
+       c. Update ticket file (stage status table)
+       d. Update epic file (ticket status)
+       e. kanban-cli sync
+       f. If stage moved to Done → COMPLETION CASCADE
 
-  3. SYSTEM columns (Backlog):
-     - Check dependency resolution
-     - If all deps resolved → move to Ready for Work
-
-  4. COMPLETION cascade:
-     - Stage reaches Done → check ticket → check epic
+  3. COMPLETION CASCADE (only triggered by stage → Done):
+     - Check all stages in ticket → if all Done, mark ticket Complete
+     - Check all tickets in epic → if all Done, mark epic Complete
+     - Re-evaluate Backlog: find dependent stages whose deps are now resolved
+     - Move newly-unblocked stages from Backlog → Ready for Work
 ```
 
-**Priority queue** applies only to skill states. Resolvers are instant. Ordering:
+**Priority queue** applies only to session states. Resolvers are instant. Ordering:
 
 1. Stages in Addressing Comments (unblock team reviewers)
 2. Stages in Manual Testing (unblock human approval)
@@ -1545,6 +1734,54 @@ On each tick:
 7. `due_date` proximity
 
 **Session crash handling**: If a session exits without setting a new status, the scheduler resets `session_active = false`. Stage stays in its current status, eligible to be picked up again on the next tick.
+
+#### System 2: MR Comment Cron
+
+```
+Every N seconds (configurable via cron.mr_comment_poll.interval_seconds, default 300):
+
+  1. Query SQLite for all stages where status = 'PR Created'
+  2. For each: read pr_url from SQLite (cached from frontmatter)
+  3. Fetch comments via gh/glab CLI using pr_url
+  4. Compare against previously seen comments (tracked in SQLite)
+  5. If new actionable comments found:
+     - Update stage status to 'Addressing Comments'
+     - Update ticket + epic + sync
+  6. If PR merged:
+     - Update stage status to 'Done'
+     - Trigger COMPLETION CASCADE (same logic as main loop)
+```
+
+This cron is independent of the main work loop. It does not spawn Claude sessions — it makes API calls and updates files/SQLite directly.
+
+#### System 3: Insights Threshold Cron
+
+```
+Every N seconds (configurable via cron.insights_threshold.interval_seconds, default 600):
+
+  1. Count unanalyzed learnings across all repos
+  2. If count > WORKFLOW_LEARNINGS_THRESHOLD (from config defaults):
+     - Spawn meta-insights Claude session (uses same session infrastructure as main loop)
+  3. If count <= threshold:
+     - No action
+```
+
+This cron shares the session spawning infrastructure with the main loop but operates on its own timer.
+
+#### What Each System Owns
+
+| Responsibility | Owner |
+|---|---|
+| Setting stage status after work | **Session** (skill-internal) |
+| Setting `session_active = false` | **Exit gate** (main loop) |
+| Updating ticket/epic files | **Exit gate** for sessions; **Main loop** for resolvers; **Cron** for cron transitions |
+| SQLite sync | **Exit gate** / **Main loop** / **Cron** (whoever transitions) |
+| Backlog → Ready for Work | **Completion cascade** (only on stage → Done, any system can trigger) |
+| MR comment detection | **MR comment cron** |
+| Insights threshold | **Insights cron** |
+| Journal + lessons-learned | **Session** (skill-internal) |
+| PR/MR creation + `pr_url` write | **Session** (finalize skill-internal) |
+| Jira sync | **Session** (finalize skill-internal, checks all stages in ticket) |
 
 ### 6.6 Pipeline Validator
 
@@ -1609,44 +1846,61 @@ The built-in pipeline config that ships with the tool:
 
 | # | Column | Type | Skill/Resolver | Transitions To |
 |---|--------|------|----------------|----------------|
-| 1 | Design | Skill | `phase-design` | Build, User Design Feedback |
-| 2 | User Design Feedback | Skill | `user-design-feedback` | Build |
-| 3 | Build | Skill | `phase-build` | Automatic Testing |
-| 4 | Automatic Testing | Skill | `automatic-testing` | Manual Testing |
-| 5 | Manual Testing | Skill | `manual-testing` | Finalize |
-| 6 | Finalize | Skill | `phase-finalize` | Done, PR Created |
-| 7 | PR Created | Resolver | `pr-status` | Done, Addressing Comments |
-| 8 | Addressing Comments | Skill | `review-cycle` | PR Created |
+| 1 | Design | Session | `phase-design` | Build, User Design Feedback |
+| 2 | User Design Feedback | Session | `user-design-feedback` | Build |
+| 3 | Build | Session | `phase-build` | Automatic Testing |
+| 4 | Automatic Testing | Session | `automatic-testing` | Testing Router |
+| 5 | Testing Router | Resolver | `testing-router` | Manual Testing, Finalize |
+| 6 | Manual Testing | Session | `manual-testing` | Finalize |
+| 7 | Finalize | Session | `phase-finalize` | Done, PR Created |
+| 8 | PR Created | Resolver | `pr-status` | Done, Addressing Comments |
+| 9 | Addressing Comments | Session | `review-cycle` | PR Created |
 
-**Complete column list (system + pipeline):**
+**Complete column list (system + pipeline + cron-managed):**
 
 | Column | Source | Type |
 |--------|--------|------|
 | To Convert | System | Condition: `stages: []` |
 | Backlog | System | Condition: unresolved deps |
 | Ready for Work | System | Condition: deps resolved, `Not Started` |
-| Design | Pipeline | Skill |
-| User Design Feedback | Pipeline | Skill |
-| Build | Pipeline | Skill |
-| Automatic Testing | Pipeline | Skill |
-| Manual Testing | Pipeline | Skill |
-| Finalize | Pipeline | Skill |
-| PR Created | Pipeline | Resolver |
-| Addressing Comments | Pipeline | Skill |
+| Design | Pipeline | Session |
+| User Design Feedback | Pipeline | Session |
+| Build | Pipeline | Session |
+| Automatic Testing | Pipeline | Session |
+| Testing Router | Pipeline | Resolver (instant, no column dwell) |
+| Manual Testing | Pipeline | Session |
+| Finalize | Pipeline | Session |
+| PR Created | Pipeline | Resolver (cron-assisted: MR comment cron also transitions from here) |
+| Addressing Comments | Pipeline | Session |
 | Done | System | Terminal |
 
-**Example trace through default pipeline:**
+**Note on Testing Router**: This resolver executes instantly on each tick — stages don't visually "sit" in this column. It reads `refinement_type` and config to route directly to Manual Testing or Finalize.
+
+**Note on PR Created**: This column is managed by both the `pr-status` resolver (called on main loop ticks) and the MR comment cron (which also transitions stages out of PR Created). The cron handles comment detection and merge detection; the resolver handles any remaining transition logic.
+
+**Example trace through default pipeline (with manual testing):**
 
 ```
 Ready for Work (Not Started)
-  → Design (skill: phase-design runs)
-    → User Design Feedback (skill: user-design-feedback loops with user)
-      → Build (skill: phase-build runs)
-        → Automatic Testing (skill: automatic-testing runs)
-          → Manual Testing (skill: manual-testing loops with user)
-            → Finalize (skill: phase-finalize runs, creates PR)
-              → PR Created (resolver: pr-status polls)
-                → Addressing Comments (skill: review-cycle runs)
-                  → PR Created (resolver polls again)
-                    → Done (resolver detects merge)
+  → Design (session: phase-design runs)
+    → User Design Feedback (session: user-design-feedback loops with user)
+      → Build (session: phase-build runs)
+        → Automatic Testing (session: automatic-testing runs)
+          → Testing Router (resolver: routes based on refinement_type)
+            → Manual Testing (session: manual-testing loops with user)
+              → Finalize (session: phase-finalize runs, creates PR, writes pr_url)
+                → PR Created (cron detects new comments)
+                  → Addressing Comments (session: review-cycle runs)
+                    → PR Created (cron polls again)
+                      → Done (cron detects merge → completion cascade)
+```
+
+**Example trace (skipping manual testing):**
+
+```
+Ready for Work (Not Started)
+  → Design → Build → Automatic Testing
+    → Testing Router (resolver: no manual testing needed)
+      → Finalize (session: phase-finalize runs)
+        → Done (local mode, no PR)
 ```
