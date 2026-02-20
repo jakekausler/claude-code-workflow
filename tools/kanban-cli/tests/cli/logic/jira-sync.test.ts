@@ -7,6 +7,7 @@ import type { JiraSyncOptions } from '../../../src/cli/logic/jira-sync.js';
 import type { JiraExecutor } from '../../../src/jira/types.js';
 import type { StageRow } from '../../../src/db/repositories/types.js';
 import { KanbanDatabase } from '../../../src/db/database.js';
+import { RepoRepository, EpicRepository, TicketRepository, StageRepository } from '../../../src/db/repositories/index.js';
 import { syncRepo } from '../../../src/sync/sync.js';
 import type { PipelineConfig } from '../../../src/types/pipeline.js';
 
@@ -930,6 +931,94 @@ jira:
       );
 
       expect(result.event).toBe('first_stage_design');
+    });
+  });
+
+  // ─── Cross-repo stage isolation ──────────────────────────────────
+
+  describe('cross-repo stage isolation', () => {
+    it('only considers stages from the correct repo, ignoring same ticket ID in other repos', async () => {
+      // Set up the primary repo with a ticket whose stages are all "Not Started"
+      createEpic(repoDir, 'EPIC-001');
+      createTicket(repoDir, 'EPIC-001', 'TICKET-001-001', 'PROJ-1234');
+      createStage(repoDir, 'EPIC-001', 'TICKET-001-001', 'STAGE-001-001-001', 'Not Started');
+
+      // Sync the primary repo into the DB so it gets a repo_id
+      const config = {
+        workflow: testConfig.workflow,
+        jira: testConfig.jira,
+      };
+      syncRepo({ repoPath: repoDir, db, config });
+
+      // Now insert a "different repo" with a stage that has the same ticket_id
+      // but status "Complete" -- if cross-repo leaks, jiraSync would see all_stages_done
+      const repoRepo = new RepoRepository(db);
+      const otherRepoId = repoRepo.upsert('/other/repo', 'other-repo');
+
+      const epicRepo = new EpicRepository(db);
+      epicRepo.upsert({
+        id: 'EPIC-001',
+        repo_id: otherRepoId,
+        title: 'Other Epic',
+        status: 'Not Started',
+        jira_key: null,
+        file_path: '/other/repo/epics/EPIC-001/EPIC-001.md',
+        last_synced: new Date().toISOString(),
+      });
+
+      const ticketRepo = new TicketRepository(db);
+      ticketRepo.upsert({
+        id: 'TICKET-001-001',
+        epic_id: 'EPIC-001',
+        repo_id: otherRepoId,
+        title: 'Other Ticket',
+        status: 'Not Started',
+        jira_key: 'OTHER-999',
+        source: 'jira',
+        has_stages: 1,
+        file_path: '/other/repo/epics/EPIC-001/TICKET-001-001.md',
+        last_synced: new Date().toISOString(),
+      });
+
+      const stageRepo = new StageRepository(db);
+      stageRepo.upsert({
+        id: 'STAGE-OTHER-001',
+        ticket_id: 'TICKET-001-001',
+        epic_id: 'EPIC-001',
+        repo_id: otherRepoId,
+        title: 'Other Stage',
+        status: 'Complete',
+        kanban_column: 'done',
+        refinement_type: null,
+        worktree_branch: null,
+        pr_url: null,
+        pr_number: null,
+        priority: 0,
+        due_date: null,
+        session_active: 0,
+        locked_at: null,
+        locked_by: null,
+        file_path: '/other/repo/epics/EPIC-001/STAGE-OTHER-001.md',
+        last_synced: new Date().toISOString(),
+      });
+
+      // Verify the cross-repo stage exists in the DB
+      const allStagesForTicket = stageRepo.listByTicket('TICKET-001-001');
+      expect(allStagesForTicket).toHaveLength(2); // one from each repo
+
+      // Run jiraSync for the primary repo -- should only see the "Not Started" stage
+      const executor = createMockExecutor();
+      const result = await jiraSync(
+        { ticketId: 'TICKET-001-001', repoPath: repoDir },
+        executor,
+        db,
+      );
+
+      // The primary repo's stage is "Not Started", so event should be null (no action)
+      // If the bug were present, it would see the other repo's "Complete" stage too
+      // and compute all_stages_done
+      expect(result.event).toBeNull();
+      expect(result.actions).toHaveLength(0);
     });
   });
 

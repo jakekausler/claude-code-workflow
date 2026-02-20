@@ -499,6 +499,32 @@ describe('Repositories', () => {
       expect(stages.listByTicket('ticket-2')).toHaveLength(1);
     });
 
+    it('listByTicket with repoId filters by repo', () => {
+      const repos = new RepoRepository(db);
+      const epics = new EpicRepository(db);
+      const tickets = new TicketRepository(db);
+      const stages = new StageRepository(db);
+
+      const repoId1 = insertRepo(repos, '/test/repo1', 'repo-1');
+      const repoId2 = insertRepo(repos, '/test/repo2', 'repo-2');
+
+      insertEpic(epics, repoId1, 'epic-1');
+      insertEpic(epics, repoId2, 'epic-1');
+      insertTicket(tickets, repoId1, 'epic-1', 'ticket-1');
+      insertTicket(tickets, repoId2, 'epic-1', 'ticket-1');
+
+      stages.upsert(makeStageData(repoId1, { id: 'stage-r1-1', ticket_id: 'ticket-1' }));
+      stages.upsert(makeStageData(repoId1, { id: 'stage-r1-2', ticket_id: 'ticket-1' }));
+      stages.upsert(makeStageData(repoId2, { id: 'stage-r2-1', ticket_id: 'ticket-1' }));
+
+      // Without repoId: returns all 3
+      expect(stages.listByTicket('ticket-1')).toHaveLength(3);
+
+      // With repoId: scoped to each repo
+      expect(stages.listByTicket('ticket-1', repoId1)).toHaveLength(2);
+      expect(stages.listByTicket('ticket-1', repoId2)).toHaveLength(1);
+    });
+
     it('listByColumn returns stages in a specific kanban column', () => {
       const { stages, repoId } = setupStagePrereqs();
 

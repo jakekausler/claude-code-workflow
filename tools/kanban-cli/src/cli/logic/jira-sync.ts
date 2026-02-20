@@ -125,9 +125,9 @@ export async function jiraSync(
 
     const jiraKey = ticket.jira_key;
 
-    // Load stages for the ticket
+    // Load stages for the ticket, scoped to the same repo
     const stageRepo = new StageRepository(db);
-    const stages = stageRepo.listByTicket(ticketId);
+    const stages = stageRepo.listByTicket(ticketId, ticket.repo_id);
 
     // Compute workflow event
     const event = computeWorkflowEvent(stages);

@@ -88,9 +88,15 @@ export class StageRepository {
   }
 
   /**
-   * List all stages for a ticket.
+   * List all stages for a ticket, optionally scoped to a specific repo.
    */
-  listByTicket(ticketId: string): StageRow[] {
+  listByTicket(ticketId: string, repoId?: number): StageRow[] {
+    if (repoId !== undefined) {
+      return this.db
+        .raw()
+        .prepare('SELECT * FROM stages WHERE ticket_id = ? AND repo_id = ?')
+        .all(ticketId, repoId) as StageRow[];
+    }
     return this.db
       .raw()
       .prepare('SELECT * FROM stages WHERE ticket_id = ?')
