@@ -134,6 +134,15 @@ Steps 1-7 are IDENTICAL for local and remote mode. Steps 8+ diverge.
       `git add epics/EPIC-XXX-name/TICKET-XXX-YYY-name/STAGE-XXX-YYY-ZZZ.md epics/EPIC-XXX-name/TICKET-XXX-YYY-name/TICKET-XXX-YYY.md epics/EPIC-XXX-name/EPIC-XXX.md`
     - Commit message: "chore(TICKET-XXX-YYY): mark STAGE-XXX-YYY-ZZZ Complete"
     - **NEVER use `git add -A`** - it picks up unrelated uncommitted files
+
+13. [CONDITIONAL: Jira Status Sync]
+    IF ticket has `jira_key` in YAML frontmatter AND `writing_script` is configured in pipeline config:
+      - Run: `npx tsx src/cli/index.ts jira-sync TICKET-XXX-YYY --repo <path>`
+      - If exit code 0: report sync result to user
+      - If exit code 2 (`WORKFLOW_JIRA_CONFIRM=true`): show user the planned Jira changes, ask for confirmation using AskUserQuestion, re-run jira-sync if approved
+      - If exit code 1: report error, continue (don't block finalization on Jira failure)
+    ELSE (no `jira_key` or no `writing_script`):
+      Skip silently.
 ```
 
 ### Remote Mode (`WORKFLOW_REMOTE_MODE=true`)
@@ -282,7 +291,16 @@ Steps 1-7 are IDENTICAL for local and remote mode. Steps 8+ diverge.
     ELSE:
       Skip Jira transition.
 
-15. Delegate to doc-updater (Haiku) to update tracking documents via YAML frontmatter:
+15. [CONDITIONAL: Jira Status Sync]
+    IF ticket has `jira_key` in YAML frontmatter AND `writing_script` is configured in pipeline config:
+      - Run: `npx tsx src/cli/index.ts jira-sync TICKET-XXX-YYY --repo <path>`
+      - If exit code 0: report sync result to user
+      - If exit code 2 (`WORKFLOW_JIRA_CONFIRM=true`): show user the planned Jira changes, ask for confirmation using AskUserQuestion, re-run jira-sync if approved
+      - If exit code 1: report error, continue (don't block finalization on Jira failure)
+    ELSE (no `jira_key` or no `writing_script`):
+      Skip silently.
+
+16. Delegate to doc-updater (Haiku) to update tracking documents via YAML frontmatter:
     - Update stage YAML frontmatter:
       - Set Finalize phase complete
       - Set status to "PR Created" (NOT "Complete")
@@ -291,7 +309,7 @@ Steps 1-7 are IDENTICAL for local and remote mode. Steps 8+ diverge.
     - Update epic YAML frontmatter in EPIC-XXX.md if needed
     - Run `kanban-cli sync --stage STAGE-XXX-YYY-ZZZ` after status changes
 
-16. Main agent commits tracking files on the worktree branch:
+17. Main agent commits tracking files on the worktree branch:
     - `git add epics/EPIC-XXX-name/TICKET-XXX-YYY-name/STAGE-XXX-YYY-ZZZ.md epics/EPIC-XXX-name/TICKET-XXX-YYY-name/TICKET-XXX-YYY.md epics/EPIC-XXX-name/EPIC-XXX.md`
     - Commit message: "chore(TICKET-XXX-YYY): mark STAGE-XXX-YYY-ZZZ PR Created"
     - Push the tracking commit: `git push origin <worktree_branch>`
@@ -367,6 +385,7 @@ chore(TICKET-001-001): mark STAGE-001-001-001 PR Created
   - Ticket status updated if all stages complete
   - Epic status updated if all tickets complete
 - [ ] `kanban-cli sync --stage STAGE-XXX-YYY-ZZZ` executed after status changes
+- [ ] IF ticket has `jira_key` and `writing_script` configured: `jira-sync` executed
 
 ### Remote Mode
 - [ ] Implementation commit created on worktree branch (NO git add -A)
@@ -377,6 +396,7 @@ chore(TICKET-001-001): mark STAGE-001-001-001 PR Created
 - [ ] MR/PR URL captured and recorded
 - [ ] IF `WORKFLOW_SLACK_WEBHOOK` set: Slack notification sent
 - [ ] IF ticket has `jira_key`: Jira issue transitioned to "In Review"
+- [ ] IF ticket has `jira_key` and `writing_script` configured: `jira-sync` executed
 - [ ] Tracking documents updated via doc-updater (YAML frontmatter):
   - Finalize phase marked complete in stage file
   - Stage status set to "PR Created"

@@ -48,6 +48,8 @@ This skill handles converting tickets that have no stages (`stages: []`) into ti
    - Jira description (if `source: jira`)
    - Acceptance criteria (if present)
 
+   **Jira Context Note:** If ticket has `source: jira` and a `jira_key`, the ticket body may contain a detailed description imported from Jira. Use this context during stage breakdown brainstorming -- it often contains acceptance criteria, technical details, and scope information from the original Jira ticket.
+
 4. Read the parent epic file for broader context:
    - What other tickets exist in this epic
    - Epic-level description and goals
