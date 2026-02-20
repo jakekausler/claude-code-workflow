@@ -163,6 +163,11 @@ function executeScript<T>(
       resolve(result.data);
     });
 
+    // Prevent unhandled error events if child process exits before stdin is fully consumed
+    child.stdin.on('error', () => {
+      // Swallow — the 'close' handler will surface the real error via non-zero exit
+    });
+
     // Write input to stdin and close
     child.stdin.write(JSON.stringify(input));
     child.stdin.end();
