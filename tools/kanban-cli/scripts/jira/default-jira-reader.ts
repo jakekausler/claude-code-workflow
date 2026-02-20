@@ -35,6 +35,7 @@ function readStdin(): Promise<string> {
 function exitWithError(message: string, code: string): never {
   process.stderr.write(JSON.stringify({ error: message, code }));
   process.exit(1);
+  throw new Error('unreachable');
 }
 
 // ─── Spawning helper ─────────────────────────────────────────────────────────

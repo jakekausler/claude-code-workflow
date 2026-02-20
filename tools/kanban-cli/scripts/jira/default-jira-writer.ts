@@ -15,7 +15,7 @@
  */
 
 import { spawn } from 'node:child_process';
-import { writeFileSync, unlinkSync, rmdirSync, mkdtempSync } from 'node:fs';
+import { writeFileSync, unlinkSync, rmSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -37,6 +37,7 @@ function readStdin(): Promise<string> {
 function exitWithError(message: string, code: string): never {
   process.stderr.write(JSON.stringify({ error: message, code }));
   process.exit(1);
+  throw new Error('unreachable');
 }
 
 // ─── Spawning helper ─────────────────────────────────────────────────────────
@@ -131,11 +132,12 @@ async function jiraFetch(
     return { status, data: undefined };
   }
 
+  const text = await response.text();
   let data: any;
   try {
-    data = await response.json();
+    data = JSON.parse(text);
   } catch {
-    data = await response.text().catch(() => '');
+    data = text;
   }
 
   return { status, data };
@@ -151,8 +153,8 @@ async function assignTicket(key: string, assignee: string | null): Promise<void>
   const scriptPath = path.join(AT_PATH, 'skills/jira-writer/scripts/jira-write.ts');
 
   // atlassian-tools jira-write.ts uses --assignee with an account ID or "me"
-  // If assignee is null, we use "me" (the authenticated API user)
-  const assigneeArg = assignee === null ? 'me' : assignee;
+  // null or undefined means "assign to authenticated API user"
+  const assigneeArg = assignee == null ? 'me' : assignee;
 
   const result = await spawnScript(scriptPath, [
     '--key', key,
@@ -227,9 +229,9 @@ async function addComment(key: string, body: string): Promise<void> {
       // Ignore: file may not exist if script failed before writing
     }
     try {
-      rmdirSync(tmpDir);
+      rmSync(tmpDir, { recursive: true });
     } catch {
-      // Ignore: directory may not exist or may not be empty
+      // Ignore: directory may not exist
     }
   }
 }
