@@ -8,6 +8,7 @@ import { validateCommand } from './commands/validate.js';
 import { syncCommand } from './commands/sync.js';
 import { summaryCommand } from './commands/summary.js';
 import { migrateCommand } from './commands/migrate.js';
+import { jiraImportCommand } from './commands/jira-import.js';
 
 const program = new Command();
 
@@ -24,5 +25,6 @@ program.addCommand(validateCommand);
 program.addCommand(syncCommand);
 program.addCommand(summaryCommand);
 program.addCommand(migrateCommand);
+program.addCommand(jiraImportCommand);
 
 program.parse();
