@@ -355,7 +355,7 @@ Epic body.
       ).rejects.toThrow('No parent epic detected. Specify --epic EPIC-XXX');
     });
 
-    it('throws error when --epic refers to nonexistent directory', async () => {
+    it('throws error when --epic refers to nonexistent epic', async () => {
       const ticketData = createTicketData({
         key: 'PROJ-BAD-EPIC',
         type: 'Story',
@@ -372,7 +372,7 @@ Epic body.
           executor,
           db,
         ),
-      ).rejects.toThrow('Epic EPIC-999 not found');
+      ).rejects.toThrow('Epic EPIC-999 not found in database');
     });
 
     it('increments ticket ID within epic correctly', async () => {

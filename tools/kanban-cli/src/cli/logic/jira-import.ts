@@ -9,6 +9,14 @@ import { EpicRepository } from '../../db/repositories/epic-repository.js';
 import { TicketRepository } from '../../db/repositories/ticket-repository.js';
 import { syncRepo } from '../../sync/sync.js';
 
+/**
+ * Escape a string for safe embedding in double-quoted YAML values.
+ * Replaces backslashes first, then double quotes with their escaped forms.
+ */
+function yamlEscapeDoubleQuoted(value: string): string {
+  return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+}
+
 export interface JiraImportOptions {
   key: string;
   repoPath: string;
@@ -29,7 +37,7 @@ export interface JiraImportResult {
  * Scan existing epic directories in <repoPath>/epics/ to find the next EPIC-NNN ID.
  * Returns "EPIC-001" if no epics exist, otherwise increments the highest found.
  */
-function nextEpicId(repoPath: string): string {
+export function nextEpicId(repoPath: string): string {
   const epicsDir = path.join(repoPath, 'epics');
   if (!fs.existsSync(epicsDir)) {
     return 'EPIC-001';
@@ -57,7 +65,7 @@ function nextEpicId(repoPath: string): string {
  * Scan existing ticket files in an epic directory to find the next TICKET-NNN-MMM ID.
  * Returns "TICKET-NNN-001" if no tickets exist for this epic, otherwise increments the highest found.
  */
-function nextTicketId(repoPath: string, epicId: string): string {
+export function nextTicketId(repoPath: string, epicId: string): string {
   const epicMatch = epicId.match(/^EPIC-(\d+)$/);
   if (!epicMatch) {
     throw new Error(`Invalid epic ID format: ${epicId}`);
@@ -143,22 +151,17 @@ export async function jiraImport(
     }
     const repoId = repo.id;
 
-    // Check for duplicate import
+    // Check for duplicate import using targeted queries
     const epicRepo = new EpicRepository(db);
     const ticketRepo = new TicketRepository(db);
 
-    const existingEpics = epicRepo.listByRepo(repoId);
-    const existingTickets = ticketRepo.listByRepo(repoId);
-
-    for (const epic of existingEpics) {
-      if (epic.jira_key === key) {
-        throw new Error(`Jira ticket ${key} already imported as ${epic.id}`);
-      }
+    const existingEpic = epicRepo.findByJiraKey(repoId, key);
+    if (existingEpic) {
+      throw new Error(`Jira ticket ${key} already imported as ${existingEpic.id}`);
     }
-    for (const ticket of existingTickets) {
-      if (ticket.jira_key === key) {
-        throw new Error(`Jira ticket ${key} already imported as ${ticket.id}`);
-      }
+    const existingTicket = ticketRepo.findByJiraKey(repoId, key);
+    if (existingTicket) {
+      throw new Error(`Jira ticket ${key} already imported as ${existingTicket.id}`);
     }
 
     // Fetch Jira ticket data
@@ -173,9 +176,10 @@ export async function jiraImport(
       fs.mkdirSync(epicDir, { recursive: true });
 
       const filePath = path.join(epicDir, `${epicId}.md`);
+      const escapedTitle = yamlEscapeDoubleQuoted(jiraData.summary);
       const content = `---
 id: ${epicId}
-title: "${jiraData.summary}"
+title: "${escapedTitle}"
 status: Not Started
 jira_key: ${key}
 tickets: []
@@ -195,6 +199,7 @@ ${description}
         file_path: filePath,
         jira_key: key,
         title: jiraData.summary,
+        // Epics don't belong to a kanban column; "N/A" is informational output only
         column: 'N/A',
       };
     } else {
@@ -202,18 +207,24 @@ ${description}
       let parentEpicId: string;
 
       if (epicOverride) {
-        // Validate that the epic directory exists
+        // Validate that the epic exists in the database
+        const epicRecord = epicRepo.findById(epicOverride);
+        if (!epicRecord || epicRecord.repo_id !== repoId) {
+          throw new Error(
+            `Epic ${epicOverride} not found in database. Ensure it has been synced.`,
+          );
+        }
+        // Also verify the directory exists on disk (needed for writing files)
         const epicDir = path.join(repoPath, 'epics', epicOverride);
         if (!fs.existsSync(epicDir)) {
           throw new Error(
-            `Epic ${epicOverride} not found. Ensure the epic directory exists at epics/${epicOverride}/`,
+            `Epic ${epicOverride} directory not found at epics/${epicOverride}/`,
           );
         }
         parentEpicId = epicOverride;
       } else if (jiraData.parent) {
         // Look up the parent's local epic by jira_key
-        const allEpics = epicRepo.listByRepo(repoId);
-        const localEpic = allEpics.find((e) => e.jira_key === jiraData.parent);
+        const localEpic = epicRepo.findByJiraKey(repoId, jiraData.parent);
 
         if (!localEpic) {
           throw new Error(
@@ -230,10 +241,11 @@ ${description}
       const ticketId = nextTicketId(repoPath, parentEpicId);
       const filePath = path.join(repoPath, 'epics', parentEpicId, `${ticketId}.md`);
 
+      const escapedTitle = yamlEscapeDoubleQuoted(jiraData.summary);
       const content = `---
 id: ${ticketId}
 epic: ${parentEpicId}
-title: "${jiraData.summary}"
+title: "${escapedTitle}"
 status: Not Started
 jira_key: ${key}
 source: jira
@@ -255,6 +267,7 @@ ${description}
         jira_key: key,
         parent_epic: parentEpicId,
         title: jiraData.summary,
+        // Newly imported tickets land in "To Convert"; informational output, not pipeline-driven
         column: 'To Convert',
       };
     }

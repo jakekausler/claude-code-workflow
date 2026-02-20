@@ -62,4 +62,15 @@ export class EpicRepository {
       .prepare('SELECT * FROM epics WHERE repo_id = ?')
       .all(repoId) as EpicRow[];
   }
+
+  /**
+   * Find an epic by its Jira key within a repo.
+   */
+  findByJiraKey(repoId: number, jiraKey: string): EpicRow | null {
+    const row = this.db
+      .raw()
+      .prepare('SELECT * FROM epics WHERE jira_key = ? AND repo_id = ?')
+      .get(jiraKey, repoId) as EpicRow | undefined;
+    return row ?? null;
+  }
 }

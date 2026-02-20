@@ -78,4 +78,15 @@ export class TicketRepository {
       .prepare('SELECT * FROM tickets WHERE epic_id = ?')
       .all(epicId) as TicketRow[];
   }
+
+  /**
+   * Find a ticket by its Jira key within a repo.
+   */
+  findByJiraKey(repoId: number, jiraKey: string): TicketRow | null {
+    const row = this.db
+      .raw()
+      .prepare('SELECT * FROM tickets WHERE jira_key = ? AND repo_id = ?')
+      .get(jiraKey, repoId) as TicketRow | undefined;
+    return row ?? null;
+  }
 }
