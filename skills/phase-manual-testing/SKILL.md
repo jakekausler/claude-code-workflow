@@ -21,6 +21,8 @@ This skill is invoked when the stage status is **Manual Testing** (set after aut
 - Stage YAML frontmatter has been read (status, refinement_type, ticket, epic, etc.)
 - Note: if no `refinement_type` is set, use general functionality verification (treat as `custom`)
 
+**Re-entry note:** If re-entering Manual Testing, read existing `-manual-testing.md` sibling and append updated results.
+
 ## CRITICAL: Main Agent Coordination Only
 
 **The main agent is a COORDINATOR, not an executor.**
@@ -30,7 +32,7 @@ This skill is invoked when the stage status is **Manual Testing** (set after aut
 - Main agent walks the user through testing and facilitates approvals
 - Use the Task tool to spawn subagents for ALL file operations
 
-**If you're about to read a file, write content, or run a command (other than simple git) -- STOP -- Delegate to a subagent instead.**
+**If you're about to read a file, write content, or run a command (other than simple git) → STOP → Delegate to a subagent instead.**
 
 ## Phase Workflow
 
