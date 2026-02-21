@@ -51,7 +51,7 @@ export function countUnanalyzedLearnings(
     };
   }
 
-  const lines = rawOutput.trim().split('\n').filter(Boolean);
+  const lines = rawOutput.trim().split('\n').filter((line) => line.trim().length > 0);
   const basenames = lines.map((line) => path.basename(line));
 
   return {
