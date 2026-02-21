@@ -32,7 +32,7 @@ STAGE-XXX-YYY-ZZZ-<phase>.md
 | `phase-awaiting-design-decision` (new) | `-user-design-feedback.md` | Discussion log, user Q&A, rationale for selected approach, rejected alternatives |
 | `phase-build` | `-build.md` | Implementation decisions, problems encountered, deviations from design, key code changes |
 | `automatic-testing` | `-automatic-testing.md` | Test results, failures found, fixes applied |
-| Manual Testing (handled within refinement) | `-manual-testing.md` | User testing notes, feedback, issues found |
+| `phase-manual-testing` (new) | `-manual-testing.md` | User testing walkthrough, approval checklist by refinement type, pass/fail results |
 | `phase-finalize` | `-finalize.md` | Code review findings, documentation updates, PR details |
 
 ### 2.2 Stage File Stays Lean
@@ -120,9 +120,36 @@ Note: `kanban-cli sync` is NOT run by the skill — that is the Stage 6 orchestr
 
 **When `WORKFLOW_AUTO_DESIGN=true`:** This skill is never entered — `phase-design` transitions directly to Build.
 
-### 3.5 `ticket-stage-workflow` Routing Update
+### 3.5 New `phase-manual-testing` Skill
 
-Status "User Design Feedback" routes to `phase-awaiting-design-decision` (currently routes to `phase-design`).
+**Purpose:** Handles the "Manual Testing" status as its own session. Walks the user through what to test based on `refinement_type`, collects approvals, and does not end until the user approves everything.
+
+**Flow:**
+1. Read all `STAGE-XXX-YYY-ZZZ-*.md` sibling files for context (will include `-build.md`, `-automatic-testing.md` from prior phases)
+2. Read stage file for `refinement_type` from YAML frontmatter
+3. Generate testing checklist based on refinement type:
+   - **frontend**: Visual checks, responsive layout, accessibility, user interactions
+   - **backend**: API endpoint testing, data integrity, error responses
+   - **cli**: Command-line argument handling, output format, error messages
+   - **database**: Query correctness, migration testing, data consistency
+   - **infrastructure**: Deployment verification, config validation
+   - **custom**: General functionality verification
+4. Walk user through each test area, one at a time
+5. User tests and reports pass/fail for each area
+6. If any area fails: discuss, iterate, user re-tests until pass
+7. **Session does not end until all areas approved**
+8. Write testing walkthrough and results to `STAGE-XXX-YYY-ZZZ-manual-testing.md`
+9. Update stage file's Manual Testing section with approval checklist (checkboxes filled in)
+10. Phase exit gate:
+    - Update stage tracking file (set status → Finalize)
+    - Update ticket tracking file
+    - Invoke `lessons-learned` skill — **mandatory**
+    - Invoke `journal` skill — **mandatory**
+
+### 3.6 `ticket-stage-workflow` Routing Updates
+
+- Status "User Design Feedback" routes to `phase-awaiting-design-decision` (currently routes to `phase-design`)
+- Status "Manual Testing" routes to `phase-manual-testing` (new skill)
 
 ---
 
@@ -155,6 +182,7 @@ Every phase skill follows this exit gate order:
 | `phase-awaiting-design-decision` | `-user-design-feedback.md` | Yes | New skill — include |
 | `phase-build` | `-build.md` | Yes | Yes — verify |
 | `automatic-testing` | `-automatic-testing.md` | Yes | Verify |
+| `phase-manual-testing` | `-manual-testing.md` | Yes | New skill — include |
 | `phase-finalize` | `-finalize.md` | Yes | Yes — verify |
 
 ---
@@ -201,7 +229,8 @@ This is a standalone command. No integration with any phase skill or exit gate. 
 - Phase notes files pattern across all phase skills
 - `phase-design` auto-design behavior + notes file output
 - New `phase-awaiting-design-decision` skill
-- `ticket-stage-workflow` routing update for "User Design Feedback"
+- New `phase-manual-testing` skill
+- `ticket-stage-workflow` routing updates for "User Design Feedback" and "Manual Testing"
 - Phase notes in `phase-build`, `automatic-testing`, `phase-finalize`
 - Summary pipeline integration (read sister files)
 - `kanban-cli learnings-count` command

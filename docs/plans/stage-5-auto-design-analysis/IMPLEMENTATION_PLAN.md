@@ -8,19 +8,20 @@
 ## Dependency Graph
 
 ```
-Task 1 (summary pipeline) ─── independent
-Task 2 (phase-design) ──────── independent
-Task 3 (awaiting-design) ───── depends on Task 2 (needs to see phase-design pattern)
-Task 4 (workflow routing) ──── depends on Task 3 (needs new skill to exist)
-Task 5 (phase-build notes) ─── independent
-Task 6 (auto-testing notes) ── independent
-Task 7 (finalize notes) ────── independent
-Task 8 (learnings-count) ───── independent
-Task 9 (verify all) ────────── depends on all above
+Task 1 (summary pipeline) ──── independent
+Task 2 (phase-design) ───────── independent
+Task 3 (awaiting-design) ────── depends on Task 2 (needs to see phase-design pattern)
+Task 4 (workflow routing) ───── depends on Tasks 3 + 4a (needs both new skills to exist)
+Task 4a (manual-testing) ────── independent
+Task 5 (phase-build notes) ──── independent
+Task 6 (auto-testing notes) ─── independent
+Task 7 (finalize notes) ─────── independent
+Task 8 (learnings-count) ────── independent
+Task 9 (verify all) ─────────── depends on all above
 ```
 
 Parallel groups:
-- **Group A** (independent): Tasks 1, 2, 5, 6, 7, 8
+- **Group A** (independent): Tasks 1, 2, 4a, 5, 6, 7, 8
 - **Group B** (sequential after 2): Task 3, then Task 4
 - **Group C** (after all): Task 9
 
@@ -48,7 +49,7 @@ Parallel groups:
 - Unit test: sister files sorted by mtime
 - Integration test: summary of stage with sister files produces different hash than without
 
-**Status:** Not Started
+**Status:** Complete
 
 ---
 
@@ -105,17 +106,54 @@ Parallel groups:
 
 ---
 
-## Task 4: `ticket-stage-workflow` Routing Update
+## Task 4: `ticket-stage-workflow` Routing Updates
 
-**Goal:** Route "User Design Feedback" status to new `phase-awaiting-design-decision` skill.
+**Goal:** Route "User Design Feedback" and "Manual Testing" statuses to their new dedicated skills.
 
 **File:** `skills/ticket-stage-workflow/SKILL.md`
 
 **Changes:**
 1. Update status routing table: "User Design Feedback" → `phase-awaiting-design-decision` (was: `phase-design`)
-2. No other routing changes needed — auto-design never reaches User Design Feedback
+2. Update status routing table: "Manual Testing" → `phase-manual-testing` (new routing)
 
-**Tests:** Grep for `User Design Feedback` and `phase-awaiting-design-decision` in skill file.
+**Tests:** Grep for `phase-awaiting-design-decision` and `phase-manual-testing` in skill file.
+
+**Status:** Not Started
+
+---
+
+## Task 4a: New `phase-manual-testing` Skill
+
+**Goal:** Create new skill for the "Manual Testing" phase as its own session. Walks user through what to test based on `refinement_type`, collects approvals, session does not end until all areas approved.
+
+**File:** `skills/phase-manual-testing/SKILL.md` (new)
+
+**Content:**
+1. Header: name, description, trigger (status = "Manual Testing")
+2. Session start: read all `STAGE-XXX-YYY-ZZZ-*.md` sibling files for context
+3. Read `refinement_type` from stage file YAML frontmatter
+4. Generate testing checklist based on refinement type:
+   - **frontend**: Visual checks, responsive layout, accessibility, user interactions
+   - **backend**: API endpoint testing, data integrity, error responses
+   - **cli**: Command-line argument handling, output format, error messages
+   - **database**: Query correctness, migration testing, data consistency
+   - **infrastructure**: Deployment verification, config validation
+   - **custom**: General functionality verification
+5. Walk user through each test area one at a time
+6. User tests and reports pass/fail for each area
+7. If any area fails: discuss, iterate, user re-tests until pass
+8. **Session does not end until all areas approved**
+9. Write testing walkthrough and results to `STAGE-XXX-YYY-ZZZ-manual-testing.md`
+10. Update stage file's Manual Testing section with approval checklist (checkboxes filled in)
+11. Exit gate:
+    - Update stage tracking (status → Finalize)
+    - Update ticket tracking
+    - Invoke `lessons-learned` — mandatory
+    - Invoke `journal` — mandatory
+
+**Pattern reference:** Follow `phase-awaiting-design-decision` and `phase-finalize` exit gate patterns.
+
+**Tests:** Grep for key terms: `sibling`, `manual-testing.md`, `refinement_type`, `lessons-learned`, `journal`, `Finalize`
 
 **Status:** Not Started
 
