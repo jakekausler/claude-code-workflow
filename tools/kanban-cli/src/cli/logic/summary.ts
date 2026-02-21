@@ -44,13 +44,58 @@ function getIdType(id: string): 'epic' | 'ticket' | 'stage' | 'unknown' {
 
 // ---------- File content reader ----------
 
-function readStageFileContent(stageFilePath: string, repoPath: string): string | null {
+export function readStageFileContent(stageFilePath: string, repoPath: string): string | null {
   const filePath = path.isAbsolute(stageFilePath)
     ? stageFilePath
     : path.join(repoPath, stageFilePath);
 
   try {
-    return fs.readFileSync(filePath, 'utf-8');
+    const mainContent = fs.readFileSync(filePath, 'utf-8');
+    const dir = path.dirname(filePath);
+    const mainBasename = path.basename(filePath);
+
+    // Derive the stage ID prefix (e.g. "STAGE-001-001-001" from "STAGE-001-001-001.md")
+    const stageIdPrefix = path.basename(filePath, '.md');
+
+    // Find sister files matching STAGE-001-001-001-*.md
+    let sisterFiles: string[] = [];
+    try {
+      const dirEntries = fs.readdirSync(dir);
+      sisterFiles = dirEntries.filter(
+        (name) =>
+          name !== mainBasename &&
+          name.startsWith(stageIdPrefix + '-') &&
+          name.endsWith('.md')
+      );
+    } catch {
+      // If directory listing fails, just return the main file
+    }
+
+    if (sisterFiles.length === 0) {
+      // Single file: still include filename header for consistency
+      return `--- ${mainBasename} ---\n${mainContent}`;
+    }
+
+    // Build array of { basename, fullPath } for main + sisters
+    const allFiles = [
+      { basename: mainBasename, fullPath: filePath },
+      ...sisterFiles.map((name) => ({ basename: name, fullPath: path.join(dir, name) })),
+    ];
+
+    // Sort by file modification time (ascending)
+    allFiles.sort((a, b) => {
+      const aMtime = fs.statSync(a.fullPath).mtimeMs;
+      const bMtime = fs.statSync(b.fullPath).mtimeMs;
+      return aMtime - bMtime;
+    });
+
+    // Concatenate with filename headers
+    const parts = allFiles.map((f) => {
+      const content = fs.readFileSync(f.fullPath, 'utf-8');
+      return `--- ${f.basename} ---\n${content}`;
+    });
+
+    return parts.join('\n\n');
   } catch {
     return null;
   }
