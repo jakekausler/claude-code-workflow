@@ -146,10 +146,24 @@ Note: `kanban-cli sync` is NOT run by the skill — that is the Stage 6 orchestr
     - Invoke `lessons-learned` skill — **mandatory**
     - Invoke `journal` skill — **mandatory**
 
-### 3.6 `ticket-stage-workflow` Routing Updates
+### 3.6 `ticket-stage-workflow` Refactor
 
-- Status "User Design Feedback" routes to `phase-awaiting-design-decision` (currently routes to `phase-design`)
-- Status "Manual Testing" routes to `phase-manual-testing` (new skill)
+The `ticket-stage-workflow` skill is refactored from a monolithic routing/protocol/documentation skill into a slim **session context skill** that provides only shared conventions and file format documentation. The orchestrator (Stage 6) includes it in every phase session prompt.
+
+**What stays in `ticket-stage-workflow`:**
+- Stage file YAML format and field definitions
+- File path conventions (epic/ticket/stage hierarchy)
+- Frontmatter field descriptions and valid values
+- How to read/write stage data correctly
+
+**What is removed:**
+- Status → skill routing table (moves to orchestrator logic in Stage 6)
+- Phase descriptions and phase-specific guidance (already in each phase skill)
+- Session protocol documentation (already in each phase skill's exit gate)
+- Environment variable documentation (moves to the specific phase skill that uses each var)
+- Orchestrator-level concerns (pipeline state machine, dependency resolution)
+
+**Rationale:** Phases are configurable — different projects may use different skills for the same pipeline status. A central routing table in a skill file is the wrong place for this mapping. The orchestrator owns routing; the phase skills own their own behavior; `ticket-stage-workflow` owns shared data conventions.
 
 ---
 

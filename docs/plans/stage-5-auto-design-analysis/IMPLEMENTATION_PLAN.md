@@ -11,7 +11,7 @@
 Task 1 (summary pipeline) ──── independent
 Task 2 (phase-design) ───────── independent
 Task 3 (awaiting-design) ────── depends on Task 2 (needs to see phase-design pattern)
-Task 4 (workflow routing) ───── depends on Tasks 3 + 4a (needs both new skills to exist)
+Task 4 (workflow refactor) ──── independent (no longer depends on new skills)
 Task 4a (manual-testing) ────── independent
 Task 5 (phase-build notes) ──── independent
 Task 6 (auto-testing notes) ─── independent
@@ -106,17 +106,26 @@ Parallel groups:
 
 ---
 
-## Task 4: `ticket-stage-workflow` Routing Updates
+## Task 4: `ticket-stage-workflow` Refactor to Session Context Skill
 
-**Goal:** Route "User Design Feedback" and "Manual Testing" statuses to their new dedicated skills.
+**Goal:** Strip `ticket-stage-workflow` down to a slim session context skill containing only shared conventions and file format documentation. Remove routing, phase descriptions, session protocol, env vars, and orchestrator concerns.
 
 **File:** `skills/ticket-stage-workflow/SKILL.md`
 
-**Changes:**
-1. Update status routing table: "User Design Feedback" → `phase-awaiting-design-decision` (was: `phase-design`)
-2. Update status routing table: "Manual Testing" → `phase-manual-testing` (new routing)
+**What stays:**
+- Stage file YAML format and field definitions
+- File path conventions (epic/ticket/stage hierarchy)
+- Frontmatter field descriptions and valid values
+- How to read/write stage data correctly
 
-**Tests:** Grep for `phase-awaiting-design-decision` and `phase-manual-testing` in skill file.
+**What is removed:**
+- Status → skill routing table (orchestrator's responsibility, Stage 6)
+- Phase descriptions and phase-specific guidance (in each phase skill)
+- Session protocol documentation (in each phase skill's exit gate)
+- Environment variable documentation (in the specific phase skill that uses each var)
+- Orchestrator-level concerns (pipeline state machine, dependency resolution)
+
+**Tests:** Verify the refactored file does NOT contain: routing table, phase descriptions, `kanban-cli sync`, orchestrator concerns. Verify it DOES contain: YAML format, frontmatter fields, file path conventions.
 
 **Status:** Not Started
 
@@ -155,7 +164,7 @@ Parallel groups:
 
 **Tests:** Grep for key terms: `sibling`, `manual-testing.md`, `refinement_type`, `lessons-learned`, `journal`, `Finalize`
 
-**Status:** Not Started
+**Status:** Complete
 
 ---
 
