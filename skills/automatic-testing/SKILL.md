@@ -15,6 +15,34 @@ The Automatic Testing phase validates the implementation through type-specific t
 - `ticket-stage-workflow` skill has been invoked (shared data conventions loaded)
 - Stage YAML frontmatter contains `refinement_type` (array of one or more types)
 
+**Re-entry note:** If re-entering Automatic Testing (e.g., kicked back from Manual Testing), read existing `-automatic-testing.md` sibling and overwrite with updated test results.
+
+## Phase Workflow (Start of Session)
+
+```
+1. Read all sibling files for prior context
+   Delegate to Explore (built-in) to read ALL `STAGE-XXX-YYY-ZZZ-*.md` sibling
+   files in the same ticket directory. This will include:
+   - `STAGE-XXX-YYY-ZZZ-design.md` (design research from Design phase)
+   - `STAGE-XXX-YYY-ZZZ-user-design-feedback.md` (decision rationale, if present)
+   - `STAGE-XXX-YYY-ZZZ-build.md` (build notes from Build phase)
+   - Any other sibling notes files from prior phases
+
+2. Read refinement_type from stage YAML frontmatter
+   → Determine the checklist (see below)
+
+3. Execute type-specific testing workflows (see Workflow by Refinement Type)
+
+4. After all types approved, prepare automatic-testing session notes
+   (DO NOT write files yet — exit gate handles all writes)
+
+   Content for `STAGE-XXX-YYY-ZZZ-automatic-testing.md`:
+   - Test results (pass/fail counts, specific failures)
+   - Failures found and fixes applied
+   - Test coverage observations
+   - Issues deferred to manual testing
+```
+
 ## Determining the Checklist
 
 Read `refinement_type` from the stage's YAML frontmatter. This field is an array — when multiple types are listed, combine all checklists (all approvals required).
@@ -265,12 +293,12 @@ Example: approve — retract — approve — retract — "approve all"
 ```
 1. User tests Desktop
 2. User reports any issues
-3. [IF issues] -> Fix -> Verify
+3. [IF issues] → Fix → Verify
 4. [LOOP until Desktop approved]
 
 5. User tests Mobile
 6. User reports any issues
-7. [IF issues] -> Fix -> Verify
+7. [IF issues] → Fix → Verify
 8. [LOOP until Mobile approved]
 ```
 
@@ -278,7 +306,7 @@ Example: approve — retract — approve — retract — "approve all"
 
 ```
 1. Design and run API/integration/E2E tests
-2. [IF issues found] -> Fix -> Verify
+2. [IF issues found] → Fix → Verify
 3. [LOOP until E2E Tests approved]
 ```
 
@@ -287,7 +315,7 @@ Example: approve — retract — approve — retract — "approve all"
 ```
 1. Test CLI commands and behavior
 2. User verifies output, flags, edge cases
-3. [IF issues found] -> Fix -> Verify
+3. [IF issues found] → Fix → Verify
 4. [LOOP until CLI Behavior approved]
 ```
 
@@ -296,11 +324,11 @@ Example: approve — retract — approve — retract — "approve all"
 ```
 1. Run migration on test data
 2. Verify migration integrity (up and down)
-3. [IF issues found] -> Fix -> Verify
+3. [IF issues found] → Fix → Verify
 4. [LOOP until Migration Verified]
 
 5. Validate data integrity post-migration
-6. [IF issues found] -> Fix -> Verify
+6. [IF issues found] → Fix → Verify
 7. [LOOP until Data Integrity Approved]
 ```
 
@@ -309,7 +337,7 @@ Example: approve — retract — approve — retract — "approve all"
 ```
 1. Deploy to test/staging environment
 2. Verify deployment health and behavior
-3. [IF issues found] -> Fix -> Verify
+3. [IF issues found] → Fix → Verify
 4. [LOOP until Deployment Verified]
 ```
 
@@ -318,7 +346,7 @@ Example: approve — retract — approve — retract — "approve all"
 ```
 1. Load user-defined approval criteria from Design phase notes
 2. Test each criterion
-3. [IF issues found] -> Fix -> Verify
+3. [IF issues found] → Fix → Verify
 4. [LOOP until all custom approvals granted]
 ```
 
@@ -326,10 +354,30 @@ Example: approve — retract — approve — retract — "approve all"
 
 ```
 1. Ensure Regression Items Added to ticket's regression.md
-2. Update stage tracking file:
-   - Mark Automatic Testing phase complete in STAGE-XXX-YYY-ZZZ.md
-   - Update stage status in ticket's TICKET-XXX-YYY.md table (MANDATORY)
+2. Prepare automatic-testing session notes for `-automatic-testing.md`
+   (DO NOT write files yet → exit gate handles all writes)
 ```
+
+## Automatic Testing Notes File (`STAGE-XXX-YYY-ZZZ-automatic-testing.md`)
+
+The automatic testing notes sibling file captures testing context so later phases (Manual Testing, Finalize) can reference it. It lives alongside the stage file:
+
+```
+epics/EPIC-XXX/TICKET-XXX-YYY/STAGE-XXX-YYY-ZZZ.md                             # stage tracking (lean)
+epics/EPIC-XXX/TICKET-XXX-YYY/STAGE-XXX-YYY-ZZZ-design.md                      # design research
+epics/EPIC-XXX/TICKET-XXX-YYY/STAGE-XXX-YYY-ZZZ-user-design-feedback.md        # decision rationale
+epics/EPIC-XXX/TICKET-XXX-YYY/STAGE-XXX-YYY-ZZZ-build.md                       # build notes
+epics/EPIC-XXX/TICKET-XXX-YYY/STAGE-XXX-YYY-ZZZ-automatic-testing.md           # automatic testing notes (this phase)
+```
+
+**Contents of the automatic testing notes file:**
+
+- Test results (pass/fail counts, specific failures)
+- Failures found and fixes applied
+- Test coverage observations
+- Issues deferred to manual testing
+
+**The main stage file stays lean.** Only automatic testing phase completion status goes in the stage file. Full testing context lives in `-automatic-testing.md`.
 
 ## Status Values
 
@@ -365,12 +413,11 @@ The checklist is dynamically constructed from `refinement_type`. All items from 
 - [ ] All user-defined approvals granted
 
 ### Always Required
+- [ ] All sibling files read for context (design, build, user-design-feedback notes)
 - [ ] Regression items added to ticket's `regression.md`
 - [ ] **Remember**: ANY code change resets ALL approvals for ALL types
-- [ ] Tracking documents updated:
-  - Automatic Testing phase marked complete in stage file
-  - Ticket stage status updated (MANDATORY)
-  - Regression items added to ticket's regression.md
+- [ ] Automatic testing session notes prepared for `-automatic-testing.md`
+- [ ] Exit gate completed (all file writes and tracking updates happen there)
 
 ---
 
@@ -381,35 +428,40 @@ The checklist is dynamically constructed from `refinement_type`. All items from 
 **YOU MUST STILL:**
 
 - Complete ALL exit gate steps in order
+- Write automatic testing notes to `-automatic-testing.md` sibling file
 - Invoke lessons-learned skill (even if "nothing to capture")
 - Invoke journal skill (even if brief)
-- Update ALL tracking documents
+- Update ALL tracking documents via doc-updater
 
-**Time pressure is not a workflow exception.** Fast delivery comes from efficient coordination, not from skipping safety checks. Exit gates take 2-3 minutes total.
+**Time pressure is not a workflow exception.** Fast delivery comes from efficient subagent coordination, not from skipping safety checks. Exit gates take 2-3 minutes total.
 
 ---
 
 ## Phase Exit Gate (MANDATORY)
 
-Before proceeding to Finalize phase, you MUST complete these steps IN ORDER:
+Before completing the Automatic Testing phase, you MUST complete these steps IN ORDER.
+This is the SINGLE authoritative checklist -- all file writes happen here, not in the workflow steps above.
 
-1. Update stage tracking file (mark Automatic Testing phase complete)
-2. Update ticket tracking file (update stage status in table)
-3. Verify regression items were added to ticket's regression.md
-4. Run `kanban-cli sync --stage STAGE-XXX-YYY-ZZZ` to sync state
-5. Use Skill tool to invoke `lessons-learned`
-6. Use Skill tool to invoke `journal`
+1. Delegate to doc-updater (Haiku) to write automatic testing artifacts:
+   a. Write automatic testing session notes to `STAGE-XXX-YYY-ZZZ-automatic-testing.md` sibling file (test results, failures found and fixes applied, coverage observations, issues deferred to manual testing)
+2. Delegate to doc-updater (Haiku) to update tracking documents:
+   a. Mark Automatic Testing phase complete in `STAGE-XXX-YYY-ZZZ.md`
+   b. Set stage status → Manual Testing in `STAGE-XXX-YYY-ZZZ.md`
+   c. Update stage status in `TICKET-XXX-YYY.md` (MANDATORY)
+   d. Update ticket status in `EPIC-XXX.md` if needed
+   e. Verify regression items were added to ticket's `regression.md`
+3. Use Skill tool to invoke `lessons-learned` -- **mandatory, no exceptions**
+4. Use Skill tool to invoke `journal` -- **mandatory, no exceptions**
 
 **Why this order?**
 
-- Steps 1-2: Establish facts (phase done, status updated)
-- Step 3: Verify artifacts were created during workflow
-- Step 4: Sync kanban state with file changes
-- Steps 5-6: Capture learnings and feelings based on the now-complete phase
+- Step 1: Persist testing context before anything else (if session crashes, testing notes are saved)
+- Step 2: Establish facts (phase done, status updated to Manual Testing in all tracking files)
+- Steps 3-4: Capture learnings and feelings based on the now-complete phase
 
-Lessons and journal need the full phase context, including final status updates. Running them before status updates means they lack complete information.
+**After exit gate completes:**
 
-After completing all exit gate steps, use Skill tool to invoke `phase-finalize` to begin the next phase.
+Use Skill tool to invoke `phase-finalize` to begin the next phase.
 
 **DO NOT skip any exit gate step. DO NOT proceed until all steps are done.**
 
