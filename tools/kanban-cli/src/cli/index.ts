@@ -10,6 +10,7 @@ import { summaryCommand } from './commands/summary.js';
 import { migrateCommand } from './commands/migrate.js';
 import { jiraImportCommand } from './commands/jira-import.js';
 import { jiraSyncCommand } from './commands/jira-sync.js';
+import { learningsCountCommand } from './commands/learnings-count.js';
 
 const program = new Command();
 
@@ -28,5 +29,6 @@ program.addCommand(summaryCommand);
 program.addCommand(migrateCommand);
 program.addCommand(jiraImportCommand);
 program.addCommand(jiraSyncCommand);
+program.addCommand(learningsCountCommand);
 
 program.parse();
