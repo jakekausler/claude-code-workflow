@@ -15,6 +15,8 @@ The Build phase implements the selected approach from Design. It creates working
 - `ticket-stage-workflow` skill has been invoked (shared data conventions loaded)
 - Stage YAML frontmatter has been read (status, refinement_type, ticket, epic, worktree_branch, etc.)
 
+**Re-entry note:** If re-entering Build (e.g., kicked back from Automatic Testing), read existing `-build.md` sibling and overwrite with updated implementation notes.
+
 ## Worktree Awareness
 
 Before implementation begins, check if `worktree_branch` is set in the stage's YAML frontmatter.
