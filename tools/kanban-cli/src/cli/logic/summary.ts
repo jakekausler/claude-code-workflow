@@ -82,16 +82,18 @@ export function readStageFileContent(stageFilePath: string, repoPath: string): s
       ...sisterFiles.map((name) => ({ basename: name, fullPath: path.join(dir, name) })),
     ];
 
-    // Sort by file modification time (ascending)
-    allFiles.sort((a, b) => {
-      const aMtime = fs.statSync(a.fullPath).mtimeMs;
-      const bMtime = fs.statSync(b.fullPath).mtimeMs;
-      return aMtime - bMtime;
-    });
+    // Cache mtime values before sorting (O(n) stat calls instead of O(n log n))
+    const allFilesWithMtime = allFiles.map((f) => ({
+      ...f,
+      mtimeMs: fs.statSync(f.fullPath).mtimeMs,
+    }));
 
-    // Concatenate with filename headers
-    const parts = allFiles.map((f) => {
-      const content = fs.readFileSync(f.fullPath, 'utf-8');
+    // Sort by file modification time (ascending)
+    allFilesWithMtime.sort((a, b) => a.mtimeMs - b.mtimeMs);
+
+    // Concatenate with filename headers, reusing mainContent for the main file
+    const parts = allFilesWithMtime.map((f) => {
+      const content = f.fullPath === filePath ? mainContent : fs.readFileSync(f.fullPath, 'utf-8');
       return `--- ${f.basename} ---\n${content}`;
     });
 

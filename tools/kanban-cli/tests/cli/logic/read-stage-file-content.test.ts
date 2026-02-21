@@ -3,6 +3,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import { readStageFileContent } from '../../../src/cli/logic/summary.js';
+import { computeHash } from '../../../src/cli/logic/summary-engine.js';
 
 describe('readStageFileContent', () => {
   let tmpDir: string;
@@ -183,5 +184,30 @@ describe('readStageFileContent', () => {
     expect(result).toBe(
       '--- STAGE-001-001-001.md ---\nMain.\n\n--- STAGE-001-001-001-design.md ---\nDesign.'
     );
+  });
+
+  it('content hash changes when a sister file is added', () => {
+    const stageDir = path.join(tmpDir, 'stages');
+    fs.mkdirSync(stageDir, { recursive: true });
+
+    const mainFile = path.join(stageDir, 'STAGE-001-001-001.md');
+    fs.writeFileSync(mainFile, 'Main stage content.');
+
+    // Compute hash without sister files
+    const contentBefore = readStageFileContent(mainFile, tmpDir);
+    expect(contentBefore).not.toBeNull();
+    const hashBefore = computeHash(contentBefore!);
+
+    // Add a sister file
+    const sisterFile = path.join(stageDir, 'STAGE-001-001-001-design.md');
+    fs.writeFileSync(sisterFile, 'Design notes.');
+
+    // Compute hash with sister file present
+    const contentAfter = readStageFileContent(mainFile, tmpDir);
+    expect(contentAfter).not.toBeNull();
+    const hashAfter = computeHash(contentAfter!);
+
+    // Hashes must differ — summary cache auto-invalidates when sisters are added
+    expect(hashBefore).not.toBe(hashAfter);
   });
 });
