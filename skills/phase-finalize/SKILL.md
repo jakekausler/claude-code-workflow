@@ -13,6 +13,9 @@ The Finalize phase ensures code quality through review, adds tests if needed, cr
 
 - Automatic Testing and Manual Testing phases are complete (user testing passed)
 - `ticket-stage-workflow` skill has been invoked (shared data conventions loaded)
+- Stage YAML frontmatter has been read (status, refinement_type, ticket, epic, worktree_branch, etc.)
+
+**Re-entry note:** If re-entering Finalize (e.g., addressing review comments), read existing `-finalize.md` sibling and overwrite with updated finalization notes.
 
 ## CRITICAL: Every Step Uses Subagents
 
@@ -57,23 +60,31 @@ When remote mode is active, determine which platform CLI to use:
 
 ## Phase Workflow
 
-Steps 1-7 are IDENTICAL for local and remote mode. Steps 8+ diverge.
+Steps 1-8 are IDENTICAL for local and remote mode. Steps 9+ diverge.
 
 ```
-1. Delegate to code-reviewer (Opus) for pre-test code review
+1. Read all sibling files for prior context
+   Delegate to Explore (built-in) to read ALL `STAGE-XXX-YYY-ZZZ-*.md` sibling
+   files in the same ticket directory. This will include:
+   - `STAGE-XXX-YYY-ZZZ-design.md` (design research from Design phase)
+   - `STAGE-XXX-YYY-ZZZ-build.md` (implementation notes from Build phase)
+   - `STAGE-XXX-YYY-ZZZ-user-design-feedback.md` (decision rationale, if present)
+   - Any other sibling notes files from prior phases
 
-2. [Implement ALL review suggestions]
+2. Delegate to code-reviewer (Opus) for pre-test code review
+
+3. [Implement ALL review suggestions]
    → Delegate to fixer (Haiku) or scribe (Haiku) as appropriate
    ALL suggestions are mandatory regardless of severity
 
-3. [CONDITIONAL: Test writing]
+4. [CONDITIONAL: Test writing]
    IF tests were NOT written during Build phase:
      → Delegate to test-writer (Sonnet) to write missing tests
 
-4. Delegate to tester (Haiku) to run all tests
+5. Delegate to tester (Haiku) to run all tests
 
-5. [CONDITIONAL: Second code review]
-   IF implementation code changed after step 2 OR existing code/tests were refactored:
+6. [CONDITIONAL: Second code review]
+   IF implementation code changed after step 3 OR existing code/tests were refactored:
      → Delegate to code-reviewer (Opus) for post-test review
    ELSE (ONLY new test files added, zero changes to existing code):
      → Skip second review
@@ -99,83 +110,89 @@ Steps 1-7 are IDENTICAL for local and remote mode. Steps 8+ diverge.
    - First review approves the approach; second review verifies execution
    - "I'm just following reviewer guidance" → You still made implementation choices
 
-6. [CONDITIONAL: Documentation]
+7. [CONDITIONAL: Documentation]
    IF complex feature OR API OR public-facing:
      → Delegate to doc-writer (Opus)
    ELSE (simple internal change):
      → Delegate to doc-writer-lite (Sonnet) OR skip if minimal
 
-7. Delegate to doc-updater (Haiku) to write to changelog/<date>.changelog.md
+8. Delegate to doc-updater (Haiku) to write to changelog/<date>.changelog.md
 ```
 
 ### Local Mode (default, `WORKFLOW_REMOTE_MODE=false`)
 
 ```
-8. Main agent creates implementation commit:
-   - ONLY add implementation files (code, tests, docs): `git add <specific files>`
-   - Include epic/ticket/stage reference in commit message
-     (e.g., "feat(EPIC-001/TICKET-001-001/STAGE-001-001-001): implement login form")
-   - **NEVER use `git add -A`** - it picks up uncommitted tracking files
+9.  Main agent creates implementation commit:
+    - ONLY add implementation files (code, tests, docs): `git add <specific files>`
+    - Include epic/ticket/stage reference in commit message
+      (e.g., "feat(EPIC-001/TICKET-001-001/STAGE-001-001-001): implement login form")
+    - **NEVER use `git add -A`** — it picks up uncommitted tracking files
 
-9. Delegate to doc-updater (Haiku) to add commit hash to changelog entry
+10. Delegate to doc-updater (Haiku) to add commit hash to changelog entry
 
-10. Main agent commits changelog update:
+11. Main agent commits changelog update:
     - ONLY commit changelog: `git add changelog/<date>.changelog.md`
     - Commit message: "chore(TICKET-XXX-YYY): add commit hash to STAGE-XXX-YYY-ZZZ changelog"
 
-11. Delegate to doc-updater (Haiku) to update tracking documents via YAML frontmatter:
+12. Delegate to doc-updater (Haiku) to update tracking documents via YAML frontmatter:
     - Update stage YAML frontmatter: set Finalize phase complete, status to "Complete"
     - Update ticket YAML frontmatter in TICKET-XXX-YYY.md (update stage status)
     - Update epic YAML frontmatter in EPIC-XXX.md if all tickets in epic are complete
-    - Run `kanban-cli sync --stage STAGE-XXX-YYY-ZZZ` after status changes
 
-12. Main agent commits tracking files:
+13. Main agent commits tracking files:
     - ONLY commit tracking files:
       `git add epics/EPIC-XXX-name/TICKET-XXX-YYY-name/STAGE-XXX-YYY-ZZZ.md epics/EPIC-XXX-name/TICKET-XXX-YYY-name/TICKET-XXX-YYY.md epics/EPIC-XXX-name/EPIC-XXX.md`
     - Commit message: "chore(TICKET-XXX-YYY): mark STAGE-XXX-YYY-ZZZ Complete"
-    - **NEVER use `git add -A`** - it picks up unrelated uncommitted files
+    - **NEVER use `git add -A`** — it picks up unrelated uncommitted files
 
-13. [CONDITIONAL: Jira Status Sync]
+14. [CONDITIONAL: Jira Status Sync]
     IF ticket has `jira_key` in YAML frontmatter AND `writing_script` is configured in pipeline config:
-      - Run: `npx tsx src/cli/index.ts jira-sync TICKET-XXX-YYY --repo <path>`
-      - If exit code 0: report sync result to user
-      - If exit code 2 (`WORKFLOW_JIRA_CONFIRM=true`): show user the planned Jira changes, ask for confirmation using AskUserQuestion, re-run jira-sync if approved
-      - If exit code 1: report error, continue (don't block finalization on Jira failure)
+      → Run: `npx tsx src/cli/index.ts jira-sync TICKET-XXX-YYY --repo <path>`
+      → If exit code 0: report sync result to user
+      → If exit code 2 (`WORKFLOW_JIRA_CONFIRM=true`): show user the planned Jira changes, ask for confirmation using AskUserQuestion, re-run jira-sync if approved
+      → If exit code 1: report error, continue (don't block finalization on Jira failure)
     ELSE (no `jira_key` or no `writing_script`):
       Skip silently.
+
+15. Prepare finalize session notes (DO NOT write files yet — exit gate handles all writes)
+
+    Content for `STAGE-XXX-YYY-ZZZ-finalize.md`:
+    - Code review findings and resolutions
+    - Documentation updates made
+    - Final verification results
 ```
 
 ### Remote Mode (`WORKFLOW_REMOTE_MODE=true`)
 
 ```
-8. Main agent creates implementation commit on the WORKTREE BRANCH (not main):
-   - Ensure you are on the worktree branch: `git branch --show-current`
-   - Branch should match `worktree_branch` from stage YAML frontmatter
-   - ONLY add implementation files (code, tests, docs): `git add <specific files>`
-   - Include epic/ticket/stage reference in commit message
-     (e.g., "feat(EPIC-001/TICKET-001-001/STAGE-001-001-001): implement login form")
-   - **NEVER use `git add -A`**
+9.  Main agent creates implementation commit on the WORKTREE BRANCH (not main):
+    - Ensure you are on the worktree branch: `git branch --show-current`
+    - Branch should match `worktree_branch` from stage YAML frontmatter
+    - ONLY add implementation files (code, tests, docs): `git add <specific files>`
+    - Include epic/ticket/stage reference in commit message
+      (e.g., "feat(EPIC-001/TICKET-001-001/STAGE-001-001-001): implement login form")
+    - **NEVER use `git add -A`**
 
-9. Delegate to doc-updater (Haiku) to add commit hash to changelog entry
+10. Delegate to doc-updater (Haiku) to add commit hash to changelog entry
 
-10. Main agent commits changelog update on the worktree branch:
+11. Main agent commits changelog update on the worktree branch:
     - `git add changelog/<date>.changelog.md`
     - Commit message: "chore(TICKET-XXX-YYY): add commit hash to STAGE-XXX-YYY-ZZZ changelog"
 
-11. Push branch to remote:
+12. Push branch to remote:
     ```bash
     git push -u origin <worktree_branch>
     ```
     If push fails due to remote rejection, report the error and stop.
 
-12. Create MR/PR via platform CLI:
+13. Create MR/PR via platform CLI:
 
     **Read stage, ticket, and epic YAML frontmatter** to gather:
     - Stage title (for PR title)
     - Stage overview (for description)
     - Ticket `jira_key` (if set)
     - Epic `jira_key` (if set)
-    - Test results summary from steps 3-4
+    - Test results summary from steps 4-5
 
     **GitHub (`gh` CLI):**
     ```bash
@@ -261,7 +278,7 @@ Steps 1-7 are IDENTICAL for local and remote mode. Steps 8+ diverge.
 
     **Capture the MR/PR URL** from the command output. Store it for use in tracking files and notifications.
 
-13. [CONDITIONAL: Slack Notification]
+14. [CONDITIONAL: Slack Notification]
     IF `WORKFLOW_SLACK_WEBHOOK` environment variable is set:
       ```bash
       curl -s -X POST "$WORKFLOW_SLACK_WEBHOOK" \
@@ -282,39 +299,66 @@ Steps 1-7 are IDENTICAL for local and remote mode. Steps 8+ diverge.
     ELSE:
       Skip Slack notification silently (no error).
 
-14. [CONDITIONAL: Jira Transition]
+15. [CONDITIONAL: Jira Transition]
     IF ticket has `jira_key` set:
-      - Transition the Jira issue to "In Review" status
-      - Use available Jira MCP/skill to perform the transition
-      - If `WORKFLOW_JIRA_CONFIRM=true`: ask user before transitioning
-      - If transition fails: log warning but do not block the workflow
+      → Transition the Jira issue to "In Review" status
+      → Use available Jira MCP/skill to perform the transition
+      → If `WORKFLOW_JIRA_CONFIRM=true`: ask user before transitioning
+      → If transition fails: log warning but do not block the workflow
     ELSE:
       Skip Jira transition.
 
-15. [CONDITIONAL: Jira Status Sync]
+16. [CONDITIONAL: Jira Status Sync]
     IF ticket has `jira_key` in YAML frontmatter AND `writing_script` is configured in pipeline config:
-      - Run: `npx tsx src/cli/index.ts jira-sync TICKET-XXX-YYY --repo <path>`
-      - If exit code 0: report sync result to user
-      - If exit code 2 (`WORKFLOW_JIRA_CONFIRM=true`): show user the planned Jira changes, ask for confirmation using AskUserQuestion, re-run jira-sync if approved
-      - If exit code 1: report error, continue (don't block finalization on Jira failure)
+      → Run: `npx tsx src/cli/index.ts jira-sync TICKET-XXX-YYY --repo <path>`
+      → If exit code 0: report sync result to user
+      → If exit code 2 (`WORKFLOW_JIRA_CONFIRM=true`): show user the planned Jira changes, ask for confirmation using AskUserQuestion, re-run jira-sync if approved
+      → If exit code 1: report error, continue (don't block finalization on Jira failure)
     ELSE (no `jira_key` or no `writing_script`):
       Skip silently.
 
-16. Delegate to doc-updater (Haiku) to update tracking documents via YAML frontmatter:
+17. Delegate to doc-updater (Haiku) to update tracking documents via YAML frontmatter:
     - Update stage YAML frontmatter:
       - Set Finalize phase complete
       - Set status to "PR Created" (NOT "Complete")
       - Record MR/PR URL in stage file (in `## Finalize Phase` section under `**MR/PR URL**:`)
     - Update ticket YAML frontmatter in TICKET-XXX-YYY.md (update stage status)
     - Update epic YAML frontmatter in EPIC-XXX.md if needed
-    - Run `kanban-cli sync --stage STAGE-XXX-YYY-ZZZ` after status changes
 
-17. Main agent commits tracking files on the worktree branch:
+18. Main agent commits tracking files on the worktree branch:
     - `git add epics/EPIC-XXX-name/TICKET-XXX-YYY-name/STAGE-XXX-YYY-ZZZ.md epics/EPIC-XXX-name/TICKET-XXX-YYY-name/TICKET-XXX-YYY.md epics/EPIC-XXX-name/EPIC-XXX.md`
     - Commit message: "chore(TICKET-XXX-YYY): mark STAGE-XXX-YYY-ZZZ PR Created"
     - Push the tracking commit: `git push origin <worktree_branch>`
     - **NEVER use `git add -A`**
+
+19. Prepare finalize session notes (DO NOT write files yet — exit gate handles all writes)
+
+    Content for `STAGE-XXX-YYY-ZZZ-finalize.md`:
+    - Code review findings and resolutions
+    - Documentation updates made
+    - PR/MR details (URL, title, platform)
+    - Final verification results
 ```
+
+## Finalize Notes File (`STAGE-XXX-YYY-ZZZ-finalize.md`)
+
+The finalize notes sibling file captures code review and completion context so future sessions (or PR reviewers) can reference it. It lives alongside the stage file:
+
+```
+epics/EPIC-XXX/TICKET-XXX-YYY/STAGE-XXX-YYY-ZZZ.md                        # stage tracking (lean)
+epics/EPIC-XXX/TICKET-XXX-YYY/STAGE-XXX-YYY-ZZZ-design.md                 # design research
+epics/EPIC-XXX/TICKET-XXX-YYY/STAGE-XXX-YYY-ZZZ-build.md                  # build notes
+epics/EPIC-XXX/TICKET-XXX-YYY/STAGE-XXX-YYY-ZZZ-finalize.md               # finalize notes (this phase)
+```
+
+**Contents of the finalize notes file:**
+
+- Code review findings and resolutions
+- Documentation updates made
+- PR/MR details (if remote mode)
+- Final verification results
+
+**The main stage file stays lean.** Only finalize phase completion status goes in the stage file. Full finalization context lives in `-finalize.md`.
 
 ## Code Review Policy
 
@@ -367,13 +411,15 @@ chore(TICKET-001-001): mark STAGE-001-001-001 PR Created
 ## Phase Gates Checklist
 
 ### Common (both modes)
+- [ ] All sibling files read for context (design, build, user-design-feedback notes)
 - [ ] code-reviewer (Opus) completed pre-test review
 - [ ] ALL review suggestions implemented via fixer/scribe
 - [ ] IF tests not written in Build: test-writer created tests
-- [ ] tester ran all tests - passing
+- [ ] tester ran all tests — passing
 - [ ] IF impl code changed after first review: code-reviewer ran post-test review
 - [ ] Documentation created (doc-writer OR doc-writer-lite based on complexity)
 - [ ] Changelog entry added via doc-updater
+- [ ] Finalize session notes prepared for `-finalize.md`
 
 ### Local Mode
 - [ ] Implementation commit created with SPECIFIC file paths (NO git add -A)
@@ -384,7 +430,6 @@ chore(TICKET-001-001): mark STAGE-001-001-001 PR Created
   - Stage status set to "Complete"
   - Ticket status updated if all stages complete
   - Epic status updated if all tickets complete
-- [ ] `kanban-cli sync --stage STAGE-XXX-YYY-ZZZ` executed after status changes
 - [ ] IF ticket has `jira_key` and `writing_script` configured: `jira-sync` executed
 
 ### Remote Mode
@@ -403,8 +448,8 @@ chore(TICKET-001-001): mark STAGE-001-001-001 PR Created
   - MR/PR URL recorded in stage file
   - Ticket status updated
   - Epic status updated if needed
-- [ ] `kanban-cli sync --stage STAGE-XXX-YYY-ZZZ` executed after status changes
 - [ ] Tracking commit pushed to remote
+- [ ] Exit gate completed (all file writes and tracking updates happen there)
 
 ## Time Pressure Does NOT Override Exit Gates
 
@@ -413,15 +458,19 @@ chore(TICKET-001-001): mark STAGE-001-001-001 PR Created
 **YOU MUST STILL:**
 
 - Complete ALL exit gate steps in order
+- Write finalize notes to `-finalize.md` sibling file
 - Invoke lessons-learned skill (even if "nothing to capture")
 - Invoke journal skill (even if brief)
-- Commit tracking files with specific paths (NEVER git add -A)
+- Update ALL tracking documents via doc-updater
 
 **Time pressure is not a workflow exception.** Fast delivery comes from efficient subagent coordination, not from skipping safety checks. Exit gates take 2-3 minutes total.
 
 ---
 
-## Phase Exit Gate (MANDATORY) - Finalize Only
+## Phase Exit Gate (MANDATORY)
+
+Before completing the Finalize phase, you MUST complete these steps IN ORDER.
+This is the SINGLE authoritative checklist — all file writes happen here, not in the workflow steps above.
 
 ### No-Code Stages Still Require Exit Gate
 
@@ -442,34 +491,30 @@ Documentation-only or tracking-only stages:
 - "No code to learn lessons about" → Process lessons exist for all work types
 - "Journal would just say 'updated docs'" → Write about the documentation process itself
 
-**Note:** The exit gate (steps 1-5 below) covers the final stage-completion steps. Implementation commits (workflow steps 8-10/16) happen BEFORE the exit gate begins.
+**Note:** The exit gate covers the final stage-completion steps. Implementation commits, changelog commits, tracking updates, and tracking commits all happen in the workflow steps BEFORE the exit gate begins (local steps 9-14, remote steps 9-19).
 
-Before completing the stage, you MUST complete these steps IN ORDER:
-
-1. Update stage tracking file YAML frontmatter (mark Finalize phase complete, stage "Complete" or "PR Created")
-2. Update ticket tracking file YAML frontmatter (update stage status, ticket status if all stages done)
-3. Update epic tracking file YAML frontmatter (update epic status if all tickets done)
-4. Run `kanban-cli sync --stage STAGE-XXX-YYY-ZZZ`
-5. **Main agent commits tracking files** (NOT doc-updater):
-   - `git add epics/EPIC-XXX-name/TICKET-XXX-YYY-name/STAGE-XXX-YYY-ZZZ.md epics/EPIC-XXX-name/TICKET-XXX-YYY-name/TICKET-XXX-YYY.md epics/EPIC-XXX-name/EPIC-XXX.md`
-   - Commit message: "chore(TICKET-XXX-YYY): mark STAGE-XXX-YYY-ZZZ Complete" (local mode) or "chore(TICKET-XXX-YYY): mark STAGE-XXX-YYY-ZZZ PR Created" (remote mode)
-   - **NEVER use `git add -A`**
-   - **Remote mode**: Push this commit to the remote branch as well
-6. Use Skill tool to invoke `lessons-learned`
-7. Use Skill tool to invoke `journal`
+1. Delegate to doc-updater (Haiku) to write finalize artifacts:
+   a. Write finalize session notes to `STAGE-XXX-YYY-ZZZ-finalize.md` sibling file (code review findings and resolutions, documentation updates, PR/MR details if remote mode, final verification results)
+2. Delegate to doc-updater (Haiku) to update tracking documents:
+   a. Mark Finalize phase complete in `STAGE-XXX-YYY-ZZZ.md`
+   b. Set stage status → "Complete" (local mode) or "PR Created" (remote mode) in `STAGE-XXX-YYY-ZZZ.md`
+   c. **Remote mode only**: Record MR/PR URL in stage file (in `## Finalize Phase` section under `**MR/PR URL**:`)
+   d. Update stage status in `TICKET-XXX-YYY.md` (MANDATORY)
+   e. Update ticket status in `EPIC-XXX.md` if needed
+3. Use Skill tool to invoke `lessons-learned` — **mandatory, no exceptions**
+4. Use Skill tool to invoke `journal` — **mandatory, no exceptions**
 
 **Why this order?**
 
-- Steps 1-3: Update tracking state (YAML frontmatter)
-- Step 4: Sync kanban board
-- Step 5: Commit tracking state (so it persists even if session ends)
-- Steps 6-7: Capture learnings and feelings based on the now-complete stage
+- Step 1: Persist finalize context before anything else (if session crashes, notes are saved)
+- Step 2: Establish facts (phase done, status updated in all tracking files)
+- Steps 3-4: Capture learnings and feelings based on the now-complete stage
 
-Committing before lessons/journal ensures tracking state is saved. Lessons and journal need the commit to have happened (they may reference the commit hash).
+**After exit gate completes:**
 
-Stage is now complete (local mode) or awaiting review (remote mode). No further phase to invoke — the stage workflow is finished.
+Stage is now complete (local mode) or awaiting review (remote mode). No further phase to invoke — the stage workflow is finished. End the session.
 
-**DO NOT skip any exit gate step.**
+**DO NOT skip any exit gate step. DO NOT proceed until all steps are done.**
 
 **DO NOT claim the stage is complete until exit gate is done.** This includes:
 
