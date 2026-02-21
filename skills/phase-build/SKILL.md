@@ -12,7 +12,7 @@ The Build phase implements the selected approach from Design. It creates working
 ## Entry Conditions
 
 - Design phase is complete (approach selected, tracking docs updated)
-- `ticket-stage-workflow` skill has been invoked (shared rules loaded)
+- `ticket-stage-workflow` skill has been invoked (shared data conventions loaded)
 - Stage YAML frontmatter has been read (status, refinement_type, ticket, epic, worktree_branch, etc.)
 
 ## Worktree Awareness
@@ -200,7 +200,7 @@ This is a sunk cost situation. The time spent is gone whether you keep or redo t
 7. [PARALLEL] Delegate to verifier (Haiku) + tester (Haiku)
    Run build/lint/type-check AND tests in parallel
 
-8. [IF verification fails] → Error handling flow (see ticket-stage-workflow)
+8. [IF verification fails] → Analyze errors, delegate to fixer (Haiku) to resolve
 
 9. [LOOP steps 3-8 until green]
 

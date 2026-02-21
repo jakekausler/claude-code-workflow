@@ -16,7 +16,7 @@ This skill is invoked when the stage status is **User Design Feedback** (set by 
 ## Entry Conditions
 
 - `phase-design` has completed and set status to "User Design Feedback"
-- `ticket-stage-workflow` skill has been invoked (shared rules loaded)
+- `ticket-stage-workflow` skill has been invoked (shared data conventions loaded)
 - Stage YAML frontmatter has been read (status, refinement_type, ticket, epic, etc.)
 - `STAGE-XXX-YYY-ZZZ-design.md` sibling file exists (written by Design phase)
 

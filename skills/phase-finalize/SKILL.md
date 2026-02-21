@@ -12,7 +12,7 @@ The Finalize phase ensures code quality through review, adds tests if needed, cr
 ## Entry Conditions
 
 - Automatic Testing and Manual Testing phases are complete (user testing passed)
-- `ticket-stage-workflow` skill has been invoked (shared rules loaded)
+- `ticket-stage-workflow` skill has been invoked (shared data conventions loaded)
 
 ## CRITICAL: Every Step Uses Subagents
 

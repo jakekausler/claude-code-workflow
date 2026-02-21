@@ -12,7 +12,7 @@ The Design phase discovers what to build and selects the approach. It ensures th
 ## Entry Conditions
 
 - `/next_task` has been run and returned a Design phase assignment
-- `ticket-stage-workflow` skill has been invoked (shared rules loaded)
+- `ticket-stage-workflow` skill has been invoked (shared data conventions loaded)
 - Stage YAML frontmatter has been read (status, refinement_type, ticket, epic, etc.)
 
 **Re-entry note:** If re-entering Design (e.g., kicked back from Build), read existing sibling files and overwrite `-design.md` with updated research.

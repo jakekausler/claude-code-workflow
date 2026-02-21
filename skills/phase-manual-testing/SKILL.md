@@ -17,7 +17,7 @@ This skill is invoked when the stage status is **Manual Testing** (set after aut
 
 - Stage status is "Manual Testing"
 - Automatic testing phase is complete
-- `ticket-stage-workflow` skill has been invoked (shared rules loaded)
+- `ticket-stage-workflow` skill has been invoked (shared data conventions loaded)
 - Stage YAML frontmatter has been read (status, refinement_type, ticket, epic, etc.)
 - Note: if no `refinement_type` is set, use general functionality verification (treat as `custom`)
 

@@ -12,7 +12,7 @@ The Automatic Testing phase validates the implementation through type-specific t
 ## Entry Conditions
 
 - Build phase is complete (code written, verification passed)
-- `ticket-stage-workflow` skill has been invoked (shared rules loaded)
+- `ticket-stage-workflow` skill has been invoked (shared data conventions loaded)
 - Stage YAML frontmatter contains `refinement_type` (array of one or more types)
 
 ## Determining the Checklist

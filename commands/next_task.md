@@ -117,24 +117,13 @@ Display the phase in the task card and prepare to invoke the corresponding skill
 
 - Skill name: `ticket-stage-workflow`
 
-This loads the complete implementation protocol including:
+This loads shared session context including:
 
-- Communication Policy (what to explain after every subagent call)
-- Phase-specific behavior
-- Session protocols
-- Code review policy
-- Quality gates
-- kanban-cli sync after status changes
-- Environment variable awareness (WORKFLOW_REMOTE_MODE, WORKFLOW_AUTO_DESIGN, etc.)
+- Workflow hierarchy (Epic > Ticket > Stage > Phase)
+- File path conventions and ID patterns
+- Stage, ticket, and epic status values
+- YAML frontmatter field definitions
+
+The phase-specific skill (already determined by Step 3's routing) provides all behavioral guidance -- phase workflows, exit gates, quality gates, subagent delegation rules, etc.
 
 Do NOT proceed with any work until both `/next_task` has run AND `ticket-stage-workflow` skill is invoked.
-
-The workflow skill contains the complete protocol for executing each phase correctly, including:
-
-- Phase-specific behavior (detailed steps for each phase)
-- Communication policy (how to explain work to user)
-- Session protocols (start and end procedures)
-- Key rules and quality gates
-- Finalize phase subagent sequence
-- Code review policy
-- Refinement type routing for automatic-testing
