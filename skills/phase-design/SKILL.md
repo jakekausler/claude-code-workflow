@@ -15,6 +15,8 @@ The Design phase discovers what to build and selects the approach. It ensures th
 - `ticket-stage-workflow` skill has been invoked (shared rules loaded)
 - Stage YAML frontmatter has been read (status, refinement_type, ticket, epic, etc.)
 
+**Re-entry note:** If re-entering Design (e.g., kicked back from Build), read existing sibling files and overwrite `-design.md` with updated research.
+
 ## Phase Workflow
 
 ```
@@ -23,9 +25,9 @@ The Design phase discovers what to build and selects the approach. It ensures th
 
 3. [CONDITIONAL: Brainstorming]
    IF task has multiple valid approaches OR is architecturally complex:
-     -> Delegate to brainstormer (Opus) to present 2-3 options
+     → Delegate to brainstormer (Opus) to generate 2-3 approaches
    ELSE (obvious single solution OR trivial task):
-     -> Skip brainstormer, proceed with obvious approach
+     → Skip brainstormer, proceed with obvious approach
 
    **SELF-CHECK: Are you about to skip brainstormer?**
 
@@ -41,16 +43,16 @@ The Design phase discovers what to build and selects the approach. It ensures th
 
    **When in doubt, use brainstormer.** Opus is specialized for architecture options. You (Sonnet) coordinate, don't architect.
 
-4. Write design artifacts:
+4. Gather and prepare design artifacts (DO NOT write files yet -- exit gate handles all writes):
 
-   a. Write FULL research to `STAGE-XXX-YYY-ZZZ-design.md` sister file:
+   a. FULL research for `STAGE-XXX-YYY-ZZZ-design.md` sister file:
       - Codebase exploration findings (what Explore discovered)
       - All approaches with detailed trade-offs (brainstormer output)
       - Architectural considerations and risks
       - Relevant code references and patterns found
       - Seed data requirements (if applicable)
 
-   b. Write BRIEF options summary to stage file's Design Phase section:
+   b. BRIEF options summary for stage file's Design Phase section:
       - Just approach names + one-liner descriptions (NOT full research)
       - Example:
         - **Option A: Direct Integration** -- Embed logic in existing service
@@ -62,25 +64,18 @@ The Design phase discovers what to build and selects the approach. It ensures th
    Check `WORKFLOW_AUTO_DESIGN` environment variable:
 
    IF `WORKFLOW_AUTO_DESIGN=true`:
-     -> Auto-select the brainstormer's recommended approach
-     -> Log in BOTH the stage file AND `STAGE-XXX-YYY-ZZZ-design.md`:
+     → Auto-select the brainstormer's recommended approach
+     → Log in BOTH the stage file AND `STAGE-XXX-YYY-ZZZ-design.md`:
         "Auto-selected: [Approach Name] -- [reasoning]"
-     -> Set stage status -> Build (skip User Design Feedback)
-     -> Proceed to exit gate
+     → Set stage status → Build (skip User Design Feedback)
+     → Proceed to exit gate
 
    IF `WORKFLOW_AUTO_DESIGN=false` or unset (default):
-     -> Set stage status -> User Design Feedback
-     -> Proceed to exit gate
-     -> **Session ends after exit gate** -- design feedback happens in a
+     → Proceed to exit gate
+     → **Session ends after exit gate** -- design feedback happens in a
         SEPARATE session with the `phase-awaiting-design-decision` skill
-     -> Do NOT present options to the user or wait for selection
-     -> Do NOT invoke `phase-build`
-
-6. Delegate to doc-updater (Haiku) to update tracking documents:
-   - Record approach info in STAGE-XXX-YYY-ZZZ.md (Design Phase section)
-   - Mark Design phase complete in STAGE-XXX-YYY-ZZZ.md
-   - Update stage status in ticket's TICKET-XXX-YYY.md (MANDATORY)
-   - Update ticket status in epic's EPIC-XXX.md if needed
+     → Do NOT present options to the user or wait for selection
+     → Do NOT invoke `phase-build`
 ```
 
 ## Design Notes File (`STAGE-XXX-YYY-ZZZ-design.md`)
@@ -178,16 +173,13 @@ Before completing Design phase, verify:
 
 - [ ] Task card received from task-navigator
 - [ ] Context gathered via Explore
-- [ ] IF multiple approaches: brainstormer presented 2-3 options
-- [ ] Full research written to `STAGE-XXX-YYY-ZZZ-design.md` sister file
-- [ ] Brief options summary written to stage file's Design Phase section
-- [ ] IF `WORKFLOW_AUTO_DESIGN=true`: approach auto-selected, logged in both files, status set to Build
-- [ ] IF `WORKFLOW_AUTO_DESIGN=false`: status set to User Design Feedback, session will end after exit gate
+- [ ] IF multiple approaches: brainstormer generated 2-3 approaches
+- [ ] IF obvious solution (brainstormer skipped): approach documented in both stage file and `-design.md`
+- [ ] Design artifacts prepared (full research + brief summary)
+- [ ] IF `WORKFLOW_AUTO_DESIGN=true`: approach auto-selected, logged in both files
+- [ ] IF `WORKFLOW_AUTO_DESIGN=false`: session will end after exit gate
 - [ ] Seed data requirements confirmed (if applicable)
-- [ ] Tracking documents updated via doc-updater:
-  - Design phase marked complete
-  - Stage status updated (Build or User Design Feedback)
-  - Ticket stage status updated (MANDATORY)
+- [ ] Exit gate completed (all file writes and tracking updates happen there)
 
 ## Time Pressure Does NOT Override Exit Gates
 
@@ -207,19 +199,25 @@ Before completing Design phase, verify:
 
 ## Phase Exit Gate (MANDATORY)
 
-Before completing the Design phase, you MUST complete these steps IN ORDER:
+Before completing the Design phase, you MUST complete these steps IN ORDER.
+This is the SINGLE authoritative checklist -- all file writes happen here, not in the workflow steps above.
 
-1. Write phase notes to `STAGE-XXX-YYY-ZZZ-design.md` sister file (full research, approaches, trade-offs, codebase exploration findings, brainstormer output)
-2. Update stage tracking file (mark Design phase complete in `STAGE-XXX-YYY-ZZZ.md`, set status to Build or User Design Feedback)
-3. Update ticket tracking file (update stage status in `TICKET-XXX-YYY.md`)
-4. Use Skill tool to invoke `lessons-learned`
-5. Use Skill tool to invoke `journal`
+1. Delegate to doc-updater (Haiku) to write design artifacts:
+   a. Write full research to `STAGE-XXX-YYY-ZZZ-design.md` sister file (approaches, trade-offs, codebase exploration findings, brainstormer output)
+   b. Write brief options summary to stage file's Design Phase section
+2. Delegate to doc-updater (Haiku) to update tracking documents:
+   a. Mark Design phase complete in `STAGE-XXX-YYY-ZZZ.md`
+   b. Set stage status (Build if auto-design, User Design Feedback otherwise)
+   c. Update stage status in `TICKET-XXX-YYY.md` (MANDATORY)
+   d. Update ticket status in `EPIC-XXX.md` if needed
+3. Use Skill tool to invoke `lessons-learned`
+4. Use Skill tool to invoke `journal`
 
 **Why this order?**
 
 - Step 1: Persist detailed research before anything else (if session crashes, research is saved)
-- Steps 2-3: Establish facts (phase done, status updated)
-- Steps 4-5: Capture learnings and feelings based on the now-complete phase
+- Step 2: Establish facts (phase done, status updated in all tracking files)
+- Steps 3-4: Capture learnings and feelings based on the now-complete phase
 
 **After exit gate completes:**
 
