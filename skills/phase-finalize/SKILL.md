@@ -449,7 +449,7 @@ chore(TICKET-001-001): mark STAGE-001-001-001 PR Created
   - Ticket status updated
   - Epic status updated if needed
 - [ ] Tracking commit pushed to remote
-- [ ] Exit gate completed (all file writes and tracking updates happen there)
+- [ ] Exit gate completed (finalize notes, lessons-learned, journal)
 
 ## Time Pressure Does NOT Override Exit Gates
 
@@ -461,7 +461,6 @@ chore(TICKET-001-001): mark STAGE-001-001-001 PR Created
 - Write finalize notes to `-finalize.md` sibling file
 - Invoke lessons-learned skill (even if "nothing to capture")
 - Invoke journal skill (even if brief)
-- Update ALL tracking documents via doc-updater
 
 **Time pressure is not a workflow exception.** Fast delivery comes from efficient subagent coordination, not from skipping safety checks. Exit gates take 2-3 minutes total.
 
@@ -470,7 +469,7 @@ chore(TICKET-001-001): mark STAGE-001-001-001 PR Created
 ## Phase Exit Gate (MANDATORY)
 
 Before completing the Finalize phase, you MUST complete these steps IN ORDER.
-This is the SINGLE authoritative checklist — all file writes happen here, not in the workflow steps above.
+Finalize notes and skill invocations happen here. Implementation commits and tracking updates are handled in the workflow steps above.
 
 ### No-Code Stages Still Require Exit Gate
 
@@ -491,24 +490,16 @@ Documentation-only or tracking-only stages:
 - "No code to learn lessons about" → Process lessons exist for all work types
 - "Journal would just say 'updated docs'" → Write about the documentation process itself
 
-**Note:** The exit gate covers the final stage-completion steps. Implementation commits, changelog commits, tracking updates, and tracking commits all happen in the workflow steps BEFORE the exit gate begins (local steps 9-14, remote steps 9-19).
+**Note:** Implementation commits, changelog commits, tracking updates, and tracking commits all happen in the workflow steps BEFORE the exit gate (local steps 9-14, remote steps 9-19). The exit gate only handles finalize notes, lessons-learned, and journal.
 
-1. Delegate to doc-updater (Haiku) to write finalize artifacts:
-   a. Write finalize session notes to `STAGE-XXX-YYY-ZZZ-finalize.md` sibling file (code review findings and resolutions, documentation updates, PR/MR details if remote mode, final verification results)
-2. Delegate to doc-updater (Haiku) to update tracking documents:
-   a. Mark Finalize phase complete in `STAGE-XXX-YYY-ZZZ.md`
-   b. Set stage status → "Complete" (local mode) or "PR Created" (remote mode) in `STAGE-XXX-YYY-ZZZ.md`
-   c. **Remote mode only**: Record MR/PR URL in stage file (in `## Finalize Phase` section under `**MR/PR URL**:`)
-   d. Update stage status in `TICKET-XXX-YYY.md` (MANDATORY)
-   e. Update ticket status in `EPIC-XXX.md` if needed
-3. Use Skill tool to invoke `lessons-learned` — **mandatory, no exceptions**
-4. Use Skill tool to invoke `journal` — **mandatory, no exceptions**
+1. Delegate to doc-updater (Haiku) to write finalize session notes to `STAGE-XXX-YYY-ZZZ-finalize.md` sibling file (code review findings and resolutions, documentation updates, PR/MR details if remote mode, final verification results)
+2. Use Skill tool to invoke `lessons-learned` — **mandatory, no exceptions**
+3. Use Skill tool to invoke `journal` — **mandatory, no exceptions**
 
 **Why this order?**
 
 - Step 1: Persist finalize context before anything else (if session crashes, notes are saved)
-- Step 2: Establish facts (phase done, status updated in all tracking files)
-- Steps 3-4: Capture learnings and feelings based on the now-complete stage
+- Steps 2-3: Capture learnings and feelings based on the now-complete stage
 
 **After exit gate completes:**
 
