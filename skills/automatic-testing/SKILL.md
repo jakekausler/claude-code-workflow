@@ -355,7 +355,7 @@ Example: approve — retract — approve — retract — "approve all"
 ```
 1. Ensure Regression Items Added to ticket's regression.md
 2. Prepare automatic-testing session notes for `-automatic-testing.md`
-   (DO NOT write files yet → exit gate handles all writes)
+   (DO NOT write files yet — exit gate handles all writes)
 ```
 
 ## Automatic Testing Notes File (`STAGE-XXX-YYY-ZZZ-automatic-testing.md`)
@@ -461,15 +461,15 @@ This is the SINGLE authoritative checklist -- all file writes happen here, not i
 
 **After exit gate completes:**
 
-Use Skill tool to invoke `phase-finalize` to begin the next phase.
+Use Skill tool to invoke `phase-manual-testing` to begin the next phase.
 
 **DO NOT skip any exit gate step. DO NOT proceed until all steps are done.**
 
-**DO NOT proceed to Finalize phase until exit gate is complete.** This includes:
+**DO NOT proceed to Manual Testing phase until exit gate is complete.** This includes:
 
-- Announcing "proceeding to Finalize"
-- Reading code files for Finalize planning
-- Starting code review mentally
-- Invoking phase-finalize skill
+- Announcing "proceeding to Manual Testing"
+- Reading code files for Manual Testing planning
+- Starting testing mentally
+- Invoking phase-manual-testing skill
 
-**Complete ALL exit gate steps FIRST. Then invoke phase-finalize.**
+**Complete ALL exit gate steps FIRST. Then invoke phase-manual-testing.**
