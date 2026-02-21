@@ -1,6 +1,6 @@
 ---
 name: phase-build
-description: Use when entering Build phase of ticket-stage-workflow - guides implementation planning, code writing, and verification within the epic/ticket/stage hierarchy
+description: Use when entering Build phase of ticket-stage-workflow — guides implementation planning, code writing, and verification within the epic/ticket/stage hierarchy
 ---
 
 # Build Phase
@@ -173,12 +173,19 @@ This is a sunk cost situation. The time spent is gone whether you keep or redo t
 ## Phase Workflow
 
 ```
-1. [CONDITIONAL: Worktree Setup]
+1. Read all sibling files for prior context
+   Delegate to Explore (built-in) to read ALL `STAGE-XXX-YYY-ZZZ-*.md` sibling
+   files in the same ticket directory. This will include:
+   - `STAGE-XXX-YYY-ZZZ-design.md` (design research from Design phase)
+   - `STAGE-XXX-YYY-ZZZ-user-design-feedback.md` (decision rationale, if present)
+   - Any other sibling notes files from prior phases
+
+2. [CONDITIONAL: Worktree Setup]
    IF worktree_branch is set in stage YAML frontmatter:
      → Ensure git worktree exists (create if needed)
      → Switch to worktree directory for all subsequent work
 
-2. [CONDITIONAL: Planning]
+3. [CONDITIONAL: Planning]
    IF complex multi-file feature OR architectural change:
      → Delegate to planner (Opus) for detailed implementation spec
      → Planner MUST save spec to /tmp/spec-YYYY-MM-DD-HH-MM-SS.md
@@ -188,27 +195,50 @@ This is a sunk cost situation. The time spent is gone whether you keep or redo t
    ELSE (trivial change):
      → Skip planner, main agent instructs scribe directly (no spec file needed)
 
-3. Delegate to scribe (Haiku) to write code from spec file
+4. Delegate to scribe (Haiku) to write code from spec file
    → Pass spec file path explicitly: "Read and implement: /tmp/spec-YYYY-MM-DD-HH-MM-SS.md"
 
-4. Add seed data if agreed in Design phase
+5. Add seed data if agreed in Design phase
 
-5. Add placeholder stubs for related future features
+6. Add placeholder stubs for related future features
 
-6. Verify dev server works - feature must be testable
+7. Verify dev server works — feature must be testable
 
-7. [PARALLEL] Delegate to verifier (Haiku) + tester (Haiku)
+8. [PARALLEL] Delegate to verifier (Haiku) + tester (Haiku)
    Run build/lint/type-check AND tests in parallel
 
-8. [IF verification fails] → Analyze errors, delegate to fixer (Haiku) to resolve
+9. [IF verification fails] → Analyze errors, delegate to fixer (Haiku) to resolve
 
-9. [LOOP steps 3-8 until green]
+10. [LOOP steps 4-9 until green]
 
-10. Delegate to doc-updater (Haiku) to update tracking documents:
-   - Mark Build phase complete in STAGE-XXX-YYY-ZZZ.md
-   - Update stage status in ticket's TICKET-XXX-YYY.md (MANDATORY)
-   - Update ticket status in epic's EPIC-XXX.md if needed
+11. Prepare build session notes (DO NOT write files yet — exit gate handles all writes)
+
+    Content for `STAGE-XXX-YYY-ZZZ-build.md`:
+    - Implementation decisions made during the session
+    - Problems encountered and how they were solved
+    - Deviations from the design (if any)
+    - Key code changes and their rationale
 ```
+
+## Build Notes File (`STAGE-XXX-YYY-ZZZ-build.md`)
+
+The build notes sibling file captures implementation context so later phases (Automatic Testing, Manual Testing, Finalize) can reference it. It lives alongside the stage file:
+
+```
+epics/EPIC-XXX/TICKET-XXX-YYY/STAGE-XXX-YYY-ZZZ.md                        # stage tracking (lean)
+epics/EPIC-XXX/TICKET-XXX-YYY/STAGE-XXX-YYY-ZZZ-design.md                 # design research
+epics/EPIC-XXX/TICKET-XXX-YYY/STAGE-XXX-YYY-ZZZ-user-design-feedback.md   # decision rationale
+epics/EPIC-XXX/TICKET-XXX-YYY/STAGE-XXX-YYY-ZZZ-build.md                  # build notes (this phase)
+```
+
+**Contents of the build notes file:**
+
+- Implementation decisions made during the session
+- Problems encountered and how they were solved
+- Deviations from the design (if any)
+- Key code changes and their rationale
+
+**The main stage file stays lean.** Only build phase completion status goes in the stage file. Full implementation context lives in `-build.md`.
 
 ## Planner Selection Criteria
 
@@ -280,6 +310,7 @@ epics/EPIC-XXX/TICKET-XXX-YYY/STAGE-XXX-YYY-ZZZ.md
 
 Before completing Build phase, verify:
 
+- [ ] All sibling files read for context (design, user-design-feedback notes)
 - [ ] Worktree checked out (if `worktree_branch` is set)
 - [ ] Implementation spec created (planner OR planner-lite OR direct for trivial)
 - [ ] Code written via scribe
@@ -287,9 +318,8 @@ Before completing Build phase, verify:
 - [ ] Placeholder stubs added for related future features
 - [ ] Dev server verified working
 - [ ] Verification passed (verifier + tester in parallel)
-- [ ] Tracking documents updated via doc-updater:
-  - Build phase marked complete in stage file (`STAGE-XXX-YYY-ZZZ.md`)
-  - Ticket stage status updated (MANDATORY)
+- [ ] Build session notes prepared for `-build.md`
+- [ ] Exit gate completed (all file writes and tracking updates happen there)
 
 ## Time Pressure Does NOT Override Exit Gates
 
@@ -298,6 +328,7 @@ Before completing Build phase, verify:
 **YOU MUST STILL:**
 
 - Complete ALL exit gate steps in order
+- Write build notes to `-build.md` sibling file
 - Invoke lessons-learned skill (even if "nothing to capture")
 - Invoke journal skill (even if brief)
 - Update ALL tracking documents via doc-updater
@@ -308,23 +339,28 @@ Before completing Build phase, verify:
 
 ## Phase Exit Gate (MANDATORY)
 
-Before proceeding to Automatic Testing phase, you MUST complete these steps IN ORDER:
+Before completing the Build phase, you MUST complete these steps IN ORDER.
+This is the SINGLE authoritative checklist -- all file writes happen here, not in the workflow steps above.
 
-1. Update stage tracking file (mark Build phase complete in `STAGE-XXX-YYY-ZZZ.md`)
-2. Update ticket tracking file (update stage status in `TICKET-XXX-YYY.md`)
-3. Run `kanban-cli sync --stage STAGE-XXX-YYY-ZZZ` to sync changes to the kanban board
-4. Use Skill tool to invoke `lessons-learned`
-5. Use Skill tool to invoke `journal`
+1. Delegate to doc-updater (Haiku) to write build artifacts:
+   a. Write build session notes to `STAGE-XXX-YYY-ZZZ-build.md` sibling file (implementation decisions, problems encountered, deviations from design, key code changes and rationale)
+2. Delegate to doc-updater (Haiku) to update tracking documents:
+   a. Mark Build phase complete in `STAGE-XXX-YYY-ZZZ.md`
+   b. Set stage status → Automatic Testing in `STAGE-XXX-YYY-ZZZ.md`
+   c. Update stage status in `TICKET-XXX-YYY.md` (MANDATORY)
+   d. Update ticket status in `EPIC-XXX.md` if needed
+3. Use Skill tool to invoke `lessons-learned` -- **mandatory, no exceptions**
+4. Use Skill tool to invoke `journal` -- **mandatory, no exceptions**
 
 **Why this order?**
 
-- Steps 1-2: Establish facts (phase done, status updated)
-- Step 3: Sync state to kanban board so downstream tools see current status
-- Steps 4-5: Capture learnings and feelings based on the now-complete phase
+- Step 1: Persist build context before anything else (if session crashes, implementation notes are saved)
+- Step 2: Establish facts (phase done, status updated to Automatic Testing in all tracking files)
+- Steps 3-4: Capture learnings and feelings based on the now-complete phase
 
-Lessons and journal need the full phase context, including final status updates. Running them before status updates means they lack complete information.
+**After exit gate completes:**
 
-After completing all exit gate steps, use Skill tool to invoke `automatic-testing` to begin the next phase.
+Use Skill tool to invoke `automatic-testing` to begin the next phase.
 
 **DO NOT skip any exit gate step. DO NOT proceed until all steps are done.**
 
