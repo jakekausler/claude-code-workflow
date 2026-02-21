@@ -82,7 +82,7 @@ This skill is invoked when the stage status is **User Design Feedback** (set by 
       - Any modifications or constraints the user added
 
    b. Stage file update content:
-      - Selected approach name + brief rationale for the Design Phase section
+      - Selected approach name + brief rationale for the Design Phase section (`User Choice` field)
       - Status change: "User Design Feedback" → "Build"
 ```
 
@@ -162,7 +162,7 @@ This is the SINGLE authoritative checklist -- all file writes happen here, not i
 1. Delegate to doc-updater (Haiku) to write discussion artifacts:
    a. Write discussion log and decision rationale to `STAGE-XXX-YYY-ZZZ-user-design-feedback.md` sibling file (options discussed, questions asked, trade-offs weighed, selected approach + rationale, rejected alternatives + reasons)
 2. Delegate to doc-updater (Haiku) to update tracking documents:
-   a. Update stage file's Design Phase section with selected approach + brief rationale
+   a. Update stage file's Design Phase section (specifically the `User Choice` field) with selected approach + brief rationale
    b. Set stage status → Build in `STAGE-XXX-YYY-ZZZ.md`
    c. Update stage status in `TICKET-XXX-YYY.md` (MANDATORY)
    d. Update ticket status in `EPIC-XXX.md` if needed
