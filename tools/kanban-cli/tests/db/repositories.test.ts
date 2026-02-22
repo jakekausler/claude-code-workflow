@@ -397,6 +397,9 @@ describe('Repositories', () => {
         session_active: number;
         locked_at: string | null;
         locked_by: string | null;
+        is_draft: number;
+        pending_merge_parents: string | null;
+        mr_target_branch: string | null;
         file_path: string;
         last_synced: string;
       }> = {}
@@ -568,6 +571,125 @@ describe('Repositories', () => {
       const found = stages.findById('stage-1');
       expect(found!.title).toBe('New');
       expect(stages.listByRepo(repoId)).toHaveLength(1);
+    });
+
+    it('upsert with new fields persists is_draft, pending_merge_parents, mr_target_branch', () => {
+      const { stages, repoId } = setupStagePrereqs();
+      const parents = [
+        { stage_id: 'stage-parent', branch: 'feature/parent', pr_url: 'https://github.com/pr/1', pr_number: 1 },
+      ];
+
+      stages.upsert(
+        makeStageData(repoId, {
+          id: 'stage-new-fields',
+          is_draft: 1,
+          pending_merge_parents: JSON.stringify(parents),
+          mr_target_branch: 'develop',
+        })
+      );
+
+      const found = stages.findById('stage-new-fields');
+      expect(found).not.toBeNull();
+      expect(found!.is_draft).toBe(1);
+      expect(found!.mr_target_branch).toBe('develop');
+      const parsed = JSON.parse(found!.pending_merge_parents!);
+      expect(parsed).toHaveLength(1);
+      expect(parsed[0].stage_id).toBe('stage-parent');
+      expect(parsed[0].branch).toBe('feature/parent');
+      expect(parsed[0].pr_url).toBe('https://github.com/pr/1');
+      expect(parsed[0].pr_number).toBe(1);
+    });
+
+    it('upsert without new fields uses defaults (is_draft=0, pending_merge_parents=null, mr_target_branch=null)', () => {
+      const { stages, repoId } = setupStagePrereqs();
+
+      stages.upsert(makeStageData(repoId, { id: 'stage-defaults' }));
+
+      const found = stages.findById('stage-defaults');
+      expect(found).not.toBeNull();
+      expect(found!.is_draft).toBe(0);
+      expect(found!.pending_merge_parents).toBeNull();
+      expect(found!.mr_target_branch).toBeNull();
+    });
+
+    it('findById returns new fields with correct types', () => {
+      const { stages, repoId } = setupStagePrereqs();
+      const parents = [
+        { stage_id: 's1', branch: 'b1', pr_url: 'https://example.com/pr/10', pr_number: 10 },
+        { stage_id: 's2', branch: 'b2', pr_url: 'https://example.com/pr/20', pr_number: 20 },
+      ];
+
+      stages.upsert(
+        makeStageData(repoId, {
+          id: 'stage-json',
+          is_draft: 0,
+          pending_merge_parents: JSON.stringify(parents),
+          mr_target_branch: 'main',
+        })
+      );
+
+      const found = stages.findById('stage-json');
+      expect(found).not.toBeNull();
+      expect(typeof found!.is_draft).toBe('number');
+      expect(typeof found!.mr_target_branch).toBe('string');
+      expect(typeof found!.pending_merge_parents).toBe('string');
+
+      const parsed = JSON.parse(found!.pending_merge_parents!);
+      expect(parsed).toHaveLength(2);
+      expect(parsed[0].stage_id).toBe('s1');
+      expect(parsed[1].stage_id).toBe('s2');
+    });
+
+    it('updatePendingMergeParents updates correctly', () => {
+      const { stages, repoId } = setupStagePrereqs();
+
+      stages.upsert(makeStageData(repoId, { id: 'stage-pmp' }));
+
+      // Initially null
+      expect(stages.findById('stage-pmp')!.pending_merge_parents).toBeNull();
+
+      // Set parents
+      const parents = [
+        { stage_id: 'parent-1', branch: 'feat/a', pr_url: 'https://example.com/pr/5', pr_number: 5 },
+      ];
+      stages.updatePendingMergeParents('stage-pmp', parents);
+
+      const found = stages.findById('stage-pmp');
+      expect(found!.pending_merge_parents).not.toBeNull();
+      const parsed = JSON.parse(found!.pending_merge_parents!);
+      expect(parsed).toHaveLength(1);
+      expect(parsed[0].stage_id).toBe('parent-1');
+
+      // Clear parents (empty array)
+      stages.updatePendingMergeParents('stage-pmp', []);
+      expect(stages.findById('stage-pmp')!.pending_merge_parents).toBeNull();
+    });
+
+    it('list methods return new fields on StageRow', () => {
+      const { stages, repoId } = setupStagePrereqs();
+
+      stages.upsert(
+        makeStageData(repoId, {
+          id: 'stage-list',
+          is_draft: 1,
+          mr_target_branch: 'release/1.0',
+          pending_merge_parents: JSON.stringify([{ stage_id: 'p1', branch: 'b', pr_url: 'u', pr_number: 1 }]),
+        })
+      );
+
+      const byRepo = stages.listByRepo(repoId);
+      expect(byRepo).toHaveLength(1);
+      expect(byRepo[0].is_draft).toBe(1);
+      expect(byRepo[0].mr_target_branch).toBe('release/1.0');
+      expect(byRepo[0].pending_merge_parents).not.toBeNull();
+
+      const byTicket = stages.listByTicket('ticket-1');
+      expect(byTicket).toHaveLength(1);
+      expect(byTicket[0].is_draft).toBe(1);
+
+      const byColumn = stages.listByColumn(repoId, 'ready_for_work');
+      expect(byColumn).toHaveLength(1);
+      expect(byColumn[0].mr_target_branch).toBe('release/1.0');
     });
   });
 

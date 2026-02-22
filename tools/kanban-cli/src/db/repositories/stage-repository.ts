@@ -1,4 +1,5 @@
 import type { KanbanDatabase } from '../database.js';
+import type { PendingMergeParent } from '../../types/work-items.js';
 import type { StageRow } from './types.js';
 
 export interface StageUpsertData {
@@ -18,6 +19,9 @@ export interface StageUpsertData {
   session_active: number;
   locked_at: string | null;
   locked_by: string | null;
+  is_draft?: number;
+  pending_merge_parents?: string | null;
+  mr_target_branch?: string | null;
   file_path: string;
   last_synced: string;
 }
@@ -41,8 +45,9 @@ export class StageRepository {
       .prepare(
         `INSERT OR REPLACE INTO stages
          (id, ticket_id, epic_id, repo_id, title, status, kanban_column, refinement_type,
-          worktree_branch, pr_url, pr_number, priority, due_date, session_active, locked_at, locked_by, file_path, last_synced)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          worktree_branch, pr_url, pr_number, priority, due_date, session_active, locked_at, locked_by,
+          is_draft, pending_merge_parents, mr_target_branch, file_path, last_synced)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         data.id,
@@ -61,6 +66,9 @@ export class StageRepository {
         data.session_active,
         data.locked_at,
         data.locked_by,
+        data.is_draft ?? 0,
+        data.pending_merge_parents ?? null,
+        data.mr_target_branch ?? null,
         data.file_path,
         data.last_synced
       );
@@ -127,5 +135,17 @@ export class StageRepository {
            AND kanban_column != 'done'`
       )
       .all(repoId) as StageRow[];
+  }
+
+  /**
+   * Update pending_merge_parents for a stage (targeted update, no full upsert needed).
+   * Stores as JSON string in SQLite.
+   */
+  updatePendingMergeParents(stageId: string, parents: PendingMergeParent[]): void {
+    const json = parents.length > 0 ? JSON.stringify(parents) : null;
+    this.db
+      .raw()
+      .prepare('UPDATE stages SET pending_merge_parents = ? WHERE id = ?')
+      .run(json, stageId);
   }
 }

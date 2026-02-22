@@ -2,7 +2,7 @@ import Database from 'better-sqlite3';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
-import { ALL_CREATE_STATEMENTS } from './schema.js';
+import { ALL_CREATE_STATEMENTS, ALTER_TABLE_MIGRATIONS } from './schema.js';
 
 /**
  * Default database path: ~/.config/kanban-workflow/kanban.db
@@ -55,6 +55,15 @@ export class KanbanDatabase {
     const migrate = this.db.transaction(() => {
       for (const sql of ALL_CREATE_STATEMENTS) {
         this.db.exec(sql);
+      }
+      // ALTER TABLE migrations: try/catch each because SQLite throws
+      // if the column already exists (no IF NOT EXISTS support).
+      for (const sql of ALTER_TABLE_MIGRATIONS) {
+        try {
+          this.db.exec(sql);
+        } catch {
+          // Column already exists — safe to ignore.
+        }
       }
     });
     migrate();

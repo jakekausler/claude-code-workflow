@@ -134,4 +134,78 @@ describe('KanbanDatabase', () => {
       db.close();
     }
   });
+
+  it('creates stages table with is_draft, pending_merge_parents, mr_target_branch columns', () => {
+    const db = new KanbanDatabase(dbPath);
+    try {
+      const columns = db.raw()
+        .prepare("PRAGMA table_info(stages)")
+        .all() as Array<{ name: string }>;
+      const colNames = columns.map((c) => c.name);
+      expect(colNames).toContain('is_draft');
+      expect(colNames).toContain('pending_merge_parents');
+      expect(colNames).toContain('mr_target_branch');
+    } finally {
+      db.close();
+    }
+  });
+
+  it('creates the parent_branch_tracking table with correct columns', () => {
+    const db = new KanbanDatabase(dbPath);
+    try {
+      const tables = db.raw()
+        .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='parent_branch_tracking'")
+        .all();
+      expect(tables).toHaveLength(1);
+
+      const columns = db.raw()
+        .prepare("PRAGMA table_info(parent_branch_tracking)")
+        .all() as Array<{ name: string }>;
+      const colNames = columns.map((c) => c.name);
+      expect(colNames).toContain('id');
+      expect(colNames).toContain('child_stage_id');
+      expect(colNames).toContain('parent_stage_id');
+      expect(colNames).toContain('parent_branch');
+      expect(colNames).toContain('parent_pr_url');
+      expect(colNames).toContain('last_known_head');
+      expect(colNames).toContain('is_merged');
+      expect(colNames).toContain('repo_id');
+      expect(colNames).toContain('last_checked');
+    } finally {
+      db.close();
+    }
+  });
+
+  it('creates indexes on parent_branch_tracking', () => {
+    const db = new KanbanDatabase(dbPath);
+    try {
+      const indexes = db.raw()
+        .prepare("SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='parent_branch_tracking'")
+        .all() as Array<{ name: string }>;
+      const indexNames = indexes.map((i) => i.name);
+      expect(indexNames).toContain('idx_parent_tracking_child');
+      expect(indexNames).toContain('idx_parent_tracking_parent');
+    } finally {
+      db.close();
+    }
+  });
+
+  it('schema migration is idempotent (runs twice without error)', () => {
+    const db1 = new KanbanDatabase(dbPath);
+    db1.close();
+
+    // Opening again runs migration a second time — should not throw
+    const db2 = new KanbanDatabase(dbPath);
+    try {
+      const columns = db2.raw()
+        .prepare("PRAGMA table_info(stages)")
+        .all() as Array<{ name: string }>;
+      const colNames = columns.map((c) => c.name);
+      expect(colNames).toContain('is_draft');
+      expect(colNames).toContain('pending_merge_parents');
+      expect(colNames).toContain('mr_target_branch');
+    } finally {
+      db2.close();
+    }
+  });
 });

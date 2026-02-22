@@ -43,6 +43,9 @@ export interface StageRow {
   session_active: number;
   locked_at: string | null;
   locked_by: string | null;
+  is_draft: number;
+  pending_merge_parents: string | null;
+  mr_target_branch: string | null;
   file_path: string;
   last_synced: string;
 }

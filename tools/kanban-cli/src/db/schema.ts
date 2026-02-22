@@ -54,6 +54,9 @@ CREATE TABLE IF NOT EXISTS stages (
   session_active BOOLEAN DEFAULT 0,
   locked_at TEXT,
   locked_by TEXT,
+  is_draft BOOLEAN DEFAULT 0,
+  pending_merge_parents TEXT,
+  mr_target_branch TEXT,
   file_path TEXT NOT NULL,
   last_synced TEXT NOT NULL
 )`;
@@ -82,8 +85,35 @@ CREATE TABLE IF NOT EXISTS summaries (
   UNIQUE(item_id, item_type, repo_id)
 )`;
 
+export const CREATE_PARENT_BRANCH_TRACKING_TABLE = `
+CREATE TABLE IF NOT EXISTS parent_branch_tracking (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  child_stage_id TEXT NOT NULL,
+  parent_stage_id TEXT NOT NULL,
+  parent_branch TEXT NOT NULL,
+  parent_pr_url TEXT,
+  last_known_head TEXT,
+  is_merged BOOLEAN DEFAULT 0,
+  repo_id INTEGER REFERENCES repos(id),
+  last_checked TEXT NOT NULL,
+  UNIQUE(child_stage_id, parent_stage_id)
+)`;
+
 export const CREATE_EPICS_JIRA_KEY_INDEX = `CREATE INDEX IF NOT EXISTS idx_epics_jira_key ON epics(jira_key, repo_id)`;
 export const CREATE_TICKETS_JIRA_KEY_INDEX = `CREATE INDEX IF NOT EXISTS idx_tickets_jira_key ON tickets(jira_key, repo_id)`;
+export const CREATE_PARENT_TRACKING_CHILD_INDEX = `CREATE INDEX IF NOT EXISTS idx_parent_tracking_child ON parent_branch_tracking(child_stage_id)`;
+export const CREATE_PARENT_TRACKING_PARENT_INDEX = `CREATE INDEX IF NOT EXISTS idx_parent_tracking_parent ON parent_branch_tracking(parent_stage_id)`;
+
+/**
+ * ALTER TABLE migrations for adding columns to existing tables.
+ * Each is wrapped in try/catch at execution time because SQLite throws
+ * if the column already exists (no IF NOT EXISTS for ALTER TABLE ADD COLUMN).
+ */
+export const ALTER_TABLE_MIGRATIONS = [
+  'ALTER TABLE stages ADD COLUMN is_draft BOOLEAN DEFAULT 0',
+  'ALTER TABLE stages ADD COLUMN pending_merge_parents TEXT',
+  'ALTER TABLE stages ADD COLUMN mr_target_branch TEXT',
+] as const;
 
 export const ALL_CREATE_STATEMENTS = [
   CREATE_REPOS_TABLE,
@@ -92,6 +122,9 @@ export const ALL_CREATE_STATEMENTS = [
   CREATE_STAGES_TABLE,
   CREATE_DEPENDENCIES_TABLE,
   CREATE_SUMMARIES_TABLE,
+  CREATE_PARENT_BRANCH_TRACKING_TABLE,
   CREATE_EPICS_JIRA_KEY_INDEX,
   CREATE_TICKETS_JIRA_KEY_INDEX,
+  CREATE_PARENT_TRACKING_CHILD_INDEX,
+  CREATE_PARENT_TRACKING_PARENT_INDEX,
 ] as const;
