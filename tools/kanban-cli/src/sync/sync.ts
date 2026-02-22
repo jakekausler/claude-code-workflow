@@ -1,8 +1,9 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import matter from 'gray-matter';
 import type { KanbanDatabase } from '../db/database.js';
 import type { PipelineConfig } from '../types/pipeline.js';
-import type { Epic, Ticket, Stage } from '../types/work-items.js';
+import type { Epic, Ticket, Stage, PendingMergeParent } from '../types/work-items.js';
 import { COMPLETE_STATUS } from '../types/pipeline.js';
 import { StateMachine } from '../engine/state-machine.js';
 import { computeKanbanColumn } from '../engine/kanban-columns.js';
@@ -17,6 +18,12 @@ import { EpicRepository } from '../db/repositories/epic-repository.js';
 import { TicketRepository } from '../db/repositories/ticket-repository.js';
 import { StageRepository } from '../db/repositories/stage-repository.js';
 import { DependencyRepository } from '../db/repositories/dependency-repository.js';
+
+/**
+ * Statuses that count as "soft-resolved" for stage→stage dependencies.
+ * A stage with one of these statuses has a PR open but is not yet Complete.
+ */
+const SOFT_RESOLVE_STATUSES = ['PR Created', 'Addressing Comments'] as const;
 
 export interface SyncOptions {
   repoPath: string;
@@ -105,8 +112,10 @@ export function syncRepo(options: SyncOptions): SyncResult {
 
   // 4. Build maps for dependency resolution
   const stageStatusMap = new Map<string, string>();
+  const stageById = new Map<string, Stage>();
   for (const stage of parsedStages) {
     stageStatusMap.set(stage.id, stage.status);
+    stageById.set(stage.id, stage);
   }
 
   // Build ticket→stages map for resolving ticket-level dependencies
@@ -135,7 +144,7 @@ export function syncRepo(options: SyncOptions): SyncResult {
   }
 
   /**
-   * Check whether a dependency target is resolved:
+   * Check whether a dependency target is resolved (hard-resolution):
    * - Stage: resolved when its status is Complete
    * - Ticket: resolved when ALL stages in that ticket are Complete
    * - Epic: resolved when ALL stages across ALL tickets in that epic are Complete
@@ -167,6 +176,33 @@ export function syncRepo(options: SyncOptions): SyncResult {
   }
 
   /**
+   * Check whether a stage dependency target is soft-resolved.
+   * Only applies to stage→stage dependencies.
+   * Returns true if the target stage's status is 'PR Created' or 'Addressing Comments'.
+   */
+  function isStageSoftResolved(stageId: string): boolean {
+    const status = stageStatusMap.get(stageId);
+    if (!status) return false;
+    return (SOFT_RESOLVE_STATUSES as readonly string[]).includes(status);
+  }
+
+  /**
+   * Check whether a dependency is soft-or-hard-resolved.
+   * - For stage→stage deps: returns true if hard-resolved OR soft-resolved
+   * - For all other dep types (stage→ticket, stage→epic, ticket→ticket, epic→epic):
+   *   returns true only if hard-resolved (Complete required)
+   */
+  function isDependencySoftOrHardResolved(targetId: string): boolean {
+    if (isDependencyResolved(targetId)) return true;
+    // Soft-resolution only applies to stage→stage deps
+    const targetType = getEntityType(targetId);
+    if (targetType === 'stage') {
+      return isStageSoftResolved(targetId);
+    }
+    return false;
+  }
+
+  /**
    * Upsert a dependency and resolve it if the target is complete.
    */
   function upsertDependency(fromId: string, fromType: string, depId: string): void {
@@ -182,6 +218,36 @@ export function syncRepo(options: SyncOptions): SyncResult {
 
     if (isDependencyResolved(depId)) {
       depRepo.resolve(fromId, depId);
+    }
+  }
+
+  /**
+   * Update a stage's frontmatter file with pending_merge_parents and is_draft.
+   * Reads the file, modifies the frontmatter, and writes it back.
+   */
+  function updateStageFrontmatter(
+    filePath: string,
+    pendingParents: PendingMergeParent[],
+  ): void {
+    try {
+      const content = fs.readFileSync(filePath, 'utf-8');
+      const parsed = matter(content);
+
+      if (pendingParents.length > 0) {
+        parsed.data.pending_merge_parents = pendingParents;
+        parsed.data.is_draft = true;
+      } else {
+        parsed.data.pending_merge_parents = [];
+        parsed.data.is_draft = false;
+      }
+
+      const updated = matter.stringify(parsed.content, parsed.data);
+      fs.writeFileSync(filePath, updated, 'utf-8');
+    } catch (err: unknown) {
+      const code = (err as NodeJS.ErrnoException)?.code;
+      if (code !== 'ENOENT') {
+        result.errors.push(`Failed to update frontmatter for ${filePath}: ${err instanceof Error ? err.message : String(err)}`);
+      }
     }
   }
 
@@ -236,15 +302,41 @@ export function syncRepo(options: SyncOptions): SyncResult {
         upsertDependency(stage.id, 'stage', depId);
       }
 
-      // Compute kanban column
-      const hasUnresolvedDeps = !depRepo.allResolved(stage.id);
+      // Determine if all deps are soft-or-hard-resolved for kanban column
+      const allSoftOrHardResolved = stage.depends_on.length === 0 ||
+        stage.depends_on.every((depId) => isDependencySoftOrHardResolved(depId));
+      const hasUnresolvedDeps = !allSoftOrHardResolved;
+
       const kanbanColumn = computeKanbanColumn({
         status: stage.status,
         pipelineStatuses,
         hasUnresolvedDeps,
       });
 
-      // Upsert stage
+      // Build pending_merge_parents for soft-unblocked stages
+      const pendingParents: PendingMergeParent[] = [];
+      if (allSoftOrHardResolved) {
+        for (const depId of stage.depends_on) {
+          const depType = getEntityType(depId);
+          // Only stage→stage deps can be soft-resolved
+          if (depType === 'stage' && !isDependencyResolved(depId) && isStageSoftResolved(depId)) {
+            const parentStage = stageById.get(depId);
+            if (parentStage && parentStage.worktree_branch && parentStage.pr_url && parentStage.pr_number != null) {
+              pendingParents.push({
+                stage_id: depId,
+                branch: parentStage.worktree_branch,
+                pr_url: parentStage.pr_url,
+                pr_number: parentStage.pr_number,
+              });
+            }
+          }
+        }
+      }
+
+      // Determine is_draft: true when there are pending merge parents
+      const isDraft = pendingParents.length > 0;
+
+      // Upsert stage with pending_merge_parents and is_draft
       stageRepo.upsert({
         id: stage.id,
         ticket_id: stage.ticket,
@@ -262,9 +354,15 @@ export function syncRepo(options: SyncOptions): SyncResult {
         session_active: stage.session_active ? 1 : 0,
         locked_at: null,
         locked_by: null,
+        is_draft: isDraft ? 1 : 0,
+        pending_merge_parents: pendingParents.length > 0 ? JSON.stringify(pendingParents) : null,
+        mr_target_branch: stage.mr_target_branch,
         file_path: stage.file_path,
         last_synced: now,
       });
+
+      // Write pending_merge_parents to the child stage's YAML frontmatter file
+      updateStageFrontmatter(stage.file_path, pendingParents);
     }
     result.stages = parsedStages.length;
   });
