@@ -21,7 +21,7 @@ Task 1 (Types + Zod)
 
 **Goal**: Add new TypeScript interfaces and Zod schemas for all new frontmatter fields. Ensure existing files without new fields parse correctly via defaults.
 
-**Status**: Not Started
+**Status**: Complete
 
 **Files to modify**:
 - `tools/kanban-cli/src/types/work-items.ts` — Add `PendingMergeParent`, `JiraLink` interfaces; extend `Stage` and `Ticket`
@@ -77,7 +77,7 @@ Task 1 (Types + Zod)
 
 **Goal**: Add new columns to stages table and create `parent_branch_tracking` table with indexes.
 
-**Status**: Not Started
+**Status**: Complete
 **Depends on**: Task 1 (types must exist for repository methods)
 
 **Files to modify**:
@@ -116,7 +116,7 @@ Task 1 (Types + Zod)
 
 **Goal**: Implement soft-resolution for stage→stage dependencies. Populate `pending_merge_parents` in both SQLite and frontmatter when stages are soft-unblocked.
 
-**Status**: Not Started
+**Status**: Complete
 **Depends on**: Tasks 1 + 2
 
 **Files to modify**:
@@ -174,7 +174,7 @@ Task 1 (Types + Zod)
 
 **Goal**: Add validation rules for `pending_merge_parents` and `jira_links` fields.
 
-**Status**: Not Started
+**Status**: Complete
 **Depends on**: Tasks 1 + 3
 
 **Files to modify**:
@@ -212,7 +212,7 @@ Task 1 (Types + Zod)
 
 **Goal**: Include `pending_merge_parents` info in board JSON output. Add HTML indicator for pending merge parents.
 
-**Status**: Not Started
+**Status**: Complete
 **Depends on**: Tasks 1 + 3
 
 **Files to modify**:
@@ -242,7 +242,7 @@ Task 1 (Types + Zod)
 
 **Goal**: End-to-end tests with realistic repo scenarios. Verify backward compatibility with existing repos.
 
-**Status**: Not Started
+**Status**: Complete
 **Depends on**: Tasks 3 + 4 + 5
 
 **Files to create**:
