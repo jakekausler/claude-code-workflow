@@ -1030,6 +1030,51 @@ See [Section 6: Modularity & Pipeline Configuration](#6-modularity--pipeline-con
 
 **Modularity integration**: `WORKFLOW_AUTO_DESIGN` and `WORKFLOW_LEARNINGS_THRESHOLD` are set in the pipeline config defaults section. Skills read `WORKFLOW_AUTO_DESIGN` from config. `WORKFLOW_LEARNINGS_THRESHOLD` is read by the insights cron loop (Stage 6E), not by individual phase skills.
 
+### Stage 5.5A: Schema & Sync — MR Dependency Resolution
+
+**Goal**: The sync engine supports graduated (soft/hard) dependency resolution. New frontmatter fields and SQLite schema are in place. The kanban board correctly shows stages unblocked by parent PR creation.
+
+**What ships**:
+1. New stage frontmatter fields: `pending_merge_parents`, `is_draft`, `mr_target_branch`.
+2. New ticket frontmatter field: `jira_links`.
+3. SQLite schema additions: `is_draft`, `pending_merge_parents` columns on stages table; `parent_branch_tracking` table.
+4. Sync engine dual-resolution logic (soft-resolve at PR Created for stage-level deps, hard-resolve at Complete).
+5. `pending_merge_parents` population during sync.
+6. Kanban column assignment update (soft-resolved deps count as resolved for column placement).
+7. `kanban-cli validate` updates for new field validation.
+8. Zod schema updates for all new frontmatter fields.
+
+**Depends on**: Stages 0–5 (all complete).
+
+**Full design**: See `docs/plans/2026-02-21-mr-dependency-chains-design.md`.
+
+### Stage 5.5B: Skill Updates — Branch Chain & Draft MR
+
+**Goal**: `phase-build` creates worktrees based on parent MR branches. `phase-finalize` creates draft MRs with dependency documentation and correct branch targeting. Code host adapters support MR editing.
+
+**What ships**:
+1. Code host adapter additions: `editPrBase()`, `markPrReady()`, `getBranchHead()` for GitHub and GitLab.
+2. `phase-build` skill update: merge parent branches into worktree at creation, run verification after merge.
+3. `phase-finalize` skill update: draft MR creation when parents unmerged, dependency documentation in MR body, MR target branch logic (single unmerged parent → parent branch, else → main).
+4. New `is_draft`, `mr_target_branch` frontmatter writes in finalize.
+
+**Depends on**: Stage 5.5A (schema and sync must be in place).
+
+**Full design**: See `docs/plans/2026-02-21-mr-dependency-chains-design.md`.
+
+### Stage 5.5C: Jira Conversion Enrichment
+
+**Goal**: `jira-import` captures link manifests. `convert-ticket` fetches and reads all linked content for enriched brainstorming.
+
+**What ships**:
+1. `jira-import` command update: extract and store `jira_links` manifest from Jira ticket data (Confluence pages, linked issues, attachments, external URLs).
+2. `convert-ticket` skill update: re-pull Jira ticket at conversion time, fetch all linked content based on manifest.
+3. Graceful degradation when skills unavailable (Confluence reader, etc.).
+
+**Depends on**: Stage 5.5A (ticket frontmatter schema with `jira_links` field). Independent of Stage 5.5B.
+
+**Full design**: See `docs/plans/2026-02-21-mr-dependency-chains-design.md`.
+
 ### Stage 6: Orchestrator (3-System Architecture)
 
 **Goal**: An external orchestrator that manages stage lifecycle through three concurrent systems: a main work loop, an MR comment cron, and an insights threshold cron.
@@ -1049,7 +1094,7 @@ Each system operates independently. The main loop handles the pipeline state mac
 - **Resolvers rely on the loop**: Resolver functions return a transition target; the loop updates stage status + ticket + epic + sync.
 - **Exit gates are loop behavior**: After a session exits, the loop runs a deterministic sequence (verify status, set `session_active = false`, update ticket/epic, sync). Not configurable, not in pipeline config.
 - **Journal and lessons-learned are skill-internal**: Each phase skill calls journal and lessons-learned before exiting. The loop never sees them.
-- **Backlog re-evaluation only on Done**: Dependencies can only be resolved when a stage reaches Done. The loop checks backlog only after completion cascade, not on every tick.
+- **Backlog re-evaluation on Done and PR Created**: Dependencies hard-resolve when a stage reaches Done (completion cascade). Stage-level dependencies also soft-resolve when a parent enters PR Created, unblocking children with `pending_merge_parents` tracking. Ticket/epic-level dependencies still require hard resolution only. See `docs/plans/2026-02-21-mr-dependency-chains-design.md` for full graduated resolution model.
 - **`pr_url` in frontmatter + SQLite**: The finalize skill writes `pr_url` to stage frontmatter. Synced to SQLite for fast cron queries.
 
 **Depends on**: Stage 1 + Stage 3 (worktrees need branch management).
@@ -1075,6 +1120,8 @@ Stage 6 is decomposed into five sub-stages:
 10. Worktree isolation strategy validation (checks repo CLAUDE.md has the section).
 11. Idle behavior: if no stages available, wait N seconds and retry.
 12. Graceful shutdown: SIGINT/SIGTERM handling, waits for active sessions to finish.
+
+13. Worktree creation reads `pending_merge_parents` from stage frontmatter and merges parent MR branches into the new worktree before handing off to the Build session (Stage 5.5B provides the schema/skill foundation for this).
 
 **Does NOT include**: Exit gate logic, ticket/epic updates, backlog re-evaluation, cron loops.
 
@@ -1111,26 +1158,28 @@ Stage 6 is decomposed into five sub-stages:
    - Stage → Done: check all stages in ticket.
    - All stages Done → mark ticket Complete.
    - All tickets Complete → mark epic Complete.
-2. Backlog re-evaluation (triggered only by stage → Done):
-   - Query `dependencies` table for edges pointing TO the completed stage/ticket/epic.
-   - For each dependent stage: check if ALL its dependencies are now resolved.
-   - If all resolved: move from Backlog to Ready for Work (update status + sync).
-3. Ticket-level completion check:
+2. Backlog re-evaluation (two triggers):
+   - **Hard trigger** (stage → Done): Query `dependencies` table for edges pointing TO the completed stage/ticket/epic. For each dependent: check if ALL its dependencies are now resolved. If all resolved: move from Backlog to Ready for Work.
+   - **Soft trigger** (stage → PR Created): For stage-level dependencies only, check if dependent stages can be soft-unblocked. If all deps are either hard-resolved or soft-resolved: move from Backlog to Ready for Work with `pending_merge_parents` populated. Ticket/epic-level deps still require hard resolution.
+3. `pending_merge_parents` management:
+   - On soft-unblock: populate child stage's `pending_merge_parents` with parent branch/PR info.
+   - On hard-resolve (parent merges): remove entry from child's `pending_merge_parents`, clear `is_draft` if no parents remain.
+4. Ticket-level completion check:
    - When ticket completes, also check if it was a dependency for other stages/tickets.
    - Recursive: ticket completion can unblock stages that depended on the ticket.
-4. Epic-level completion check:
+5. Epic-level completion check:
    - Same recursive logic at epic level.
 
 **Depends on**: Stage 6B (exit gates must update status before cascade can check).
 
-#### Stage 6D: Cron Loop — MR Comment Poller
+#### Stage 6D: Cron Loop — MR Comment Poller & MR Dependency Chain Manager
 
-**Goal**: Periodically polls for new MR/PR comments and merged status, transitions stages accordingly.
+**Goal**: Periodically polls for new MR/PR comments and merged status, manages parent→child MR dependency chains including rebasing, retargeting, and draft promotion.
 
 **What ships**:
 1. Cron scheduler: timer-based execution at configurable interval.
 2. `cron` config section in workflow YAML (schema + loader + validation).
-3. MR comment polling:
+3. MR comment polling (original scope):
    - Query SQLite for all stages where `status = 'PR Created'`.
    - Read `pr_url` from SQLite (cached from frontmatter).
    - Fetch comments via `gh pr view` / `glab mr notes list`.
@@ -1142,8 +1191,28 @@ Stage 6 is decomposed into five sub-stages:
    - Added to SQLite `stages` table.
    - Written by finalize skill when creating PR.
    - Synced to DB by `kanban-cli sync`.
+5. Parent→child MR relationship tracking (new scope):
+   - Query SQLite for stages with non-empty `pending_merge_parents` in `PR Created` or `Addressing Comments`.
+   - For each parent: check if PR is open, merged, or updated (new commits).
+   - Track parent branch HEAD commits in `parent_branch_tracking` SQLite table.
+6. Parent merge detection & rebase:
+   - When parent MR merges: remove from child's `pending_merge_parents`, spawn `rebase-child-mr` session to rebase child branch.
+   - When parent branch updated (new commits): spawn `rebase-child-mr` session to rebase child onto updated parent.
+7. MR retargeting:
+   - Multi-parent → all but one merge: retarget child MR to remaining parent branch via `editPrBase()`.
+   - Single-parent → parent merges: retarget child MR to main/default via `editPrBase()`.
+8. Draft → ready promotion:
+   - After all parents merged and rebase clean: promote via `markPrReady()`, set `is_draft: false` in frontmatter.
+9. New `rebase-child-mr` skill:
+   - Rebases child branch onto new base (parent or main after merge).
+   - Resolves conflicts using full context (child + parent stage files, ticket info).
+   - Runs verification after rebase, pushes with `--force-with-lease`.
+   - Flags unresolvable conflicts with `rebase_conflict: true` for human review.
+10. Race condition mitigation: uses `session_active` locking before spawning rebase sessions.
 
-**Depends on**: Stage 6B (needs the status propagation logic), Stage 6C (merged PR triggers completion cascade).
+**Depends on**: Stage 6B (needs the status propagation logic), Stage 6C (merged PR triggers completion cascade). Uses code host adapters from Stage 5.5B (`editPrBase`, `markPrReady`, `getBranchHead`).
+
+**Full design**: See `docs/plans/2026-02-21-mr-dependency-chains-design.md`.
 
 #### Stage 6E: Cron Loop — Insights Threshold Checker
 
@@ -1229,22 +1298,26 @@ Stage 6A (Infrastructure & Sessions)
 Stage 0 (Pipeline Configuration) ✅
   └── Stage 1 (Foundation + SQLite + CLI) ✅
         ├── Stage 2 (Migration + Conversion) ✅
-        │     └── Stage 4 (Jira + Bidirectional Sync) ── also depends on Stage 3
+        │     └── Stage 4 (Jira + Bidirectional Sync) ✅ ── also depends on Stage 3
         ├── Stage 3 (Remote Mode + MR/PR) ✅
-        │     ├── Stage 6A (Orchestrator Infrastructure & Sessions)
-        │     │     ├── Stage 6B (Exit Gates & Resolvers)
-        │     │     │     └── Stage 6C (Completion Cascade & Backlog)
-        │     │     │           └── Stage 6D (MR Comment Cron) ── also depends on 6B
-        │     │     └── Stage 6E (Insights Cron) ── depends on 6A + 6D cron infra
-        │     ├── Stage 7 (Slack)
-        │     └── Stage 4 (Jira)
-        ├── Stage 5 (Auto-Design + Auto-Analysis) ── independent, insights cron in 6E
-        └── Stage 8 (Global CLI + Multi-Repo) ── independent
-              └── Stage 9 (Web UI)
-                    └── Stage 10 (Session Monitor Integration)
+        ├── Stage 5 (Auto-Design + Auto-Analysis) ✅
+        │
+        └── Stage 5.5A (Schema & Sync — MR Dependency Resolution)
+              ├── Stage 5.5B (Skill Updates — Branch Chain & Draft MR)
+              │     └── Stage 6A (Orchestrator Infrastructure & Sessions)
+              │           ├── Stage 6B (Exit Gates & Resolvers)
+              │           │     └── Stage 6C (Completion Cascade & Backlog)
+              │           │           └── Stage 6D (MR Comment Cron + MR Chain Manager) ── also depends on 6B
+              │           └── Stage 6E (Insights Cron) ── depends on 6A + 6D cron infra
+              ├── Stage 5.5C (Jira Conversion Enrichment) ── independent of 5.5B
+              │
+              ├── Stage 7 (Slack) ── depends on Stage 3
+              └── Stage 8 (Global CLI + Multi-Repo) ── depends on Stage 1
+                    └── Stage 9 (Web UI)
+                          └── Stage 10 (Session Monitor Integration)
 ```
 
-**Parallelizable after Stage 3**: Stages 4, 5, 6A, 7, and 8 can all be started concurrently. Within Stage 6, sub-stages are serial (6A → 6B → 6C → 6D, with 6E branching from 6A + 6D).
+**Next up**: Stage 5.5A must complete before 5.5B and 5.5C (both depend on schema). Stage 5.5B must complete before 6A (orchestrator needs branch chain awareness). Stage 5.5C is independent of 5.5B and can run in parallel. Within Stage 6, sub-stages are serial (6A → 6B → 6C → 6D, with 6E branching from 6A + 6D). Stage 6D has expanded scope to include MR dependency chain management.
 
 ---
 
@@ -1287,6 +1360,16 @@ Stage 0 (Pipeline Configuration) ✅
 | When does backlog re-evaluation happen? | Only when a stage reaches Done (completion cascade). Not on every tick — dependencies can only be resolved by a completion event. |
 | Who sets stage status after work? | Session states set their own status in frontmatter before exiting. Resolvers and crons rely on the loop to update status. |
 | Is the orchestrator a single loop? | No. Three concurrent systems: main work loop, MR comment cron, insights threshold cron. |
+| When do dependencies unblock? | Graduated: stage-level deps soft-resolve at PR Created (child gets `pending_merge_parents`), hard-resolve at Complete. Ticket/epic-level deps hard-resolve only. |
+| How are child worktrees created with unmerged parents? | Merge all parent MR branches into child branch at worktree creation (Build phase). Run verification after merge. |
+| What does a child MR target? | Single unmerged parent → parent branch. Multiple or zero unmerged parents → main/default. |
+| Are child MRs created as draft? | Yes, when `pending_merge_parents` is non-empty. MR description documents the dependency chain. |
+| When are child MRs promoted from draft? | Auto-promoted when all parents merge and rebase is clean. Cron handles this. |
+| What triggers child branch rebasing? | Any parent branch push (new commits) or parent merge. Cron detects and spawns rebase session. |
+| When do parent updates propagate to children? | Only after child reaches PR Created. No rebasing during active Design/Build/Testing phases. |
+| How are merge conflicts during rebase handled? | Claude session (`rebase-child-mr` skill) resolves conflicts with full parent + child context. Flags unresolvable conflicts for human review. |
+| How does Jira ticket conversion get enriched? | Import captures link manifest (Confluence, issues, attachments, external URLs). Convert-ticket re-pulls ticket and fetches all linked content at conversion time. |
+| Where do MR chain amendments go? | New stages 5.5A (schema/sync), 5.5B (skills), 5.5C (Jira enrichment) before 6A. |
 
 ### 5.2 Open — Resolve at Stage Start
 
@@ -1315,6 +1398,21 @@ Stage 0 (Pipeline Configuration) ✅
 - Which Jira fields to populate beyond status? Assignee, sprint, story points, labels?
 - Should the "To Convert" column support non-Jira sources (e.g., GitHub Issues, Linear tickets)?
 
+**Stage 5.5A (Schema & Sync)**:
+- How should `pending_merge_parents` interact with `kanban-cli validate`? Should it warn if a parent reference points to a stage that's no longer in PR Created?
+- Should `pending_merge_parents` be auto-populated by the sync engine, or explicitly set by the orchestrator's backlog re-evaluation?
+- Content hash vs mtime for detecting frontmatter staleness with the new fields?
+
+**Stage 5.5B (Skill Updates)**:
+- Should `phase-build` automatically run `git fetch` before attempting parent branch merges, or assume the orchestrator already fetched?
+- How should the build session communicate merge conflict details back if it can't resolve them?
+- Should verification after parent merge be the full project verify or a lighter check?
+
+**Stage 5.5C (Jira Conversion Enrichment)**:
+- Exact Confluence reader skill API contract (URL in → content out). Can be stubbed until the skill is available.
+- Should the converter store fetched content as separate files alongside the ticket, or inline it all into the brainstorming context?
+- Rate limiting for fetching many linked items from a single Jira ticket.
+
 **Stage 6A (Orchestrator Infrastructure)**:
 - How does the orchestrator handle Claude session failures (crash, timeout, token limit)? Retry immediately? Exponential backoff? Mark stage as blocked after N failures? Alert user?
 - Should the orchestrator run indefinitely (daemon) or as a bounded batch (`--rounds N`)?
@@ -1330,10 +1428,14 @@ Stage 0 (Pipeline Configuration) ✅
 - How deep should recursive cascade go? If completing a stage unblocks a stage that auto-completes (e.g., all its sub-dependencies are met), should that trigger another cascade immediately?
 - Performance: for large dependency graphs, should cascade be batched or run synchronously?
 
-**Stage 6D (MR Comment Cron)**:
+**Stage 6D (MR Comment Cron + MR Chain Manager)**:
 - How to track "seen" comments? Last-seen comment ID in SQLite? Timestamp-based? Full comment hash?
 - How to distinguish actionable comments from discussion/resolved threads? Heuristic or explicit "actionable" label?
 - Rate limiting: how to handle GitHub/GitLab API rate limits when polling many PRs?
+- How to detect "parent branch has new commits" efficiently? `git ls-remote` per branch per cycle could be expensive with many MRs. Consider batching.
+- Should the cron immediately spawn a rebase session, or queue the rebase and let the main loop pick it up?
+- How deep can parent chains go? (A depends on B depends on C, all in PR.) Rebase must cascade sequentially. What's the ordering?
+- What if a rebase session fails and the branch is in a broken state? Recovery flow for `rebase_conflict` flagged stages.
 
 **Stage 6E (Insights Cron)**:
 - How to count "unanalyzed" learnings? A flag in each learning file? A separate index? Timestamp-based (learnings newer than last meta-insights run)?
@@ -1370,6 +1472,12 @@ Stage 0 (Pipeline Configuration) ✅
 | Skill text ↔ config transition mismatch | LLM validation layer in `validate-pipeline` checks skill content against declared transitions. Runtime enforcement rejects illegal transitions. | 0 |
 | Custom pipeline dead ends | Graph validation ensures all states can reach Done. Users must run `validate-pipeline` before using custom configs. | 0 |
 | Resolver function errors in production | Resolver validation dry-runs with mock data. Runtime catches exceptions and logs errors without transitioning. | 0 |
+| MR dependency chain cascade depth | Deep chains (A→B→C all in PR) require sequential rebasing. Cron must handle ordering correctly and avoid infinite rebase loops. | 6D |
+| Rebase conflicts in child MRs | Claude session resolves conflicts, but complex conflicts may be unresolvable. `rebase_conflict` flag + human intervention fallback. | 6D |
+| Stale `pending_merge_parents` data | Parent MR could be merged externally (outside workflow). Cron must detect and update. Sync engine validates on each run. | 5.5A, 6D |
+| Force-push risks on child branches | Rebasing requires `--force-with-lease` push. If another session is working on the same branch, force-push could lose work. `session_active` locking prevents this. | 6D |
+| MR retargeting API differences | GitHub and GitLab have different APIs for changing MR base branch. Code host adapters must handle both correctly. | 5.5B |
+| Confluence reader skill availability | Not currently installed. `convert-ticket` must gracefully degrade when unavailable. | 5.5C |
 
 ---
 
