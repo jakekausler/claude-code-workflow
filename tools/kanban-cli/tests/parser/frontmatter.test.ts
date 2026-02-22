@@ -259,6 +259,10 @@ Stage description here.
     expect(result.worktree_branch).toBe('epic-001/ticket-001-001/stage-001-001-001');
     expect(result.priority).toBe(0);
     expect(result.due_date).toBeNull();
+    // New fields should have defaults when not in frontmatter
+    expect(result.pending_merge_parents).toEqual([]);
+    expect(result.is_draft).toBe(false);
+    expect(result.mr_target_branch).toBeNull();
   });
 
   it('throws on missing ticket field', () => {
@@ -457,6 +461,186 @@ depends_on: []
 `;
     const result = parseStageFrontmatter(content, '/repo/epics/STAGE-001-001-001.md');
     expect(result.due_date).toBeNull();
+  });
+
+  it('defaults pending_merge_parents to empty array when missing', () => {
+    const content = `---
+id: STAGE-001
+ticket: TICKET-001
+epic: EPIC-001
+title: Build feature
+status: Design
+---
+# Stage`;
+    const result = parseStageFrontmatter(content, 'stage.md');
+    expect(result.pending_merge_parents).toEqual([]);
+  });
+
+  it('defaults is_draft to false when missing', () => {
+    const content = `---
+id: STAGE-001
+ticket: TICKET-001
+epic: EPIC-001
+title: Build feature
+status: Design
+---
+# Stage`;
+    const result = parseStageFrontmatter(content, 'stage.md');
+    expect(result.is_draft).toBe(false);
+  });
+
+  it('defaults mr_target_branch to null when missing', () => {
+    const content = `---
+id: STAGE-001
+ticket: TICKET-001
+epic: EPIC-001
+title: Build feature
+status: Design
+---
+# Stage`;
+    const result = parseStageFrontmatter(content, 'stage.md');
+    expect(result.mr_target_branch).toBeNull();
+  });
+
+  it('parses pending_merge_parents when present', () => {
+    const content = `---
+id: STAGE-001
+ticket: TICKET-001
+epic: EPIC-001
+title: Build feature
+status: PR Created
+pending_merge_parents:
+  - stage_id: STAGE-002
+    branch: feature/parent
+    pr_url: https://github.com/org/repo/pull/9
+    pr_number: 9
+---
+# Stage`;
+    const result = parseStageFrontmatter(content, 'stage.md');
+    expect(result.pending_merge_parents).toHaveLength(1);
+    expect(result.pending_merge_parents[0]).toEqual({
+      stage_id: 'STAGE-002',
+      branch: 'feature/parent',
+      pr_url: 'https://github.com/org/repo/pull/9',
+      pr_number: 9,
+    });
+  });
+
+  it('parses is_draft when present', () => {
+    const content = `---
+id: STAGE-001
+ticket: TICKET-001
+epic: EPIC-001
+title: Build feature
+status: PR Created
+is_draft: true
+---
+# Stage`;
+    const result = parseStageFrontmatter(content, 'stage.md');
+    expect(result.is_draft).toBe(true);
+  });
+
+  it('parses mr_target_branch when present', () => {
+    const content = `---
+id: STAGE-001
+ticket: TICKET-001
+epic: EPIC-001
+title: Build feature
+status: PR Created
+mr_target_branch: develop
+---
+# Stage`;
+    const result = parseStageFrontmatter(content, 'stage.md');
+    expect(result.mr_target_branch).toBe('develop');
+  });
+
+  it('throws on invalid pending_merge_parents entry (missing required fields)', () => {
+    const content = `---
+id: STAGE-001
+ticket: TICKET-001
+epic: EPIC-001
+title: Build feature
+status: PR Created
+pending_merge_parents:
+  - stage_id: STAGE-002
+---
+# Stage`;
+    expect(() => parseStageFrontmatter(content, 'stage.md')).toThrow();
+  });
+});
+
+describe('parseTicketFrontmatter - jira_links', () => {
+  it('defaults jira_links to empty array when missing', () => {
+    const content = `---
+id: TICKET-001
+epic: EPIC-001
+title: Login Flow
+status: In Progress
+source: local
+stages: []
+depends_on: []
+---
+# Ticket`;
+    const result = parseTicketFrontmatter(content, 'ticket.md');
+    expect(result.jira_links).toEqual([]);
+  });
+
+  it('parses jira_links when present', () => {
+    const content = `---
+id: TICKET-001
+epic: EPIC-001
+title: Login Flow
+status: In Progress
+source: local
+stages: []
+depends_on: []
+jira_links:
+  - type: confluence
+    url: https://wiki.example.com/page/1
+    title: Design Doc
+    key: SPACE-1
+  - type: attachment
+    url: https://jira.example.com/attachment/100
+    title: mockup.png
+    filename: mockup.png
+    mime_type: image/png
+---
+# Ticket`;
+    const result = parseTicketFrontmatter(content, 'ticket.md');
+    expect(result.jira_links).toHaveLength(2);
+    expect(result.jira_links[0].type).toBe('confluence');
+    expect(result.jira_links[0].key).toBe('SPACE-1');
+    expect(result.jira_links[1].type).toBe('attachment');
+    expect(result.jira_links[1].filename).toBe('mockup.png');
+  });
+
+  it('throws on invalid jira_links entry (invalid type)', () => {
+    const content = `---
+id: TICKET-001
+epic: EPIC-001
+title: Login Flow
+status: In Progress
+jira_links:
+  - type: invalid_type
+    url: https://example.com
+    title: Bad Link
+---
+# Ticket`;
+    expect(() => parseTicketFrontmatter(content, 'ticket.md')).toThrow();
+  });
+
+  it('throws on invalid jira_links entry (missing url)', () => {
+    const content = `---
+id: TICKET-001
+epic: EPIC-001
+title: Login Flow
+status: In Progress
+jira_links:
+  - type: confluence
+    title: No URL
+---
+# Ticket`;
+    expect(() => parseTicketFrontmatter(content, 'ticket.md')).toThrow();
   });
 });
 

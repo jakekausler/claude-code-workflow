@@ -57,7 +57,31 @@ export interface Ticket {
   source: 'local' | 'jira';
   stages: string[];
   depends_on: string[];
+  jira_links: JiraLink[];
   file_path: string;
+}
+
+/**
+ * A parent stage whose MR must merge before this stage's MR can proceed.
+ */
+export interface PendingMergeParent {
+  stage_id: string;
+  branch: string;
+  pr_url: string;
+  pr_number: number;
+}
+
+/**
+ * A link associated with a Jira ticket (confluence page, attachment, etc.).
+ */
+export interface JiraLink {
+  type: 'confluence' | 'jira_issue' | 'attachment' | 'external';
+  url: string;
+  title: string;
+  key?: string;
+  relationship?: string;
+  filename?: string;
+  mime_type?: string;
 }
 
 /**
@@ -77,6 +101,9 @@ export interface Stage {
   pr_number: number | null;
   priority: number;
   due_date: string | null;
+  pending_merge_parents: PendingMergeParent[];
+  is_draft: boolean;
+  mr_target_branch: string | null;
   file_path: string;
 }
 

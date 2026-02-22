@@ -1,5 +1,9 @@
 import matter from 'gray-matter';
-import type { Epic, Ticket, Stage, WorkItemType } from '../types/work-items.js';
+import type { Epic, Ticket, Stage, WorkItemType, PendingMergeParent, JiraLink } from '../types/work-items.js';
+import {
+  pendingMergeParentSchema,
+  jiraLinkSchema,
+} from './frontmatter-schemas.js';
 
 /**
  * Extract raw frontmatter data from markdown content.
@@ -62,6 +66,16 @@ export function parseEpicFrontmatter(content: string, filePath: string): Epic {
 export function parseTicketFrontmatter(content: string, filePath: string): Ticket {
   const data = extractData(content, filePath);
 
+  // Parse jira_links with Zod validation, defaulting to []
+  const rawLinks = Array.isArray(data.jira_links) ? data.jira_links : [];
+  const jiraLinks: JiraLink[] = rawLinks.map((item: unknown) => {
+    try {
+      return jiraLinkSchema.parse(item);
+    } catch (e) {
+      throw new Error(`Invalid jira_links entry in ${filePath}: ${e instanceof Error ? e.message : e}`);
+    }
+  });
+
   return {
     id: requireField<string>(data, 'id', filePath),
     epic: requireField<string>(data, 'epic', filePath),
@@ -71,6 +85,7 @@ export function parseTicketFrontmatter(content: string, filePath: string): Ticke
     source: (data.source as 'local' | 'jira') ?? 'local',
     stages: Array.isArray(data.stages) ? data.stages : [],
     depends_on: Array.isArray(data.depends_on) ? data.depends_on : [],
+    jira_links: jiraLinks,
     file_path: filePath,
   };
 }
@@ -80,6 +95,16 @@ export function parseTicketFrontmatter(content: string, filePath: string): Ticke
  */
 export function parseStageFrontmatter(content: string, filePath: string): Stage {
   const data = extractData(content, filePath);
+
+  // Parse pending_merge_parents with Zod validation, defaulting to []
+  const rawParents = Array.isArray(data.pending_merge_parents) ? data.pending_merge_parents : [];
+  const pendingMergeParents: PendingMergeParent[] = rawParents.map((item: unknown) => {
+    try {
+      return pendingMergeParentSchema.parse(item);
+    } catch (e) {
+      throw new Error(`Invalid pending_merge_parents entry in ${filePath}: ${e instanceof Error ? e.message : e}`);
+    }
+  });
 
   return {
     id: requireField<string>(data, 'id', filePath),
@@ -95,6 +120,9 @@ export function parseStageFrontmatter(content: string, filePath: string): Stage 
     pr_number: typeof data.pr_number === 'number' ? data.pr_number : null,
     priority: typeof data.priority === 'number' ? data.priority : 0,
     due_date: (data.due_date as string) ?? null,
+    pending_merge_parents: pendingMergeParents,
+    is_draft: data.is_draft === true ? true : false,
+    mr_target_branch: (data.mr_target_branch as string) ?? null,
     file_path: filePath,
   };
 }

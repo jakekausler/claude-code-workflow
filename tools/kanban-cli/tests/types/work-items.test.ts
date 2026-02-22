@@ -6,6 +6,8 @@ import type {
   Dependency,
   WorkItemType,
   RepoRecord,
+  PendingMergeParent,
+  JiraLink,
 } from '../../src/types/work-items.js';
 import {
   SYSTEM_COLUMNS,
@@ -46,10 +48,12 @@ describe('Work Item Types', () => {
       source: 'local',
       stages: ['STAGE-001-001-001'],
       depends_on: [],
+      jira_links: [],
       file_path: '/repo/epics/TICKET-001-001.md',
     };
     expect(ticket.id).toBe('TICKET-001-001');
     expect(ticket.source).toBe('local');
+    expect(ticket.jira_links).toEqual([]);
   });
 
   it('Stage interface has required fields including session_active', () => {
@@ -67,10 +71,16 @@ describe('Work Item Types', () => {
       pr_number: null,
       priority: 0,
       due_date: null,
+      pending_merge_parents: [],
+      is_draft: false,
+      mr_target_branch: null,
       file_path: '/repo/epics/STAGE-001-001-001.md',
     };
     expect(stage.session_active).toBe(false);
     expect(stage.refinement_type).toContain('frontend');
+    expect(stage.pending_merge_parents).toEqual([]);
+    expect(stage.is_draft).toBe(false);
+    expect(stage.mr_target_branch).toBeNull();
   });
 
   it('Dependency interface has required fields', () => {
