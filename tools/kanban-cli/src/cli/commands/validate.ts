@@ -111,6 +111,7 @@ export const validateCommand = new Command('validate')
         source: t.source ?? 'local',
         stages: stagesByTicket.get(t.id) || [],
         depends_on: depsByFromId.get(t.id) || [],
+        jira_links: [],  // jira_links are not stored in DB; validation applies to frontmatter-parsed data
         file_path: t.file_path,
       }));
 
@@ -126,6 +127,8 @@ export const validateCommand = new Command('validate')
         due_date: s.due_date,
         session_active: s.session_active === 1,
         depends_on: depsByFromId.get(s.id) || [],
+        pending_merge_parents: s.pending_merge_parents ? JSON.parse(s.pending_merge_parents) : [],
+        is_draft: s.is_draft === 1,
         file_path: s.file_path,
       }));
 

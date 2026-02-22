@@ -10,6 +10,13 @@ export interface ValidateEpicRow {
   file_path: string;
 }
 
+export interface ValidateJiraLinkRow {
+  type?: string;
+  url?: string;
+  title?: string;
+  [key: string]: unknown;
+}
+
 export interface ValidateTicketRow {
   id: string;
   epic_id: string;
@@ -19,7 +26,15 @@ export interface ValidateTicketRow {
   source: string;
   stages: string[];
   depends_on: string[];
+  jira_links: ValidateJiraLinkRow[];
   file_path: string;
+}
+
+export interface ValidatePendingMergeParentRow {
+  stage_id: string;
+  branch: string;
+  pr_url: string;
+  pr_number: number;
 }
 
 export interface ValidateStageRow {
@@ -34,6 +49,8 @@ export interface ValidateStageRow {
   due_date: string | null;
   session_active: boolean;
   depends_on: string[];
+  pending_merge_parents: ValidatePendingMergeParentRow[];
+  is_draft: boolean;
   file_path: string;
 }
 
@@ -141,6 +158,10 @@ function findCircularDeps(dependencies: ValidateDependencyRow[]): string[][] {
 // Epic -> Ticket: NOT OK
 // Epic -> Stage: NOT OK
 // Ticket -> Stage: NOT OK
+const VALID_JIRA_LINK_TYPES = ['confluence', 'jira_issue', 'attachment', 'external'] as const;
+
+const ACCEPTABLE_PARENT_STATUSES = new Set(['PR Created', 'Addressing Comments', 'Complete']);
+
 const VALID_DEP_PAIRS: Record<string, Set<string>> = {
   epic: new Set(['epic']),
   ticket: new Set(['ticket', 'epic']),
@@ -157,6 +178,7 @@ export function validateWorkItems(input: ValidateInput): ValidateOutput {
   // Build lookup maps
   const ticketIds = new Set(tickets.map((t) => t.id));
   const stageIds = new Set(stages.map((s) => s.id));
+  const stageStatusById = new Map(stages.map((s) => [s.id, s.status]));
 
   // --- Validate epics ---
   for (const epic of epics) {
@@ -264,6 +286,37 @@ export function validateWorkItems(input: ValidateInput): ValidateOutput {
         error: `Invalid status "${ticket.status}". Valid values: ${[...validStatuses].join(', ')}`,
       });
     }
+
+    // Validate jira_links
+    for (const link of ticket.jira_links) {
+      if (!link.type) {
+        errors.push({
+          file: ticket.file_path,
+          field: 'jira_links',
+          error: 'Jira link is missing required field "type"',
+        });
+      } else if (!(VALID_JIRA_LINK_TYPES as readonly string[]).includes(link.type)) {
+        errors.push({
+          file: ticket.file_path,
+          field: 'jira_links',
+          error: `Invalid jira_links type "${link.type}". Valid values: ${VALID_JIRA_LINK_TYPES.join(', ')}`,
+        });
+      }
+      if (!link.url) {
+        errors.push({
+          file: ticket.file_path,
+          field: 'jira_links',
+          error: 'Jira link is missing required field "url"',
+        });
+      }
+      if (!link.title) {
+        errors.push({
+          file: ticket.file_path,
+          field: 'jira_links',
+          error: 'Jira link is missing required field "title"',
+        });
+      }
+    }
   }
 
   // --- Validate stages ---
@@ -317,6 +370,35 @@ export function validateWorkItems(input: ValidateInput): ValidateOutput {
       } else {
         worktreeBranches.set(stage.worktree_branch, stage.file_path);
       }
+    }
+
+    // Validate pending_merge_parents
+    for (const parent of stage.pending_merge_parents) {
+      if (!stageIds.has(parent.stage_id)) {
+        errors.push({
+          file: stage.file_path,
+          field: 'pending_merge_parents',
+          error: `Referenced stage ${parent.stage_id} does not exist`,
+        });
+      } else {
+        const parentStatus = stageStatusById.get(parent.stage_id);
+        if (parentStatus && !ACCEPTABLE_PARENT_STATUSES.has(parentStatus)) {
+          warnings.push({
+            file: stage.file_path,
+            field: 'pending_merge_parents',
+            warning: `Parent stage ${parent.stage_id} has status "${parentStatus}" — expected PR Created, Addressing Comments, or Complete`,
+          });
+        }
+      }
+    }
+
+    // is_draft: true with empty pending_merge_parents is inconsistent
+    if (stage.is_draft && stage.pending_merge_parents.length === 0) {
+      warnings.push({
+        file: stage.file_path,
+        field: 'is_draft',
+        warning: 'Stage is marked as draft but has no pending merge parents — inconsistent state',
+      });
     }
   }
 

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { validateWorkItems } from '../../../src/cli/logic/validate.js';
-import type { ValidateEpicRow, ValidateTicketRow, ValidateStageRow, ValidateDependencyRow } from '../../../src/cli/logic/validate.js';
+import type { ValidateEpicRow, ValidateTicketRow, ValidateStageRow, ValidateDependencyRow, ValidateJiraLinkRow } from '../../../src/cli/logic/validate.js';
 
 function makeEpic(overrides: Partial<ValidateEpicRow> = {}): ValidateEpicRow {
   return {
@@ -25,6 +25,7 @@ function makeTicket(overrides: Partial<ValidateTicketRow> = {}): ValidateTicketR
     source: 'local',
     stages: ['STAGE-001-001-001'],
     depends_on: [],
+    jira_links: [],
     file_path: 'epics/EPIC-001-auth/TICKET-001-001-login/TICKET-001-001.md',
     ...overrides,
   };
@@ -43,6 +44,8 @@ function makeStage(overrides: Partial<ValidateStageRow> = {}): ValidateStageRow 
     due_date: null,
     session_active: false,
     depends_on: [],
+    pending_merge_parents: [],
+    is_draft: false,
     file_path: 'epics/EPIC-001-auth/TICKET-001-001-login/STAGE-001-001-001.md',
     ...overrides,
   };
@@ -190,5 +193,266 @@ describe('validateWorkItems', () => {
     });
     expect(result.valid).toBe(false);
     expect(result.errors.some((e) => e.field === 'title')).toBe(true);
+  });
+
+  // --- pending_merge_parents validation ---
+
+  describe('pending_merge_parents', () => {
+    it('no error when pending_merge_parents references valid stage_id', () => {
+      const result = validateWorkItems({
+        epics: [],
+        tickets: [],
+        stages: [
+          makeStage({
+            id: 'STAGE-001',
+            status: 'PR Created',
+            worktree_branch: 'branch-a',
+            file_path: 'S1.md',
+            pending_merge_parents: [],
+          }),
+          makeStage({
+            id: 'STAGE-002',
+            status: 'Build',
+            worktree_branch: 'branch-b',
+            file_path: 'S2.md',
+            pending_merge_parents: [
+              { stage_id: 'STAGE-001', branch: 'branch-a', pr_url: 'https://example.com/pr/1', pr_number: 1 },
+            ],
+          }),
+        ],
+        dependencies: [],
+        allIds: new Set(['STAGE-001', 'STAGE-002']),
+        validStatuses: new Set(['Not Started', 'In Progress', 'Build', 'PR Created', 'Complete']),
+      });
+      expect(result.errors.filter((e) => e.field === 'pending_merge_parents')).toHaveLength(0);
+    });
+
+    it('reports error when pending_merge_parents references non-existent stage_id', () => {
+      const result = validateWorkItems({
+        epics: [],
+        tickets: [],
+        stages: [
+          makeStage({
+            id: 'STAGE-001',
+            worktree_branch: 'branch-a',
+            file_path: 'S1.md',
+            pending_merge_parents: [
+              { stage_id: 'STAGE-999', branch: 'branch-x', pr_url: 'https://example.com/pr/99', pr_number: 99 },
+            ],
+          }),
+        ],
+        dependencies: [],
+        allIds: new Set(['STAGE-001']),
+        validStatuses: new Set(['Not Started']),
+      });
+      expect(result.errors.some((e) => e.field === 'pending_merge_parents' && e.error.includes('STAGE-999'))).toBe(true);
+    });
+
+    it('no warning when parent stage is in PR Created', () => {
+      const result = validateWorkItems({
+        epics: [],
+        tickets: [],
+        stages: [
+          makeStage({ id: 'STAGE-001', status: 'PR Created', worktree_branch: 'b-1', file_path: 'S1.md' }),
+          makeStage({
+            id: 'STAGE-002',
+            status: 'Build',
+            worktree_branch: 'b-2',
+            file_path: 'S2.md',
+            pending_merge_parents: [
+              { stage_id: 'STAGE-001', branch: 'b-1', pr_url: 'https://example.com/pr/1', pr_number: 1 },
+            ],
+          }),
+        ],
+        dependencies: [],
+        allIds: new Set(['STAGE-001', 'STAGE-002']),
+        validStatuses: new Set(['Not Started', 'Build', 'PR Created']),
+      });
+      expect(result.warnings.filter((w) => w.field === 'pending_merge_parents')).toHaveLength(0);
+    });
+
+    it('no warning when parent stage is in Addressing Comments', () => {
+      const result = validateWorkItems({
+        epics: [],
+        tickets: [],
+        stages: [
+          makeStage({ id: 'STAGE-001', status: 'Addressing Comments', worktree_branch: 'b-1', file_path: 'S1.md' }),
+          makeStage({
+            id: 'STAGE-002',
+            status: 'Build',
+            worktree_branch: 'b-2',
+            file_path: 'S2.md',
+            pending_merge_parents: [
+              { stage_id: 'STAGE-001', branch: 'b-1', pr_url: 'https://example.com/pr/1', pr_number: 1 },
+            ],
+          }),
+        ],
+        dependencies: [],
+        allIds: new Set(['STAGE-001', 'STAGE-002']),
+        validStatuses: new Set(['Not Started', 'Build', 'Addressing Comments']),
+      });
+      expect(result.warnings.filter((w) => w.field === 'pending_merge_parents')).toHaveLength(0);
+    });
+
+    it('warns when parent stage is in Build (stale entry)', () => {
+      const result = validateWorkItems({
+        epics: [],
+        tickets: [],
+        stages: [
+          makeStage({ id: 'STAGE-001', status: 'Build', worktree_branch: 'b-1', file_path: 'S1.md' }),
+          makeStage({
+            id: 'STAGE-002',
+            status: 'PR Created',
+            worktree_branch: 'b-2',
+            file_path: 'S2.md',
+            pending_merge_parents: [
+              { stage_id: 'STAGE-001', branch: 'b-1', pr_url: 'https://example.com/pr/1', pr_number: 1 },
+            ],
+          }),
+        ],
+        dependencies: [],
+        allIds: new Set(['STAGE-001', 'STAGE-002']),
+        validStatuses: new Set(['Not Started', 'Build', 'PR Created']),
+      });
+      const pmpWarnings = result.warnings.filter((w) => w.field === 'pending_merge_parents');
+      expect(pmpWarnings).toHaveLength(1);
+      expect(pmpWarnings[0].warning).toContain('STAGE-001');
+      expect(pmpWarnings[0].warning).toContain('Build');
+    });
+
+    it('warns when is_draft is true with empty pending_merge_parents', () => {
+      const result = validateWorkItems({
+        epics: [],
+        tickets: [],
+        stages: [
+          makeStage({
+            id: 'STAGE-001',
+            is_draft: true,
+            pending_merge_parents: [],
+            worktree_branch: 'b-1',
+            file_path: 'S1.md',
+          }),
+        ],
+        dependencies: [],
+        allIds: new Set(['STAGE-001']),
+        validStatuses: new Set(['Not Started']),
+      });
+      const draftWarnings = result.warnings.filter((w) => w.field === 'is_draft');
+      expect(draftWarnings).toHaveLength(1);
+      expect(draftWarnings[0].warning).toContain('draft');
+    });
+
+    it('no warning when is_draft is false with non-empty pending_merge_parents', () => {
+      const result = validateWorkItems({
+        epics: [],
+        tickets: [],
+        stages: [
+          makeStage({
+            id: 'STAGE-001',
+            status: 'PR Created',
+            worktree_branch: 'b-1',
+            file_path: 'S1.md',
+          }),
+          makeStage({
+            id: 'STAGE-002',
+            is_draft: false,
+            worktree_branch: 'b-2',
+            file_path: 'S2.md',
+            pending_merge_parents: [
+              { stage_id: 'STAGE-001', branch: 'b-1', pr_url: 'https://example.com/pr/1', pr_number: 1 },
+            ],
+          }),
+        ],
+        dependencies: [],
+        allIds: new Set(['STAGE-001', 'STAGE-002']),
+        validStatuses: new Set(['Not Started', 'PR Created']),
+      });
+      expect(result.warnings.filter((w) => w.field === 'is_draft')).toHaveLength(0);
+    });
+  });
+
+  // --- jira_links validation ---
+
+  describe('jira_links', () => {
+    it('no error when jira_links has all required fields', () => {
+      const result = validateWorkItems({
+        epics: [makeEpic()],
+        tickets: [
+          makeTicket({
+            jira_links: [
+              { type: 'confluence', url: 'https://wiki.example.com/page', title: 'Design Doc' },
+            ],
+          }),
+        ],
+        stages: [makeStage()],
+        dependencies: [],
+        allIds: new Set(['EPIC-001', 'TICKET-001-001', 'STAGE-001-001-001']),
+        validStatuses: new Set(['Not Started', 'In Progress']),
+      });
+      expect(result.errors.filter((e) => e.field === 'jira_links')).toHaveLength(0);
+    });
+
+    it('reports error when jira_links entry is missing type', () => {
+      const result = validateWorkItems({
+        epics: [makeEpic()],
+        tickets: [
+          makeTicket({
+            jira_links: [
+              { url: 'https://wiki.example.com/page', title: 'Design Doc' } as ValidateJiraLinkRow,
+            ],
+          }),
+        ],
+        stages: [makeStage()],
+        dependencies: [],
+        allIds: new Set(['EPIC-001', 'TICKET-001-001', 'STAGE-001-001-001']),
+        validStatuses: new Set(['Not Started', 'In Progress']),
+      });
+      const linkErrors = result.errors.filter((e) => e.field === 'jira_links');
+      expect(linkErrors.some((e) => e.error.includes('"type"'))).toBe(true);
+    });
+
+    it('reports error when jira_links entry has invalid type value', () => {
+      const result = validateWorkItems({
+        epics: [makeEpic()],
+        tickets: [
+          makeTicket({
+            jira_links: [
+              { type: 'invalid_type', url: 'https://example.com', title: 'Something' },
+            ],
+          }),
+        ],
+        stages: [makeStage()],
+        dependencies: [],
+        allIds: new Set(['EPIC-001', 'TICKET-001-001', 'STAGE-001-001-001']),
+        validStatuses: new Set(['Not Started', 'In Progress']),
+      });
+      const linkErrors = result.errors.filter((e) => e.field === 'jira_links');
+      expect(linkErrors.some((e) => e.error.includes('invalid_type'))).toBe(true);
+    });
+
+    it('no error when jira_links is empty array', () => {
+      const result = validateWorkItems({
+        epics: [makeEpic()],
+        tickets: [makeTicket({ jira_links: [] })],
+        stages: [makeStage()],
+        dependencies: [],
+        allIds: new Set(['EPIC-001', 'TICKET-001-001', 'STAGE-001-001-001']),
+        validStatuses: new Set(['Not Started', 'In Progress']),
+      });
+      expect(result.errors.filter((e) => e.field === 'jira_links')).toHaveLength(0);
+    });
+
+    it('no error when jira_links field defaults to empty', () => {
+      // The makeTicket helper defaults jira_links to []
+      const result = validateWorkItems({
+        epics: [makeEpic()],
+        tickets: [makeTicket()],
+        stages: [makeStage()],
+        dependencies: [],
+        allIds: new Set(['EPIC-001', 'TICKET-001-001', 'STAGE-001-001-001']),
+        validStatuses: new Set(['Not Started', 'In Progress']),
+      });
+      expect(result.errors.filter((e) => e.field === 'jira_links')).toHaveLength(0);
+    });
   });
 });

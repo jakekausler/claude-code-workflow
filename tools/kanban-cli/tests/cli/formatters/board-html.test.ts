@@ -252,6 +252,6 @@ describe('renderBoardHtml', () => {
       stats: { total_stages: 1, total_tickets: 0, by_column: { design: 1 } },
     });
     const html = renderBoardHtml(board);
-    expect(html).not.toContain('pending-merge');
+    expect(html).not.toContain('class="pending-merge"');
   });
 });

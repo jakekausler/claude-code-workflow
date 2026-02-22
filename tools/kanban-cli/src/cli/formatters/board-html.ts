@@ -237,6 +237,7 @@ export function renderBoardHtml(board: BoardOutput): string {
     .badge-jira { background: #fff3e0; color: #e65100; }
     .badge-blocked { background: #ffebee; color: #c62828; }
     .badge-branch { background: #e8f5e9; color: #2e7d32; }
+    .pending-merge { cursor: help; }
     .session-dot {
       display: inline-block;
       width: 10px;
