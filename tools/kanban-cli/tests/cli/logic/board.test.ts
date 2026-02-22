@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { buildBoard, toColumnKey } from '../../../src/cli/logic/board.js';
+import type { StageBoardItem } from '../../../src/cli/logic/board.js';
 import type { PipelineConfig } from '../../../src/types/pipeline.js';
 
 const testConfig: PipelineConfig = {
@@ -250,5 +251,90 @@ describe('buildBoard', () => {
     expect(columnKeys).toContain('backlog');
     expect(columnKeys).toContain('ready_for_work');
     expect(columnKeys).toContain('done');
+  });
+
+  it('includes pending_merge_parents for stages that have them', () => {
+    const pendingParents = JSON.stringify([
+      { stage_id: 'STAGE-001-001-001', branch: 'feature/parent', pr_url: 'https://github.com/org/repo/pull/10', pr_number: 10 },
+    ]);
+    const result = buildBoard({
+      config: testConfig,
+      repoPath: '/tmp/test-repo',
+      epics: [],
+      tickets: [],
+      stages: [
+        { id: 'STAGE-001-001-002', ticket_id: 'TICKET-001-001', epic_id: 'EPIC-001', title: 'Child Stage', status: 'Design', kanban_column: 'design', refinement_type: '[]', worktree_branch: 'b1', priority: 0, due_date: null, session_active: false, pending_merge_parents: pendingParents, file_path: 'f.md' },
+      ],
+      dependencies: [],
+    });
+    const item = result.columns.design[0] as StageBoardItem;
+    expect(item.pending_merge_parents).toBeDefined();
+    expect(item.pending_merge_parents).toHaveLength(1);
+    expect(item.pending_merge_parents![0].stage_id).toBe('STAGE-001-001-001');
+    expect(item.pending_merge_parents![0].branch).toBe('feature/parent');
+    expect(item.pending_merge_parents![0].pr_url).toBe('https://github.com/org/repo/pull/10');
+    expect(item.pending_merge_parents![0].pr_number).toBe(10);
+  });
+
+  it('does NOT include pending_merge_parents for stages without them', () => {
+    const result = buildBoard({
+      config: testConfig,
+      repoPath: '/tmp/test-repo',
+      epics: [],
+      tickets: [],
+      stages: [
+        { id: 'STAGE-001-001-001', ticket_id: 'TICKET-001-001', epic_id: 'EPIC-001', title: 'Normal Stage', status: 'Design', kanban_column: 'design', refinement_type: '[]', worktree_branch: 'b1', priority: 0, due_date: null, session_active: false, file_path: 'f.md' },
+      ],
+      dependencies: [],
+    });
+    const item = result.columns.design[0] as StageBoardItem;
+    expect(item.pending_merge_parents).toBeUndefined();
+  });
+
+  it('does NOT include pending_merge_parents when JSON is empty array', () => {
+    const result = buildBoard({
+      config: testConfig,
+      repoPath: '/tmp/test-repo',
+      epics: [],
+      tickets: [],
+      stages: [
+        { id: 'STAGE-001-001-001', ticket_id: 'TICKET-001-001', epic_id: 'EPIC-001', title: 'Stage', status: 'Design', kanban_column: 'design', refinement_type: '[]', worktree_branch: 'b1', priority: 0, due_date: null, session_active: false, pending_merge_parents: '[]', file_path: 'f.md' },
+      ],
+      dependencies: [],
+    });
+    const item = result.columns.design[0] as StageBoardItem;
+    expect(item.pending_merge_parents).toBeUndefined();
+  });
+
+  it('does NOT include pending_merge_parents when JSON is invalid', () => {
+    const result = buildBoard({
+      config: testConfig,
+      repoPath: '/tmp/test-repo',
+      epics: [],
+      tickets: [],
+      stages: [
+        { id: 'STAGE-001-001-001', ticket_id: 'TICKET-001-001', epic_id: 'EPIC-001', title: 'Stage', status: 'Design', kanban_column: 'design', refinement_type: '[]', worktree_branch: 'b1', priority: 0, due_date: null, session_active: false, pending_merge_parents: 'not-valid-json', file_path: 'f.md' },
+      ],
+      dependencies: [],
+    });
+    const item = result.columns.design[0] as StageBoardItem;
+    expect(item.pending_merge_parents).toBeUndefined();
+  });
+
+  it('board output without any pending merge parents is unchanged from current', () => {
+    const result = buildBoard({
+      config: testConfig,
+      repoPath: '/tmp/test-repo',
+      epics: [],
+      tickets: [],
+      stages: [
+        { id: 'STAGE-001-001-001', ticket_id: 'TICKET-001-001', epic_id: 'EPIC-001', title: 'S1', status: 'Design', kanban_column: 'design', refinement_type: '[]', worktree_branch: 'b1', priority: 0, due_date: null, session_active: false, file_path: 'f.md' },
+        { id: 'STAGE-001-001-002', ticket_id: 'TICKET-001-001', epic_id: 'EPIC-001', title: 'S2', status: 'Build', kanban_column: 'build', refinement_type: '[]', worktree_branch: 'b2', priority: 0, due_date: null, session_active: true, file_path: 'f.md' },
+      ],
+      dependencies: [],
+    });
+    // Ensure no stage has pending_merge_parents key in JSON output
+    const json = JSON.stringify(result);
+    expect(json).not.toContain('pending_merge_parents');
   });
 });

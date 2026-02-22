@@ -1,4 +1,5 @@
 import type { PipelineConfig } from '../../types/pipeline.js';
+import type { PendingMergeParent } from '../../types/work-items.js';
 import { StateMachine } from '../../engine/state-machine.js';
 import { toColumnKey } from '../../engine/kanban-columns.js';
 
@@ -23,6 +24,7 @@ export interface StageBoardItem {
   blocked_by_resolved?: boolean;
   session_active?: boolean;
   worktree_branch?: string;
+  pending_merge_parents?: PendingMergeParent[];
 }
 
 export type BoardItem = TicketBoardItem | StageBoardItem;
@@ -63,6 +65,7 @@ export interface BoardStageRow {
   priority: number;
   due_date: string | null;
   session_active: boolean;
+  pending_merge_parents?: string;
   file_path: string;
 }
 
@@ -196,6 +199,17 @@ export function buildBoard(input: BuildBoardInput): BoardOutput {
 
     if (stage.worktree_branch) {
       item.worktree_branch = stage.worktree_branch;
+    }
+
+    if (stage.pending_merge_parents) {
+      try {
+        const parsed: PendingMergeParent[] = JSON.parse(stage.pending_merge_parents);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          item.pending_merge_parents = parsed;
+        }
+      } catch {
+        // Invalid JSON — skip silently
+      }
     }
 
     // Ensure the column exists (it should, but guard against unknown kanban_column values)

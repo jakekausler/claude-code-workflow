@@ -79,6 +79,7 @@ export const boardCommand = new Command('board')
         priority: s.priority,
         due_date: s.due_date,
         session_active: s.session_active === 1,
+        pending_merge_parents: s.pending_merge_parents ?? undefined,
         file_path: s.file_path,
       }));
 

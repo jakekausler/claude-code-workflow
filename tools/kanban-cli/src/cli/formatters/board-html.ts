@@ -56,13 +56,17 @@ function renderTicketCard(item: TicketBoardItem): string {
 }
 
 function renderStageCard(item: StageBoardItem): string {
+  const hasPendingMerge = item.pending_merge_parents && item.pending_merge_parents.length > 0;
+  const pendingMergeTitle = hasPendingMerge
+    ? `Pending merge: ${item.pending_merge_parents!.map((p) => p.stage_id).join(', ')}`
+    : '';
   return `
       <div class="card stage-card">
         <div class="card-header-row">
           <div class="card-id">${escapeHtml(item.id)}</div>
           ${item.session_active ? '<span class="session-dot" title="Session active"></span>' : ''}
         </div>
-        <div class="card-title">${escapeHtml(item.title)}</div>
+        <div class="card-title">${escapeHtml(item.title)}${hasPendingMerge ? ` <span class="pending-merge" title="${escapeHtml(pendingMergeTitle)}">⚠️</span>` : ''}</div>
         <div class="card-meta">
           <span class="badge badge-ticket">${escapeHtml(item.ticket)}</span>
           ${item.epic ? `<span class="badge badge-epic">${escapeHtml(item.epic)}</span>` : ''}

@@ -202,4 +202,56 @@ describe('renderBoardHtml', () => {
     expect(html).toContain('data-column="build"');
     expect(html).toContain('data-column="done"');
   });
+
+  it('shows warning indicator for stages with pending merge parents', () => {
+    const board = makeBoardOutput({
+      columns: {
+        to_convert: [],
+        backlog: [],
+        ready_for_work: [],
+        design: [
+          {
+            type: 'stage',
+            id: 'STAGE-001-001-002',
+            ticket: 'TICKET-001-001',
+            epic: 'EPIC-001',
+            title: 'Child Stage',
+            pending_merge_parents: [
+              { stage_id: 'STAGE-001-001-001', branch: 'feature/parent', pr_url: 'https://github.com/org/repo/pull/10', pr_number: 10 },
+            ],
+          },
+        ],
+        build: [],
+        done: [],
+      },
+      stats: { total_stages: 1, total_tickets: 0, by_column: { design: 1 } },
+    });
+    const html = renderBoardHtml(board);
+    expect(html).toContain('pending-merge');
+    expect(html).toContain('Pending merge: STAGE-001-001-001');
+  });
+
+  it('does NOT show warning indicator for stages without pending merge parents', () => {
+    const board = makeBoardOutput({
+      columns: {
+        to_convert: [],
+        backlog: [],
+        ready_for_work: [],
+        design: [
+          {
+            type: 'stage',
+            id: 'STAGE-001-001-001',
+            ticket: 'TICKET-001-001',
+            epic: 'EPIC-001',
+            title: 'Normal Stage',
+          },
+        ],
+        build: [],
+        done: [],
+      },
+      stats: { total_stages: 1, total_tickets: 0, by_column: { design: 1 } },
+    });
+    const html = renderBoardHtml(board);
+    expect(html).not.toContain('pending-merge');
+  });
 });
