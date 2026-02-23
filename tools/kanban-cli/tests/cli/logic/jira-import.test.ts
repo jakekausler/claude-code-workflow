@@ -118,6 +118,22 @@ jira:
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
+  function createEpicLocally(epicId: string, jiraKey?: string): void {
+    const epicDir = path.join(repoDir, 'epics', epicId);
+    fs.mkdirSync(epicDir, { recursive: true });
+    const content = `---
+id: ${epicId}
+title: "Test Epic"
+status: Not Started
+jira_key: ${jiraKey ?? 'null'}
+tickets: []
+depends_on: []
+---
+Epic body.
+`;
+    fs.writeFileSync(path.join(epicDir, `${epicId}.md`), content);
+  }
+
   // ─── Epic import ───────────────────────────────────────────────────────
 
   describe('epic import', () => {
@@ -234,22 +250,6 @@ jira:
   // ─── Ticket import ─────────────────────────────────────────────────────
 
   describe('ticket import', () => {
-    function createEpicLocally(epicId: string, jiraKey?: string): void {
-      const epicDir = path.join(repoDir, 'epics', epicId);
-      fs.mkdirSync(epicDir, { recursive: true });
-      const content = `---
-id: ${epicId}
-title: "Test Epic"
-status: Not Started
-jira_key: ${jiraKey ?? 'null'}
-tickets: []
-depends_on: []
----
-Epic body.
-`;
-      fs.writeFileSync(path.join(epicDir, `${epicId}.md`), content);
-    }
-
     it('creates ticket file under specified epic with --epic flag', async () => {
       createEpicLocally('EPIC-001');
 
@@ -445,22 +445,6 @@ Existing.
   // ─── jira_links in ticket frontmatter ────────────────────────────────────
 
   describe('jira_links in ticket frontmatter', () => {
-    function createEpicLocally(epicId: string, jiraKey?: string): void {
-      const epicDir = path.join(repoDir, 'epics', epicId);
-      fs.mkdirSync(epicDir, { recursive: true });
-      const content = `---
-id: ${epicId}
-title: "Test Epic"
-status: Not Started
-jira_key: ${jiraKey ?? 'null'}
-tickets: []
-depends_on: []
----
-Epic body.
-`;
-      fs.writeFileSync(path.join(epicDir, `${epicId}.md`), content);
-    }
-
     it('includes jira_links in frontmatter when links are present', async () => {
       createEpicLocally('EPIC-001');
 

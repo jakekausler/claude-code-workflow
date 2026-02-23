@@ -251,7 +251,7 @@ ${description}
       let jiraLinksBlock = '';
       if (jiraLinks.length > 0) {
         const serialized = yamlStringify(jiraLinks).trimEnd();
-        const indented = serialized.split('\n').map((line: string) => '  ' + line).join('\n');
+        const indented = serialized.split('\n').map((line) => line === '' ? '' : '  ' + line).join('\n');
         jiraLinksBlock = `\njira_links:\n${indented}`;
       }
       const content = `---
