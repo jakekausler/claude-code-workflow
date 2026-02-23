@@ -1,5 +1,33 @@
 {
-  "tickets": {},
-  "pages": {},
+  "tickets": {
+    "PROJ-101": {
+      "key": "PROJ-101",
+      "summary": "User authentication flow",
+      "description": "Implement login and registration",
+      "status": "To Do",
+      "type": "Story",
+      "parent": null,
+      "assignee": null,
+      "labels": ["backend"]
+    },
+    "PROJ-102": {
+      "key": "PROJ-102",
+      "summary": "API rate limiting",
+      "description": "Add rate limiting to public endpoints",
+      "status": "In Progress",
+      "type": "Task",
+      "parent": "PROJ-100",
+      "assignee": "user@example.com",
+      "labels": ["backend", "security"]
+    }
+  },
+  "pages": {
+    "12345": {
+      "pageId": "12345",
+      "title": "Architecture Overview",
+      "body": "# Architecture\n\nThis document describes the system architecture.",
+      "url": "https://wiki.example.com/pages/12345"
+    }
+  },
   "prs": {}
 }
