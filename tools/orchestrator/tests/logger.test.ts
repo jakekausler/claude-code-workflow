@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import * as fs from 'node:fs';
 import * as fsPromises from 'node:fs/promises';
 import * as os from 'node:os';
@@ -19,7 +19,8 @@ function makeDeps(overrides?: Partial<LoggerDeps>): LoggerDeps & { stderrOutput:
     createWriteStream: vi.fn(() => {
       const mockStream = {
         write: vi.fn(),
-        end: vi.fn(),
+        end: vi.fn((cb?: () => void) => { if (cb) cb(); }),
+        on: vi.fn(),
       } as unknown as fs.WriteStream;
       return mockStream;
     }),
@@ -191,7 +192,8 @@ describe('createLogger', () => {
     it('creates file at correct path format', () => {
       const mockCreateWriteStream = vi.fn(() => ({
         write: vi.fn(),
-        end: vi.fn(),
+        end: vi.fn((cb?: () => void) => { if (cb) cb(); }),
+        on: vi.fn(),
       } as unknown as fs.WriteStream));
 
       const deps = makeDeps({ createWriteStream: mockCreateWriteStream });
@@ -209,7 +211,8 @@ describe('createLogger', () => {
       const mockWrite = vi.fn();
       const mockCreateWriteStream = vi.fn(() => ({
         write: mockWrite,
-        end: vi.fn(),
+        end: vi.fn((cb?: () => void) => { if (cb) cb(); }),
+        on: vi.fn(),
       } as unknown as fs.WriteStream));
 
       const deps = makeDeps({ createWriteStream: mockCreateWriteStream });
@@ -224,18 +227,21 @@ describe('createLogger', () => {
       expect(mockWrite).toHaveBeenCalledWith('line 2\n');
     });
 
-    it('close ends the stream', () => {
-      const mockEnd = vi.fn();
+    it('close ends the stream and returns a promise', async () => {
+      const mockEnd = vi.fn((cb?: () => void) => { if (cb) cb(); });
       const mockCreateWriteStream = vi.fn(() => ({
         write: vi.fn(),
         end: mockEnd,
+        on: vi.fn(),
       } as unknown as fs.WriteStream));
 
       const deps = makeDeps({ createWriteStream: mockCreateWriteStream });
       const logger = createLogger(false, deps);
       const session = logger.createSessionLogger('STAGE-1', '/tmp/logs');
 
-      session.close();
+      const result = session.close();
+      expect(result).toBeInstanceOf(Promise);
+      await result;
 
       expect(mockEnd).toHaveBeenCalledTimes(1);
     });
@@ -265,21 +271,10 @@ describe('createLogger', () => {
         session.write('hello world\n');
         session.write('second line\n');
 
-        // Wait for stream to flush
-        await new Promise<void>((resolve, reject) => {
-          // We need to close first to flush
-          session.close();
-          // Give the stream a moment to finish
-          setTimeout(async () => {
-            try {
-              const contents = await fsPromises.readFile(session.logFilePath, 'utf-8');
-              expect(contents).toBe('hello world\nsecond line\n');
-              resolve();
-            } catch (err) {
-              reject(err);
-            }
-          }, 50);
-        });
+        await session.close();
+
+        const contents = await fsPromises.readFile(session.logFilePath, 'utf-8');
+        expect(contents).toBe('hello world\nsecond line\n');
       } finally {
         await fsPromises.rm(tmpDir, { recursive: true });
       }

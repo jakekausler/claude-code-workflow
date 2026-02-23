@@ -12,7 +12,7 @@ export interface Logger {
 export interface SessionLogger {
   logFilePath: string;
   write(data: string): void;
-  close(): void;
+  close(): Promise<void>;
 }
 
 /**
@@ -45,7 +45,7 @@ function toFileTimestamp(date: Date): string {
  */
 function formatLogLine(
   timestamp: string,
-  level: string,
+  level: 'INFO' | 'WARN' | 'ERROR' | 'DEBUG',
   message: string,
   context?: Record<string, unknown>,
 ): string {
@@ -66,7 +66,7 @@ function formatLogLine(
 export function createLogger(verbose: boolean, deps: Partial<LoggerDeps> = {}): Logger {
   const { writeStderr, now, createWriteStream } = { ...defaultDeps, ...deps };
 
-  function log(level: string, message: string, context?: Record<string, unknown>): void {
+  function log(level: 'INFO' | 'WARN' | 'ERROR' | 'DEBUG', message: string, context?: Record<string, unknown>): void {
     const timestamp = now().toISOString();
     const line = formatLogLine(timestamp, level, message, context);
     writeStderr(line);
@@ -96,6 +96,10 @@ export function createLogger(verbose: boolean, deps: Partial<LoggerDeps> = {}): 
       const logFilePath = path.join(logDir, `${stageId}-${timestamp}.log`);
       const stream = createWriteStream(logFilePath);
 
+      stream.on('error', (err: Error) => {
+        writeStderr(`[WARN] session log stream error for ${logFilePath}: ${err.message}\n`);
+      });
+
       return {
         logFilePath,
 
@@ -103,8 +107,10 @@ export function createLogger(verbose: boolean, deps: Partial<LoggerDeps> = {}): 
           stream.write(data);
         },
 
-        close(): void {
-          stream.end();
+        close(): Promise<void> {
+          return new Promise((resolve) => {
+            stream.end(() => resolve());
+          });
         },
       };
     },
