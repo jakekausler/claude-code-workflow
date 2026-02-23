@@ -251,4 +251,51 @@ describe('loadOrchestratorConfig', () => {
 
     expect(config.verbose).toBe(true);
   });
+
+  it('throws on non-numeric idleSeconds value', async () => {
+    const deps = makeDeps();
+    await expect(
+      loadOrchestratorConfig(makeCliOptions({ idleSeconds: 'not-a-number' }), deps),
+    ).rejects.toThrow('Invalid idle-seconds value: "not-a-number"');
+  });
+
+  it('throws on negative idleSeconds value', async () => {
+    const deps = makeDeps();
+    await expect(
+      loadOrchestratorConfig(makeCliOptions({ idleSeconds: '-5' }), deps),
+    ).rejects.toThrow('Invalid idle-seconds value: "-5"');
+  });
+
+  it('env var WORKFLOW_MAX_PARALLEL overrides pipeline config when both are set', async () => {
+    const pipelineConfig = makePipelineConfig({
+      workflow: {
+        entry_phase: 'Design',
+        phases: [
+          { name: 'Design', skill: 'phase-design', status: 'Design', transitions_to: ['Done'] },
+        ],
+        defaults: { WORKFLOW_MAX_PARALLEL: 2 },
+      },
+    });
+    const deps = makeDeps({
+      loadPipelineConfig: vi.fn(() => pipelineConfig),
+      env: { WORKFLOW_MAX_PARALLEL: '8' },
+    });
+
+    const config = await loadOrchestratorConfig(makeCliOptions(), deps);
+
+    // env var (8) should override pipeline config (2)
+    expect(config.maxParallel).toBe(8);
+  });
+
+  it('propagates error when loadPipelineConfig throws', async () => {
+    const deps = makeDeps({
+      loadPipelineConfig: vi.fn(() => {
+        throw new Error('Config file not found');
+      }),
+    });
+
+    await expect(
+      loadOrchestratorConfig(makeCliOptions(), deps),
+    ).rejects.toThrow('Config file not found');
+  });
 });

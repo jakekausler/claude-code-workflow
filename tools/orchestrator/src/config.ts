@@ -46,16 +46,16 @@ export async function loadOrchestratorConfig(
 ): Promise<OrchestratorConfig> {
   const { loadPipelineConfig, env, mkdir } = { ...defaultDeps, ...deps };
 
-  // 1. Resolve repo path to absolute
+  // Resolve repo path to absolute
   const repoPath = path.resolve(cliOptions.repo);
 
-  // 2. Load pipeline config
+  // Load pipeline config
   const pipelineConfig = loadPipelineConfig(repoPath);
 
-  // 3. Extract WORKFLOW_MAX_PARALLEL from config defaults (default: 1)
+  // Extract WORKFLOW_MAX_PARALLEL from config defaults (default: 1)
   let maxParallel = pipelineConfig.workflow.defaults?.WORKFLOW_MAX_PARALLEL ?? 1;
 
-  // 4. Override with env var if set
+  // Override with env var if set
   const envMaxParallel = env['WORKFLOW_MAX_PARALLEL'];
   if (envMaxParallel !== undefined) {
     const parsed = parseInt(envMaxParallel, 10);
@@ -64,7 +64,7 @@ export async function loadOrchestratorConfig(
     }
   }
 
-  // 5. Build workflowEnv from all WORKFLOW_* env vars
+  // Build workflowEnv from all WORKFLOW_* env vars
   const workflowEnv: Record<string, string> = {};
   for (const [key, value] of Object.entries(env)) {
     if (key.startsWith('WORKFLOW_') && value !== undefined) {
@@ -72,14 +72,19 @@ export async function loadOrchestratorConfig(
     }
   }
 
-  // 6-7. Parse CLI flags, default logDir to <repoPath>/.kanban-logs/
+  // Parse CLI flags, validate idleSeconds
   const idleSeconds = Number(cliOptions.idleSeconds);
+  if (Number.isNaN(idleSeconds) || idleSeconds < 0) {
+    throw new Error(`Invalid idle-seconds value: "${cliOptions.idleSeconds}"`);
+  }
+
+  // Default logDir to <repoPath>/.kanban-logs/
   const logDir = path.resolve(cliOptions.logDir ?? path.join(repoPath, '.kanban-logs'));
 
-  // 9. Create log directory if it doesn't exist
+  // Create log directory if it doesn't exist
   await mkdir(logDir, { recursive: true });
 
-  // 10. Return fully populated config
+  // Return fully populated config
   return {
     repoPath,
     once: cliOptions.once,
