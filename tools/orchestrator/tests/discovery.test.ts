@@ -220,7 +220,8 @@ describe('createDiscovery', () => {
       expect(args).toContain('--repo');
       expect(args).toContain('/my/repo/path');
       expect(args).toContain('--max');
-      expect(args).toContain('42');
+      // Over-requests: Math.max(42*3, 42+10) = 126
+      expect(args).toContain('126');
     });
 
     it('includes both --repo and --max flags with correct values', async () => {
@@ -236,8 +237,8 @@ describe('createDiscovery', () => {
       expect(maxIdx).toBeGreaterThan(-1);
       // --repo value follows --repo flag
       expect(args[repoIdx + 1]).toBe('/tmp/repo');
-      // --max value follows --max flag
-      expect(args[maxIdx + 1]).toBe('10');
+      // --max value follows --max flag (over-requested: Math.max(10*3, 10+10) = 30)
+      expect(args[maxIdx + 1]).toBe('30');
     });
 
     it('converts max number to string argument', async () => {
@@ -248,7 +249,8 @@ describe('createDiscovery', () => {
 
       const [, args] = (execFn as ReturnType<typeof vi.fn>).mock.calls[0];
       const maxIdx = args.indexOf('--max');
-      expect(args[maxIdx + 1]).toBe('7');
+      // Over-requested: Math.max(7*3, 7+10) = 21
+      expect(args[maxIdx + 1]).toBe('21');
       expect(typeof args[maxIdx + 1]).toBe('string');
     });
   });

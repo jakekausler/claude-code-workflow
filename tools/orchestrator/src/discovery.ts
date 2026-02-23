@@ -114,7 +114,10 @@ export function createDiscovery(deps: Partial<DiscoveryDeps> = {}): Discovery {
 
   return {
     async discover(repoPath: string, max: number): Promise<DiscoveryResult> {
-      const args = ['tsx', cliPath, 'next', '--repo', repoPath, '--max', String(max)];
+      // Request extra stages to compensate for needsHuman filtering.
+      // The orchestrator's loop maxParallel guard handles the actual spawn limit.
+      const requestMax = Math.max(max * 3, max + 10);
+      const args = ['tsx', cliPath, 'next', '--repo', repoPath, '--max', String(requestMax)];
 
       const stdout = await exec('npx', args);
       const raw = JSON.parse(stdout);
