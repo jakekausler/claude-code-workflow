@@ -2,7 +2,16 @@
 
 ## Context
 
-Stages 0-5 are complete on the `kanban` branch. This session implements **Stage 6A: Orchestrator Infrastructure & Session Management** — the foundational infrastructure for the orchestrator that manages stage lifecycle, session spawning, worktree isolation, and crash recovery.
+Stages 0-5 are complete on the `kanban` branch. Stage 5.5A (Schema & Sync), Stage 5.5B (Skill Updates), and Stage 5.5C (Jira Conversion Enrichment) are also complete. This session implements **Stage 6A: Orchestrator Infrastructure & Session Management** — the foundational infrastructure for the orchestrator that manages stage lifecycle, session spawning, worktree isolation, and crash recovery.
+
+### Dependency Graph
+
+```
+Stage 5.5A (Schema & Sync) ✅
+  ├── Stage 5.5B (Skill Updates) ✅
+  │     └── Stage 6A (Orchestrator Infrastructure) ← THIS STAGE
+  └── Stage 5.5C (Jira Conversion Enrichment) ✅
+```
 
 ### What Has Been Built (Stages 0-5)
 
@@ -21,8 +30,9 @@ Stages 0-5 are complete on the `kanban` branch. This session implements **Stage 
 | `jira-import` | Import Jira issues as local epics/tickets | JSON, `--pretty`, `--epic` |
 | `jira-sync` | Sync workflow state to Jira | JSON, `--pretty`, `--dry-run` |
 | `learnings-count` | Count unanalyzed learnings entries | JSON, `--pretty`, `--threshold` |
+| `enrich` | Fetch linked content for enriched brainstorming | JSON, `--pretty` |
 
-All commands support `--output/-o <file>` and `--repo <path>`.
+All 13 commands support `--output/-o <file>` and `--repo <path>`.
 
 **Infrastructure (Stages 0-1):**
 - SQLite database with repos, epics, tickets, stages, dependencies, summaries tables
@@ -70,7 +80,28 @@ All commands support `--output/-o <file>` and `--repo <path>`.
 - `kanban-cli learnings-count` command — standalone CLI for counting unanalyzed learnings
 - Canonical exit gate pattern across all phases: notes file → tracking updates → lessons-learned → journal
 
-**Test Suite:** 596 tests across 46 test files, all passing
+**Stage 5.5A: Schema & Sync (Complete):**
+- Multi-parent dependency schema (`depends_on` array with `stage_id` + `relationship` objects)
+- `pending_merge_parents` frontmatter field for tracking parent branches awaiting merge
+- `is_draft` frontmatter field for draft MR tracking
+- `mr_target_branch` frontmatter field for MR target branch logic
+- Sync engine updates for new schema fields
+
+**Stage 5.5B: Skill Updates (Complete):**
+- Code host adapter methods: `editPRBase(prNumber, newBase)`, `markPRReady(prNumber)`, `getBranchHead(branch)` — for both GitHub and GitLab
+- `phase-build` skill: parent branch merge step (reads `pending_merge_parents`, merges each parent branch before build)
+- `phase-finalize` skill: draft MR and target branch logic (0 parents → main, 1 parent → parent branch, >1 parents → main; creates as draft if `pending_merge_parents` non-empty)
+- `resolve-merge-conflicts` skill: automated conflict resolution during parent merges
+
+**Stage 5.5C: Jira Conversion Enrichment (Complete):**
+- `jira-import` captures link manifests (`jira_links` array in ticket frontmatter) from Jira API
+- `kanban-cli enrich` command: fetches linked content (Confluence pages, Jira issues, attachments, external URLs) for enriched brainstorming
+- `convert-ticket` skill: enrichment step before brainstorming (re-pulls Jira data, reads linked content)
+- Jira reading script: extracts issue links, attachments, and remote links from Jira API
+- New `jira_links` schema and validation
+- Enrichment module (`enrich-ticket`)
+
+**Test Suite:** 729 tests across 51 test files, all passing
 **Source Files:** ~70 TypeScript source files
 
 **Workflow Skills** (all in `skills/`):
@@ -87,7 +118,8 @@ All commands support `--output/-o <file>` and `--repo <path>`.
 | `phase-finalize` | Local mode (merge) + remote mode (MR/PR) + Jira sync, writes `-finalize.md` notes |
 | `review-cycle` | MR/PR review comment handling (fetch, classify, fix, push, reply) |
 | `migrate-repo` | Interactive old-format repo migration with approval gates |
-| `convert-ticket` | Stageless ticket → stages via brainstorming, Jira context aware |
+| `convert-ticket` | Stageless ticket → stages via brainstorming, Jira context aware, enrichment step |
+| `resolve-merge-conflicts` | Automated conflict resolution during parent branch merges |
 | `lessons-learned` | Phase completion lessons with three-level metadata |
 | `journal` | Post-phase feelings journal |
 | `meta-insights` | Cross-cutting learnings analysis with scripts in `meta-insights/scripts/` |
@@ -198,6 +230,12 @@ These decisions were made in the design doc and end-state vision. Do NOT re-open
 - **Pipeline config loader**: `loadPipelineConfig()` reads `.kanban-workflow.yaml` with Zod validation.
 - **Default pipeline YAML**: `tools/kanban-cli/config/default-pipeline.yaml` defines the state machine.
 - **Priority queue**: `kanban-cli next` already sorts by Addressing Comments > Manual Testing > Automatic Testing > Build > Design.
+- **Code host adapter additions (5.5B)**: `editPRBase()`, `markPRReady()`, `getBranchHead()` on GitHub and GitLab adapters.
+- **Parent branch merge step (5.5B)**: `phase-build` reads `pending_merge_parents` and merges parent branches before build.
+- **Draft MR logic (5.5B)**: `phase-finalize` sets `is_draft`, `mr_target_branch` based on parent count.
+- **`kanban-cli enrich` (5.5C)**: Fetches linked content for enriched brainstorming.
+- **`jira_links` in frontmatter (5.5C)**: Link manifests captured by `jira-import` from Jira API.
+- **Jira link extraction (5.5C)**: Reading script extracts issue links, attachments, and remote links.
 
 #### Not Yet Implemented (Stage 6A Builds These)
 
@@ -297,6 +335,12 @@ The orchestrator validates this strategy exists before creating worktrees. `WORK
 - **Frontmatter read/write**: `readYamlFrontmatter()` and `writeYamlFrontmatter()` in utils/yaml.ts handle stage file operations.
 - **Stage file discovery**: `discoverStageFiles()` recursively walks epics/ directory.
 - **Repo instance**: `createRepository()` factory in database/repository.ts creates typed DB accessor with all query methods.
+- **Code host adapter additions (5.5B)**: `editPRBase(prNumber, newBase)`, `markPRReady(prNumber)`, `getBranchHead(branch)` on both GitHub and GitLab adapters.
+- **Parent branch merge step (5.5B)**: `phase-build` reads `pending_merge_parents` from frontmatter and merges each parent branch before starting build work.
+- **Draft MR creation (5.5B)**: `phase-finalize` sets `is_draft` and `mr_target_branch` based on parent count (0 parents → main, 1 parent → parent branch, >1 parents → main; creates as draft if `pending_merge_parents` non-empty).
+- **`kanban-cli enrich` command (5.5C)**: Fetches linked content (Confluence pages, Jira issues, attachments, external URLs) for enriched brainstorming.
+- **Jira link extraction (5.5C)**: Jira reading script extracts issue links, attachments, and remote links from Jira API.
+- **`jira_links` population (5.5C)**: `jira-import` captures link manifests (`jira_links` array) in ticket frontmatter from Jira API.
 
 ### Not Yet Implemented
 
@@ -371,7 +415,7 @@ Invoke the subagent-driven-development skill to execute the implementation plan:
 
 ### Key Constraints
 
-- The existing 596 tests must continue passing throughout
+- The existing 729 tests must continue passing throughout
 - All CLI commands consume pipeline config (not hardcoded)
 - `npm run verify` must pass after every task
 - The orchestrator must work with the default pipeline config out of the box
