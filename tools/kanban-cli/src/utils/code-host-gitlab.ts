@@ -92,6 +92,7 @@ export function createGitLabAdapter(options: GitLabAdapterOptions = {}): CodeHos
     getBranchHead(branch: string): string {
       try {
         const encoded = encodeURIComponent(branch);
+        // :id is resolved by glab CLI to the current project ID
         const json = exec('glab', [
           'api', `projects/:id/repository/branches/${encoded}`,
         ]);
