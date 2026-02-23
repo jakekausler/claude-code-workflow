@@ -81,5 +81,25 @@ export function createGitHubAdapter(options: GitHubAdapterOptions = {}): CodeHos
         return { merged: false, hasUnresolvedComments: false, state: 'error' };
       }
     },
+
+    editPRBase(prNumber: number, newBase: string): void {
+      exec('gh', ['pr', 'edit', String(prNumber), '--base', newBase]);
+    },
+
+    markPRReady(prNumber: number): void {
+      exec('gh', ['pr', 'ready', String(prNumber)]);
+    },
+
+    getBranchHead(branch: string): string {
+      try {
+        const json = exec('gh', [
+          'api', `repos/{owner}/{repo}/git/ref/heads/${branch}`,
+        ]);
+        const data = JSON.parse(json) as { object: { sha: string } };
+        return data.object.sha;
+      } catch {
+        return '';
+      }
+    },
   };
 }
