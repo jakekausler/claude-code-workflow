@@ -29,13 +29,13 @@ export interface Locker {
   readStatus(stageFilePath: string): Promise<string>;
 }
 
-async function defaultReadFrontmatter(filePath: string): Promise<FrontmatterData> {
+export async function defaultReadFrontmatter(filePath: string): Promise<FrontmatterData> {
   const raw = await readFile(filePath, 'utf-8');
   const parsed = matter(raw);
   return { data: parsed.data, content: parsed.content };
 }
 
-async function defaultWriteFrontmatter(filePath: string, data: Record<string, unknown>, content: string): Promise<void> {
+export async function defaultWriteFrontmatter(filePath: string, data: Record<string, unknown>, content: string): Promise<void> {
   const output = matter.stringify(content, data);
   await writeFile(filePath, output, 'utf-8');
 }

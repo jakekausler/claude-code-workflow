@@ -19,4 +19,6 @@ export interface OrchestratorConfig {
   maxParallel: number;
   pipelineConfig: PipelineConfig;
   workflowEnv: Record<string, string>;
+  mockMode: 'none' | 'full' | 'selective';
+  mockServices: string[];  // empty for 'none' and 'full', populated for 'selective'
 }

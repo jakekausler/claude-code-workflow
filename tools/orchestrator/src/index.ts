@@ -3,9 +3,11 @@ import { Command } from 'commander';
 import { loadOrchestratorConfig } from './config.js';
 import { createLogger } from './logger.js';
 import { createDiscovery } from './discovery.js';
-import { createLocker } from './locking.js';
+import { createLocker, defaultReadFrontmatter, defaultWriteFrontmatter } from './locking.js';
 import { createWorktreeManager } from './worktree.js';
 import { createSessionExecutor } from './session.js';
+import { createMockSessionExecutor } from './mock-session.js';
+import { createMockWorktreeManager } from './mock-worktree.js';
 import { createOrchestrator } from './loop.js';
 import { setupShutdownHandlers } from './shutdown.js';
 
@@ -18,6 +20,7 @@ const program = new Command()
   .option('--log-dir <path>', 'Session log directory')
   .option('--model <model>', 'Claude model for sessions', 'sonnet')
   .option('--verbose', 'Verbose output', false)
+  .option('--mock [services]', 'Mock mode: no args = full mock (auto-advance, no CLI), or comma-separated services to mock (jira,github,gitlab,slack)')
   .action(async (options) => {
     try {
       // 1. Load config
@@ -28,14 +31,32 @@ const program = new Command()
         logDir: options.logDir,
         model: options.model,
         verbose: options.verbose,
+        mock: options.mock,
       });
 
       // 2. Create all dependencies
       const logger = createLogger(config.verbose);
       const discovery = createDiscovery();
       const locker = createLocker();
-      const worktreeManager = createWorktreeManager(config.maxParallel);
-      const sessionExecutor = createSessionExecutor();
+
+      let worktreeManager;
+      let sessionExecutor;
+
+      if (config.mockMode === 'full') {
+        logger.info('Running in full mock mode (auto-advancing stages)');
+        worktreeManager = createMockWorktreeManager();
+        sessionExecutor = createMockSessionExecutor({
+          readFrontmatter: defaultReadFrontmatter,
+          writeFrontmatter: defaultWriteFrontmatter,
+          pipelineConfig: config.pipelineConfig,
+        });
+      } else {
+        if (config.mockMode === 'selective') {
+          logger.info(`Running with mocked services: ${config.mockServices.join(', ')}`);
+        }
+        worktreeManager = createWorktreeManager(config.maxParallel);
+        sessionExecutor = createSessionExecutor();
+      }
 
       // 3. Create orchestrator
       const orchestrator = createOrchestrator(config, {

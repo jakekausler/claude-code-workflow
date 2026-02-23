@@ -14,6 +14,7 @@ export interface CliOptions {
   logDir?: string;
   model: string;
   verbose: boolean;
+  mock?: boolean | string;
 }
 
 /**
@@ -84,6 +85,32 @@ export async function loadOrchestratorConfig(
   // Create log directory if it doesn't exist
   await mkdir(logDir, { recursive: true });
 
+  // Parse mock mode
+  const VALID_MOCK_SERVICES = ['jira', 'github', 'gitlab', 'slack'];
+  let mockMode: 'none' | 'full' | 'selective' = 'none';
+  let mockServices: string[] = [];
+
+  if (cliOptions.mock === true || cliOptions.mock === 'all') {
+    mockMode = 'full';
+  } else if (typeof cliOptions.mock === 'string' && cliOptions.mock.length > 0) {
+    mockMode = 'selective';
+    mockServices = cliOptions.mock.split(',').map((s) => s.trim().toLowerCase());
+
+    // Validate service names
+    for (const service of mockServices) {
+      if (!VALID_MOCK_SERVICES.includes(service)) {
+        throw new Error(
+          `Invalid mock service "${service}". Valid services: ${VALID_MOCK_SERVICES.join(', ')}`,
+        );
+      }
+    }
+
+    // Add MOCK_<SERVICE>=true to workflowEnv
+    for (const service of mockServices) {
+      workflowEnv[`MOCK_${service.toUpperCase()}`] = 'true';
+    }
+  }
+
   // Return fully populated config
   return {
     repoPath,
@@ -95,5 +122,7 @@ export async function loadOrchestratorConfig(
     maxParallel,
     pipelineConfig,
     workflowEnv,
+    mockMode,
+    mockServices,
   };
 }

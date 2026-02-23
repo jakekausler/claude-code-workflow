@@ -180,6 +180,8 @@ function makeConfig(overrides?: Partial<OrchestratorConfig>): OrchestratorConfig
     maxParallel: 2,
     pipelineConfig: PIPELINE_CONFIG,
     workflowEnv: { WORKFLOW_AUTO_DESIGN: 'true' },
+    mockMode: 'none',
+    mockServices: [],
     ...overrides,
   };
 }
