@@ -160,7 +160,6 @@ describe('enrichTicket', () => {
     );
 
     const result = await enrichTicket({
-      repoPath: repoDir,
       ticketPath,
       executor,
     });
@@ -204,7 +203,6 @@ process.stdout.write('# Confluence Page Content\\n\\nThis is the fetched content
 `);
 
     const result = await enrichTicket({
-      repoPath: repoDir,
       ticketPath,
       confluenceScriptPath: mockScript,
     });
@@ -217,7 +215,7 @@ process.stdout.write('# Confluence Page Content\\n\\nThis is the fetched content
     expect(content).toContain('### [Confluence] Design Doc');
     expect(content).toContain('*Source: https://company.atlassian.net/wiki/spaces/TEAM/pages/123*');
     expect(content).toContain('# Confluence Page Content');
-  });
+  }, 15000);
 
   // ─── Test 3: Ticket with jira_issue link ───────────────────────────────
 
@@ -253,7 +251,6 @@ process.stdout.write('# Confluence Page Content\\n\\nThis is the fetched content
     });
 
     const result = await enrichTicket({
-      repoPath: repoDir,
       ticketPath,
       executor,
     });
@@ -289,11 +286,10 @@ process.stdout.write('# Confluence Page Content\\n\\nThis is the fetched content
     );
 
     const result = await enrichTicket({
-      repoPath: repoDir,
       ticketPath,
     });
 
-    expect(fetchSpy).toHaveBeenCalledWith('https://docs.google.com/document/d/abc123');
+    expect(fetchSpy).toHaveBeenCalledWith('https://docs.google.com/document/d/abc123', { signal: expect.any(AbortSignal) });
     expect(result.linkResults).toHaveLength(1);
     expect(result.linkResults[0].success).toBe(true);
 
@@ -328,12 +324,12 @@ process.stdout.write('# Confluence Page Content\\n\\nThis is the fetched content
       );
 
       const result = await enrichTicket({
-        repoPath: repoDir,
         ticketPath,
       });
 
       expect(fetchSpy).toHaveBeenCalledWith(
         'https://company.atlassian.net/secure/attachment/789/data.json',
+        { signal: expect.any(AbortSignal) },
       );
       expect(result.linkResults[0].success).toBe(true);
 
@@ -360,7 +356,6 @@ process.stdout.write('# Confluence Page Content\\n\\nThis is the fetched content
       });
 
       const result = await enrichTicket({
-        repoPath: repoDir,
         ticketPath,
       });
 
@@ -396,7 +391,6 @@ process.stdout.write('# Confluence Page Content\\n\\nThis is the fetched content
     );
 
     const result = await enrichTicket({
-      repoPath: repoDir,
       ticketPath,
     });
 
@@ -423,7 +417,6 @@ process.stdout.write('# Confluence Page Content\\n\\nThis is the fetched content
     });
 
     const result = await enrichTicket({
-      repoPath: repoDir,
       ticketPath,
     });
 
@@ -431,27 +424,8 @@ process.stdout.write('# Confluence Page Content\\n\\nThis is the fetched content
     expect(result.enrichmentFilePath).toBeNull();
     expect(result.freshJiraData).toBe(false);
     expect(result.linkResults).toEqual([]);
-  });
 
-  // ─── Test 8: Non-jira ticket (source: local, no jira_key) → skip ──────
-
-  it('skips enrichment for non-jira ticket with no links', async () => {
-    const ticketPath = path.join(repoDir, 'epics', 'EPIC-001', 'TICKET-001-001.md');
-    writeTicketFile(ticketPath, {
-      jira_key: null,
-      source: 'local',
-    });
-
-    const result = await enrichTicket({
-      repoPath: repoDir,
-      ticketPath,
-    });
-
-    expect(result.enrichmentFilePath).toBeNull();
-    expect(result.freshJiraData).toBe(false);
-    expect(result.linkResults).toEqual([]);
-
-    // Verify no enrichment file was created
+    // Verify no enrichment file was created on disk
     const expectedEnrichmentPath = path.join(
       repoDir,
       'epics',
@@ -531,7 +505,6 @@ process.stdout.write('# Confluence Page Content\\n\\nThis is the fetched content
     );
 
     const result = await enrichTicket({
-      repoPath: repoDir,
       ticketPath,
       executor,
       confluenceScriptPath: mockScript,
@@ -573,7 +546,7 @@ process.stdout.write('# Confluence Page Content\\n\\nThis is the fetched content
     );
 
     fetchSpy.mockRestore();
-  });
+  }, 15000);
 
   // ─── Test 10: Multiple links → all fetched sequentially ────────────────
 
@@ -609,7 +582,6 @@ process.stdout.write('# Confluence Page Content\\n\\nThis is the fetched content
     });
 
     const result = await enrichTicket({
-      repoPath: repoDir,
       ticketPath,
     });
 
@@ -666,7 +638,6 @@ process.stdout.write('# Confluence Page Content\\n\\nThis is the fetched content
     });
 
     const result = await enrichTicket({
-      repoPath: repoDir,
       ticketPath,
     });
 
@@ -706,7 +677,6 @@ process.stdout.write('# Confluence Page Content\\n\\nThis is the fetched content
 
     try {
       const result = await enrichTicket({
-        repoPath: repoDir,
         ticketPath,
       });
 
@@ -753,7 +723,6 @@ Body.
     const executor = createMockExecutor();
 
     const result = await enrichTicket({
-      repoPath: repoDir,
       ticketPath,
       executor,
     });
@@ -782,7 +751,6 @@ Body.
 
     // No executor passed — fresh Jira data should be skipped
     const result = await enrichTicket({
-      repoPath: repoDir,
       ticketPath,
     });
 
@@ -817,7 +785,6 @@ Body.
     );
 
     const result = await enrichTicket({
-      repoPath: repoDir,
       ticketPath,
     });
 

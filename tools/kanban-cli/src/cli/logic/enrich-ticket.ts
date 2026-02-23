@@ -8,7 +8,6 @@ import type { JiraLink } from '../../types/work-items.js';
 // ─── Public interfaces ──────────────────────────────────────────────────────
 
 export interface EnrichOptions {
-  repoPath: string;
   ticketPath: string;
   executor?: JiraExecutor;
   confluenceScriptPath?: string;
@@ -56,7 +55,8 @@ function resolveConfluenceScript(override?: string): string | null {
   );
 
   try {
-    // fs.globSync is available in Node 22+
+    // Node 22+ experimental recursive glob API. Cast to any since TypeScript
+    // types don't yet include this API. Falls back gracefully if unavailable.
     const matches = (fs as any).globSync(pluginGlob);
     if (Array.isArray(matches) && matches.length > 0) {
       // Sort to get latest version
@@ -78,8 +78,9 @@ function resolveConfluenceScript(override?: string): string | null {
 
 /**
  * Spawn `npx tsx <script> <url> --no-metadata` and capture stdout.
+ * URLs are expected to come from parsed ticket frontmatter (user-controlled).
  */
-function fetchConfluenceContent(scriptPath: string, url: string): Promise<string> {
+function fetchConfluenceContent(scriptPath: string, url: string, timeoutMs = 30000): Promise<string> {
   return new Promise((resolve, reject) => {
     const child = spawn('npx', ['tsx', scriptPath, url, '--no-metadata'], {
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -87,6 +88,15 @@ function fetchConfluenceContent(scriptPath: string, url: string): Promise<string
 
     let stdout = '';
     let stderr = '';
+    let settled = false;
+
+    const timer = setTimeout(() => {
+      if (!settled) {
+        settled = true;
+        child.kill('SIGKILL');
+        reject(new Error(`Confluence script timed out after ${timeoutMs}ms`));
+      }
+    }, timeoutMs);
 
     child.stdout.on('data', (chunk: Buffer) => {
       stdout += chunk.toString();
@@ -97,28 +107,43 @@ function fetchConfluenceContent(scriptPath: string, url: string): Promise<string
     });
 
     child.on('error', (err) => {
-      reject(new Error(`Failed to spawn confluence script: ${err.message}`));
+      if (!settled) {
+        settled = true;
+        clearTimeout(timer);
+        reject(new Error(`Failed to spawn confluence script: ${err.message}`));
+      }
     });
 
     child.on('close', (exitCode) => {
-      if (exitCode !== 0) {
-        reject(new Error(`Confluence script exited with code ${exitCode}: ${stderr.trim()}`));
-        return;
+      if (!settled) {
+        settled = true;
+        clearTimeout(timer);
+        if (exitCode !== 0) {
+          reject(new Error(`Confluence script exited with code ${exitCode}: ${stderr.trim()}`));
+          return;
+        }
+        resolve(stdout);
       }
-      resolve(stdout);
     });
   });
 }
 
 /**
  * Fetch content via HTTP GET. Returns response body as text.
+ * URLs are expected to come from parsed ticket frontmatter (user-controlled).
  */
-async function httpGet(url: string): Promise<string> {
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`${response.status} ${response.statusText}`);
+async function httpGet(url: string, timeoutMs = 30000): Promise<string> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, { signal: controller.signal });
+    if (!response.ok) {
+      throw new Error(`${response.status} ${response.statusText}`);
+    }
+    return response.text();
+  } finally {
+    clearTimeout(timer);
   }
-  return response.text();
 }
 
 /**
@@ -234,12 +259,18 @@ function linkTypeLabel(type: JiraLink['type']): string {
  */
 function isTextMimeType(mimeType?: string): boolean {
   if (!mimeType) return false;
-  return (
-    mimeType.startsWith('text/') ||
-    mimeType === 'application/json' ||
-    mimeType === 'application/xml' ||
-    mimeType === 'application/javascript'
-  );
+  if (mimeType.startsWith('text/')) return true;
+  if (mimeType.endsWith('+json') || mimeType.endsWith('+xml')) return true;
+  const textTypes = [
+    'application/json',
+    'application/xml',
+    'application/javascript',
+    'application/yaml',
+    'application/x-yaml',
+    'application/typescript',
+    'application/x-sh',
+  ];
+  return textTypes.includes(mimeType);
 }
 
 // ─── Main enrichment function ───────────────────────────────────────────────
@@ -255,7 +286,7 @@ function isTextMimeType(mimeType?: string): boolean {
  * - Never throws for fetch failures; only throws for file I/O errors
  */
 export async function enrichTicket(options: EnrichOptions): Promise<EnrichResult> {
-  const { repoPath, ticketPath, executor, confluenceScriptPath } = options;
+  const { ticketPath, executor, confluenceScriptPath } = options;
 
   // 1. Read and parse ticket
   const ticketContent = fs.readFileSync(ticketPath, 'utf-8');
@@ -361,12 +392,12 @@ export async function enrichTicket(options: EnrichOptions): Promise<EnrichResult
     }
   }
 
-  // 6. Write enrichment file
+  // 5. Write enrichment file
   const outPath = enrichmentFilePath(ticketPath);
   const content = sections.join('\n') + '\n';
   fs.writeFileSync(outPath, content);
 
-  // 7. Return result
+  // 6. Return result
   return {
     ticketId: ticket.id,
     enrichmentFilePath: outPath,
