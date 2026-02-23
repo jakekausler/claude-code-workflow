@@ -1,0 +1,501 @@
+import { describe, it, expect, vi } from 'vitest';
+import {
+  assemblePrompt,
+  createSessionExecutor,
+  type SpawnOptions,
+  type SessionDeps,
+  type ChildProcessLike,
+  type SessionLoggerLike,
+  type SpawnProcessOptions,
+} from '../src/session.js';
+
+/** Build a default SpawnOptions for testing. */
+function makeSpawnOptions(overrides: Partial<SpawnOptions> = {}): SpawnOptions {
+  return {
+    stageId: 'STAGE-001-001-001',
+    stageFilePath: '/repo/epics/epic-001/tickets/ticket-001/stages/stage-001.md',
+    skillName: 'implement',
+    worktreePath: '/repo/.worktrees/worktree-1',
+    worktreeIndex: 1,
+    model: 'opus',
+    workflowEnv: {
+      WORKFLOW_AUTO_DESIGN: 'true',
+      WORKFLOW_REMOTE_MODE: 'false',
+    },
+    ...overrides,
+  };
+}
+
+/** Build a mock session logger. */
+function makeLogger(): SessionLoggerLike & { write: ReturnType<typeof vi.fn> } {
+  return {
+    write: vi.fn(),
+  };
+}
+
+type CloseListener = (code: number | null) => void;
+type ErrorListener = (err: Error) => void;
+type DataListener = (chunk: Buffer) => void;
+
+/** Build a mock child process with controllable events. */
+function makeMockChild(pid = 12345): {
+  child: ChildProcessLike;
+  emitClose: (code: number | null) => void;
+  emitError: (err: Error) => void;
+  emitStdout: (data: string) => void;
+  emitStderr: (data: string) => void;
+  stdinWrite: ReturnType<typeof vi.fn>;
+  stdinEnd: ReturnType<typeof vi.fn>;
+  killFn: ReturnType<typeof vi.fn>;
+} {
+  const closeListeners: CloseListener[] = [];
+  const errorListeners: ErrorListener[] = [];
+  const stdoutListeners: DataListener[] = [];
+  const stderrListeners: DataListener[] = [];
+  const stdinWrite = vi.fn(() => true);
+  const stdinEnd = vi.fn();
+  const killFn = vi.fn(() => true);
+
+  const child: ChildProcessLike = {
+    pid,
+    stdin: { write: stdinWrite, end: stdinEnd },
+    stdout: {
+      on(_event: 'data', listener: DataListener) {
+        stdoutListeners.push(listener);
+      },
+    },
+    stderr: {
+      on(_event: 'data', listener: DataListener) {
+        stderrListeners.push(listener);
+      },
+    },
+    on(event: string, listener: (...args: unknown[]) => void) {
+      if (event === 'close') closeListeners.push(listener as CloseListener);
+      if (event === 'error') errorListeners.push(listener as ErrorListener);
+    },
+    kill: killFn,
+  };
+
+  return {
+    child,
+    emitClose: (code) => closeListeners.forEach((l) => l(code)),
+    emitError: (err) => errorListeners.forEach((l) => l(err)),
+    emitStdout: (data) => stdoutListeners.forEach((l) => l(Buffer.from(data))),
+    emitStderr: (data) => stderrListeners.forEach((l) => l(Buffer.from(data))),
+    stdinWrite,
+    stdinEnd,
+    killFn,
+  };
+}
+
+/** Build mock deps with a controllable child process. */
+function makeDeps(
+  mockChild: ReturnType<typeof makeMockChild>,
+  overrides: Partial<SessionDeps> = {},
+): SessionDeps & { spawnProcess: ReturnType<typeof vi.fn>; now: ReturnType<typeof vi.fn> } {
+  let time = 1000;
+  return {
+    spawnProcess: vi.fn(() => mockChild.child),
+    now: vi.fn(() => time++),
+    ...overrides,
+  };
+}
+
+describe('assemblePrompt', () => {
+  it('includes stageId in the prompt', () => {
+    const options = makeSpawnOptions();
+    const prompt = assemblePrompt(options);
+
+    expect(prompt).toContain('STAGE-001-001-001');
+  });
+
+  it('includes stageFilePath in the prompt', () => {
+    const options = makeSpawnOptions();
+    const prompt = assemblePrompt(options);
+
+    expect(prompt).toContain('/repo/epics/epic-001/tickets/ticket-001/stages/stage-001.md');
+  });
+
+  it('includes worktreePath in the prompt', () => {
+    const options = makeSpawnOptions();
+    const prompt = assemblePrompt(options);
+
+    expect(prompt).toContain('/repo/.worktrees/worktree-1');
+  });
+
+  it('includes worktreeIndex in the prompt', () => {
+    const options = makeSpawnOptions({ worktreeIndex: 3 });
+    const prompt = assemblePrompt(options);
+
+    expect(prompt).toContain('Worktree index: 3');
+  });
+
+  it('includes skillName in the prompt', () => {
+    const options = makeSpawnOptions({ skillName: 'design-review' });
+    const prompt = assemblePrompt(options);
+
+    expect(prompt).toContain('`design-review`');
+  });
+
+  it('includes skill invocation instructions', () => {
+    const options = makeSpawnOptions();
+    const prompt = assemblePrompt(options);
+
+    expect(prompt).toContain('Invoke the `ticket-stage-workflow` skill to load shared context.');
+    expect(prompt).toContain('Then invoke the `implement` skill to begin work on this stage.');
+  });
+
+  it('lists environment variables alphabetically', () => {
+    const options = makeSpawnOptions({
+      workflowEnv: {
+        WORKFLOW_REMOTE_MODE: 'false',
+        WORKFLOW_AUTO_DESIGN: 'true',
+        WORKFLOW_DRY_RUN: 'yes',
+      },
+    });
+    const prompt = assemblePrompt(options);
+
+    const envLines = prompt.split('\n').filter((line) => line.startsWith('- WORKFLOW_'));
+    expect(envLines).toEqual([
+      '- WORKFLOW_AUTO_DESIGN=true',
+      '- WORKFLOW_DRY_RUN=yes',
+      '- WORKFLOW_REMOTE_MODE=false',
+    ]);
+  });
+
+  it('handles empty workflowEnv', () => {
+    const options = makeSpawnOptions({ workflowEnv: {} });
+    const prompt = assemblePrompt(options);
+
+    expect(prompt).toContain('Environment configuration:');
+    // No env var lines after the header
+    const lines = prompt.split('\n');
+    const configIdx = lines.indexOf('Environment configuration:');
+    expect(configIdx).toBeGreaterThan(-1);
+    // Nothing follows the header
+    expect(lines.slice(configIdx + 1).filter((l) => l.trim().length > 0)).toHaveLength(0);
+  });
+});
+
+describe('createSessionExecutor', () => {
+  describe('spawn', () => {
+    it('passes correct args to claude CLI', async () => {
+      const mock = makeMockChild();
+      const deps = makeDeps(mock);
+      const executor = createSessionExecutor(deps);
+      const logger = makeLogger();
+      const options = makeSpawnOptions({ model: 'sonnet' });
+
+      const promise = executor.spawn(options, logger);
+      mock.emitClose(0);
+      await promise;
+
+      expect(deps.spawnProcess).toHaveBeenCalledWith(
+        'claude',
+        ['-p', '--model', 'sonnet'],
+        expect.objectContaining({
+          cwd: options.worktreePath,
+          stdio: ['pipe', 'pipe', 'pipe'],
+        }),
+      );
+    });
+
+    it('sets cwd to worktree path', async () => {
+      const mock = makeMockChild();
+      const deps = makeDeps(mock);
+      const executor = createSessionExecutor(deps);
+      const logger = makeLogger();
+      const options = makeSpawnOptions({ worktreePath: '/custom/worktree/path' });
+
+      const promise = executor.spawn(options, logger);
+      mock.emitClose(0);
+      await promise;
+
+      const callArgs = deps.spawnProcess.mock.calls[0];
+      const processOptions = callArgs[2] as SpawnProcessOptions;
+      expect(processOptions.cwd).toBe('/custom/worktree/path');
+    });
+
+    it('sets WORKTREE_INDEX in env', async () => {
+      const mock = makeMockChild();
+      const deps = makeDeps(mock);
+      const executor = createSessionExecutor(deps);
+      const logger = makeLogger();
+      const options = makeSpawnOptions({ worktreeIndex: 7 });
+
+      const promise = executor.spawn(options, logger);
+      mock.emitClose(0);
+      await promise;
+
+      const callArgs = deps.spawnProcess.mock.calls[0];
+      const processOptions = callArgs[2] as SpawnProcessOptions;
+      expect(processOptions.env.WORKTREE_INDEX).toBe('7');
+    });
+
+    it('passes workflowEnv vars to child env', async () => {
+      const mock = makeMockChild();
+      const deps = makeDeps(mock);
+      const executor = createSessionExecutor(deps);
+      const logger = makeLogger();
+      const options = makeSpawnOptions({
+        workflowEnv: { MY_CUSTOM_VAR: 'hello', ANOTHER_VAR: 'world' },
+      });
+
+      const promise = executor.spawn(options, logger);
+      mock.emitClose(0);
+      await promise;
+
+      const callArgs = deps.spawnProcess.mock.calls[0];
+      const processOptions = callArgs[2] as SpawnProcessOptions;
+      expect(processOptions.env.MY_CUSTOM_VAR).toBe('hello');
+      expect(processOptions.env.ANOTHER_VAR).toBe('world');
+    });
+
+    it('writes prompt to stdin', async () => {
+      const mock = makeMockChild();
+      const deps = makeDeps(mock);
+      const executor = createSessionExecutor(deps);
+      const logger = makeLogger();
+      const options = makeSpawnOptions();
+
+      const promise = executor.spawn(options, logger);
+      mock.emitClose(0);
+      await promise;
+
+      expect(mock.stdinWrite).toHaveBeenCalledTimes(1);
+      const writtenPrompt = mock.stdinWrite.mock.calls[0][0] as string;
+      expect(writtenPrompt).toContain('STAGE-001-001-001');
+      expect(mock.stdinEnd).toHaveBeenCalledTimes(1);
+    });
+
+    it('pipes stdout to session logger', async () => {
+      const mock = makeMockChild();
+      const deps = makeDeps(mock);
+      const executor = createSessionExecutor(deps);
+      const logger = makeLogger();
+      const options = makeSpawnOptions();
+
+      const promise = executor.spawn(options, logger);
+      mock.emitStdout('hello from stdout');
+      mock.emitClose(0);
+      await promise;
+
+      expect(logger.write).toHaveBeenCalledWith('hello from stdout');
+    });
+
+    it('pipes stderr to session logger', async () => {
+      const mock = makeMockChild();
+      const deps = makeDeps(mock);
+      const executor = createSessionExecutor(deps);
+      const logger = makeLogger();
+      const options = makeSpawnOptions();
+
+      const promise = executor.spawn(options, logger);
+      mock.emitStderr('warning from stderr');
+      mock.emitClose(0);
+      await promise;
+
+      expect(logger.write).toHaveBeenCalledWith('warning from stderr');
+    });
+
+    it('resolves with exit code on completion', async () => {
+      const mock = makeMockChild();
+      const deps = makeDeps(mock);
+      const executor = createSessionExecutor(deps);
+      const logger = makeLogger();
+      const options = makeSpawnOptions();
+
+      const promise = executor.spawn(options, logger);
+      mock.emitClose(42);
+      const result = await promise;
+
+      expect(result.exitCode).toBe(42);
+    });
+
+    it('resolves with exit code 1 when close code is null', async () => {
+      const mock = makeMockChild();
+      const deps = makeDeps(mock);
+      const executor = createSessionExecutor(deps);
+      const logger = makeLogger();
+      const options = makeSpawnOptions();
+
+      const promise = executor.spawn(options, logger);
+      mock.emitClose(null);
+      const result = await promise;
+
+      expect(result.exitCode).toBe(1);
+    });
+
+    it('reports duration in milliseconds', async () => {
+      const mock = makeMockChild();
+      let callCount = 0;
+      const deps = makeDeps(mock, {
+        now: vi.fn(() => {
+          callCount++;
+          // First call (start): 1000, second call (close): 3500
+          return callCount === 1 ? 1000 : 3500;
+        }),
+      });
+      const executor = createSessionExecutor(deps);
+      const logger = makeLogger();
+      const options = makeSpawnOptions();
+
+      const promise = executor.spawn(options, logger);
+      mock.emitClose(0);
+      const result = await promise;
+
+      expect(result.durationMs).toBe(2500);
+    });
+
+    it('rejects on process error', async () => {
+      const mock = makeMockChild();
+      const deps = makeDeps(mock);
+      const executor = createSessionExecutor(deps);
+      const logger = makeLogger();
+      const options = makeSpawnOptions();
+
+      const promise = executor.spawn(options, logger);
+      mock.emitError(new Error('spawn ENOENT'));
+
+      await expect(promise).rejects.toThrow('spawn ENOENT');
+    });
+
+    it('tracks active session during execution', async () => {
+      const mock = makeMockChild(99999);
+      const deps = makeDeps(mock);
+      const executor = createSessionExecutor(deps);
+      const logger = makeLogger();
+      const options = makeSpawnOptions();
+
+      const promise = executor.spawn(options, logger);
+
+      // Session should be active before close
+      const active = executor.getActiveSessions();
+      expect(active).toHaveLength(1);
+      expect(active[0].pid).toBe(99999);
+
+      mock.emitClose(0);
+      await promise;
+    });
+
+    it('removes session from active list after completion', async () => {
+      const mock = makeMockChild();
+      const deps = makeDeps(mock);
+      const executor = createSessionExecutor(deps);
+      const logger = makeLogger();
+      const options = makeSpawnOptions();
+
+      const promise = executor.spawn(options, logger);
+      mock.emitClose(0);
+      await promise;
+
+      expect(executor.getActiveSessions()).toHaveLength(0);
+    });
+
+    it('removes session from active list after error', async () => {
+      const mock = makeMockChild();
+      const deps = makeDeps(mock);
+      const executor = createSessionExecutor(deps);
+      const logger = makeLogger();
+      const options = makeSpawnOptions();
+
+      const promise = executor.spawn(options, logger);
+      mock.emitError(new Error('process failed'));
+
+      try {
+        await promise;
+      } catch {
+        // expected rejection
+      }
+
+      expect(executor.getActiveSessions()).toHaveLength(0);
+    });
+  });
+
+  describe('getActiveSessions', () => {
+    it('returns empty array when no sessions are active', () => {
+      const executor = createSessionExecutor({ now: () => 0, spawnProcess: vi.fn() });
+
+      expect(executor.getActiveSessions()).toEqual([]);
+    });
+
+    it('returns tracked sessions', async () => {
+      const mock1 = makeMockChild(111);
+      const mock2 = makeMockChild(222);
+      let callIndex = 0;
+      const deps: SessionDeps = {
+        spawnProcess: vi.fn(() => {
+          callIndex++;
+          return callIndex === 1 ? mock1.child : mock2.child;
+        }),
+        now: () => 1000,
+      };
+      const executor = createSessionExecutor(deps);
+      const logger = makeLogger();
+
+      // Spawn two sessions without closing them
+      executor.spawn(makeSpawnOptions(), logger);
+      executor.spawn(makeSpawnOptions(), logger);
+
+      const active = executor.getActiveSessions();
+      expect(active).toHaveLength(2);
+      expect(active.map((s) => s.pid).sort()).toEqual([111, 222]);
+
+      // Clean up
+      mock1.emitClose(0);
+      mock2.emitClose(0);
+    });
+  });
+
+  describe('killAll', () => {
+    it('sends signal to all active sessions', async () => {
+      const mock1 = makeMockChild(111);
+      const mock2 = makeMockChild(222);
+      let callIndex = 0;
+      const deps: SessionDeps = {
+        spawnProcess: vi.fn(() => {
+          callIndex++;
+          return callIndex === 1 ? mock1.child : mock2.child;
+        }),
+        now: () => 1000,
+      };
+      const executor = createSessionExecutor(deps);
+      const logger = makeLogger();
+
+      executor.spawn(makeSpawnOptions(), logger);
+      executor.spawn(makeSpawnOptions(), logger);
+
+      executor.killAll();
+
+      expect(mock1.killFn).toHaveBeenCalledWith('SIGTERM');
+      expect(mock2.killFn).toHaveBeenCalledWith('SIGTERM');
+
+      // Clean up
+      mock1.emitClose(0);
+      mock2.emitClose(0);
+    });
+
+    it('sends custom signal when provided', async () => {
+      const mock = makeMockChild(333);
+      const deps = makeDeps(mock);
+      const executor = createSessionExecutor(deps);
+      const logger = makeLogger();
+
+      executor.spawn(makeSpawnOptions(), logger);
+
+      executor.killAll('SIGKILL');
+
+      expect(mock.killFn).toHaveBeenCalledWith('SIGKILL');
+
+      // Clean up
+      mock.emitClose(0);
+    });
+
+    it('does nothing when no sessions are active', () => {
+      const executor = createSessionExecutor({ now: () => 0, spawnProcess: vi.fn() });
+
+      // Should not throw
+      executor.killAll();
+    });
+  });
+});
