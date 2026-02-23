@@ -416,7 +416,7 @@ describe('integration', () => {
     const mc = makeMockChild();
     mockChildren.push(mc);
 
-    const { orchestrator, frontmatterStore } = wireUp({
+    const { orchestrator, frontmatterStore, execGit } = wireUp({
       discoveryJson: makeDiscoveryJson([{
         id: 'STAGE-001-001-001',
         ticket: 'TICKET-001-001',
@@ -441,6 +441,10 @@ describe('integration', () => {
     // Verify: lock released
     const entryAfter = frontmatterStore.getEntry(stageFile);
     expect(entryAfter?.data.session_active).toBe(false);
+
+    // Verify: worktree removed during cleanup
+    const removeCalls = execGit.calls.filter((c) => c.args[0] === 'worktree' && c.args[1] === 'remove');
+    expect(removeCalls.length).toBe(1);
 
     // Verify: crash logged (check stderr output)
     const crashLog = stderrOutput.find((line) => line.includes('Session crashed'));
@@ -497,6 +501,10 @@ describe('integration', () => {
     const entry2 = frontmatterStore.getEntry(stageFile2);
     expect(entry1?.data.session_active).toBe(false);
     expect(entry2?.data.session_active).toBe(false);
+
+    // Stage 3 was not processed (max parallel = 2)
+    const entry3 = frontmatterStore.getEntry(stageFile3);
+    expect(entry3?.data.session_active).toBe(false);
   });
 
   // -------- Test 5: Isolation strategy validation fails --------
@@ -585,8 +593,10 @@ describe('integration', () => {
 
     await orchestrator.start();
 
-    // Verify: lock was acquired then released
-    expect(fmStore.readFrontmatter).toHaveBeenCalled();
+    // Verify: readFrontmatter was called with the specific stage file path
+    expect(fmStore.readFrontmatter).toHaveBeenCalledWith(stageFile);
+    // Verify: writeFrontmatter called at least 2 times (acquire lock + release lock)
+    expect(fmStore.writeFrontmatter.mock.calls.length).toBeGreaterThanOrEqual(2);
     const entryAfter = frontmatterStore.getEntry(stageFile);
     expect(entryAfter?.data.session_active).toBe(false);
 
