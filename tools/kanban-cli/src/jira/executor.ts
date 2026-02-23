@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import path from 'node:path';
-import type { ZodSchema } from 'zod';
+import type { ZodType, ZodTypeDef } from 'zod';
 import type { JiraConfig } from '../types/pipeline.js';
 import type {
   JiraExecutor,
@@ -79,7 +79,7 @@ function resolveScriptPath(scriptPath: string, repoRoot: string): string {
 function executeScript<T>(
   scriptPath: string,
   input: unknown,
-  outputSchema: ZodSchema<T>,
+  outputSchema: ZodType<T, ZodTypeDef, unknown>,
   repoRoot: string,
   timeoutMs: number = DEFAULT_TIMEOUT_MS,
 ): Promise<T> {
@@ -218,7 +218,7 @@ export function createJiraExecutor(
   return {
     async getTicket(key: string): Promise<JiraTicketData> {
       const script = requireReadScript();
-      return executeScript(
+      return executeScript<JiraTicketData>(
         script,
         { operation: 'get-ticket', key },
         jiraTicketDataSchema,

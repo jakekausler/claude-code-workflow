@@ -47,6 +47,15 @@ export const jiraTicketDataSchema = z.object({
     body: z.string(),
     created: z.string(),
   })),
+  links: z.array(z.object({
+    type: z.enum(['confluence', 'jira_issue', 'attachment', 'external']),
+    url: z.string(),
+    title: z.string(),
+    key: z.string().optional(),
+    relationship: z.string().optional(),
+    filename: z.string().optional(),
+    mime_type: z.string().optional(),
+  })).optional().default([]),
 });
 
 export const jiraSearchResultSchema = z.object({

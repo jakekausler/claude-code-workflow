@@ -41,6 +41,7 @@ function createMockExecutor(overrides: Partial<JiraExecutor> = {}): JiraExecutor
       assignee: null,
       labels: [],
       comments: [],
+      links: [],
     }),
     searchTickets: async () => ({ tickets: [] }),
     transitionTicket: async () => ({
@@ -68,6 +69,7 @@ function createTicketData(overrides: Partial<JiraTicketData> = {}): JiraTicketDa
     assignee: null,
     labels: [],
     comments: [],
+    links: [],
     ...overrides,
   };
 }
