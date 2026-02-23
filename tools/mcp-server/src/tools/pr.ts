@@ -6,8 +6,7 @@ import type { MockState } from '../state.js';
 
 export interface PrToolDeps {
   mockState: MockState | null;
-  execFn?: (command: string, args: string[]) => Promise<string>; // for real mode gh/glab calls
-  platform?: 'github' | 'gitlab'; // defaults to 'github'
+  // Real mode deps (execFn, platform) will be added when wiring real mode
 }
 
 /** Extract PR/MR number from a GitHub or GitLab URL. */
@@ -87,6 +86,7 @@ export async function handlePrGetComments(
   deps: PrToolDeps,
 ): Promise<ToolResult> {
   if (isMockMode() && deps.mockState) {
+    // Check existence separately since getPrComments returns [] for missing PRs
     const pr = deps.mockState.getPr(args.number);
     if (!pr) return errorResult(`PR not found: #${args.number}`);
     const comments = deps.mockState.getPrComments(args.number);
@@ -102,7 +102,7 @@ export async function handlePrAddComment(
   if (isMockMode() && deps.mockState) {
     const comment = deps.mockState.addPrComment(args.number, { body: args.body });
     if (!comment) return errorResult(`PR not found: #${args.number}`);
-    return successResult({ id: comment.id });
+    return successResult(comment);
   }
   return errorResult('Real PR integration not yet configured');
 }

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { MockState, type MockSeedData } from '../src/state.js';
 import {
   handlePrCreate,
@@ -237,7 +237,7 @@ describe('PR tools', () => {
   });
 
   describe('handlePrAddComment', () => {
-    it('adds a comment and returns its id', async () => {
+    it('adds a comment and returns the full comment object', async () => {
       const { number } = parseResult(
         await handlePrCreate({ branch: 'feat/f', title: 'Add comment test', body: 'body' }, deps),
       );
@@ -247,6 +247,8 @@ describe('PR tools', () => {
       const data = parseResult(result);
       expect(data.id).toBeDefined();
       expect(typeof data.id).toBe('string');
+      expect(data.body).toBe('Test comment');
+      expect(data.createdAt).toBeDefined();
     });
 
     it('persists comment on the PR', async () => {
@@ -373,6 +375,29 @@ describe('PR tools', () => {
       expect(pr.draft).toBe(false);
     });
 
+    it('succeeds idempotently on a non-draft PR', async () => {
+      const { number } = parseResult(
+        await handlePrCreate(
+          { branch: 'feat/m', title: 'Non-draft PR', body: 'body', draft: false },
+          deps,
+        ),
+      );
+
+      // Verify it starts as non-draft
+      let pr = parseResult(await handlePrGet({ number }, deps));
+      expect(pr.draft).toBe(false);
+
+      // markReady should succeed even though it's already non-draft
+      const result = await handlePrMarkReady({ number }, deps);
+      expect(result.isError).toBeUndefined();
+      const data = parseResult(result);
+      expect(data.success).toBe(true);
+
+      // Still non-draft
+      pr = parseResult(await handlePrGet({ number }, deps));
+      expect(pr.draft).toBe(false);
+    });
+
     it('returns error for nonexistent PR', async () => {
       const result = await handlePrMarkReady({ number: 99999 }, deps);
       expect(result.isError).toBe(true);
@@ -408,7 +433,9 @@ describe('PR tools', () => {
   describe('registerPrTools', () => {
     it('registers all 8 tools on the server without error', () => {
       const server = new McpServer({ name: 'test-server', version: '0.0.1' });
-      expect(() => registerPrTools(server, deps)).not.toThrow();
+      const spy = vi.spyOn(server, 'tool');
+      registerPrTools(server, deps);
+      expect(spy).toHaveBeenCalledTimes(8);
     });
   });
 });
