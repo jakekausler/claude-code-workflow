@@ -34,7 +34,12 @@ const program = new Command()
         mock: options.mock,
       });
 
-      // 2. Create all dependencies
+      // 2. Propagate mock flag to child processes (e.g., MCP server)
+      if (config.mock) {
+        process.env.KANBAN_MOCK = 'true';
+      }
+
+      // 3. Create all dependencies
       const logger = createLogger(config.verbose);
       const discovery = createDiscovery();
       const locker = createLocker();
@@ -43,7 +48,7 @@ const program = new Command()
       let sessionExecutor;
 
       if (config.mock) {
-        logger.info('Running in mock mode (auto-advancing stages)');
+        logger.info('Mock mode enabled (KANBAN_MOCK=true)');
         worktreeManager = createMockWorktreeManager();
         sessionExecutor = createMockSessionExecutor({
           readFrontmatter: defaultReadFrontmatter,
@@ -55,7 +60,7 @@ const program = new Command()
         sessionExecutor = createSessionExecutor();
       }
 
-      // 3. Create orchestrator
+      // 4. Create orchestrator
       const orchestrator = createOrchestrator(config, {
         discovery,
         locker,
@@ -64,7 +69,7 @@ const program = new Command()
         logger,
       });
 
-      // 4. Setup shutdown handlers
+      // 5. Setup shutdown handlers
       setupShutdownHandlers({
         orchestrator,
         worktreeManager,
@@ -73,7 +78,7 @@ const program = new Command()
         logger,
       });
 
-      // 5. Start orchestrator
+      // 6. Start orchestrator
       logger.info('Starting orchestrator', {
         repo: config.repoPath,
         maxParallel: config.maxParallel,
