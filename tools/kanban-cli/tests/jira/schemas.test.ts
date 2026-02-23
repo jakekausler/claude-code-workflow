@@ -122,7 +122,7 @@ describe('jiraTicketDataSchema', () => {
       const input = {
         ...baseTicket,
         links: [{
-          type: 'confluence' as const,
+          type: 'confluence',
           url: 'https://wiki.example.com/page',
           title: 'Minimal link',
         }],
