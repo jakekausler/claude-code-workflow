@@ -435,7 +435,7 @@ process.stdout.write('# Confluence Page Content\\n\\nThis is the fetched content
     expect(fs.existsSync(expectedEnrichmentPath)).toBe(false);
   });
 
-  // ─── Test 9: Enrichment file format matches expected structure ─────────
+  // ─── Test 8: Enrichment file format matches expected structure ─────────
 
   it('produces correctly formatted enrichment file', async () => {
     const ticketPath = path.join(repoDir, 'epics', 'EPIC-001', 'TICKET-001-001.md');
@@ -548,7 +548,7 @@ process.stdout.write('# Confluence Page Content\\n\\nThis is the fetched content
     fetchSpy.mockRestore();
   }, 15000);
 
-  // ─── Test 10: Multiple links → all fetched sequentially ────────────────
+  // ─── Test 9: Multiple links → all fetched sequentially ────────────────
 
   it('fetches multiple links sequentially and records results', async () => {
     const ticketPath = path.join(repoDir, 'epics', 'EPIC-001', 'TICKET-001-001.md');

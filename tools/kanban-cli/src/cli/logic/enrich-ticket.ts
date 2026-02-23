@@ -131,6 +131,9 @@ function fetchConfluenceContent(scriptPath: string, url: string, timeoutMs = 300
 /**
  * Fetch content via HTTP GET. Returns response body as text.
  * URLs are expected to come from parsed ticket frontmatter (user-controlled).
+ *
+ * Note: Jira attachment URLs typically require authentication.
+ * Unauthenticated fetches will fail gracefully (error recorded in enrichment file).
  */
 async function httpGet(url: string, timeoutMs = 30000): Promise<string> {
   const controller = new AbortController();
