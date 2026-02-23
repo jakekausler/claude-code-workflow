@@ -27,11 +27,32 @@ export interface PRStatus {
 }
 
 /**
- * Adapter for querying code host (GitHub/GitLab) PR/MR status.
+ * Adapter for querying and managing code host (GitHub/GitLab) PR/MR status.
  * Implementations can shell out to `gh`/`glab` CLI or call APIs directly.
  */
 export interface CodeHostAdapter {
+  /**
+   * Query the status of a PR/MR given its URL.
+   */
   getPRStatus(prUrl: string): PRStatus;
+
+  /**
+   * Retarget a PR/MR to a different base branch.
+   * Throws on failure — callers need to know if the mutation failed.
+   */
+  editPRBase(prNumber: number, newBase: string): void;
+
+  /**
+   * Promote a draft PR/MR to ready for review.
+   * Throws on failure — callers need to know if the mutation failed.
+   */
+  markPRReady(prNumber: number): void;
+
+  /**
+   * Get the commit SHA at the head of a branch.
+   * Returns empty string on failure (safe default).
+   */
+  getBranchHead(branch: string): string;
 }
 
 /**
