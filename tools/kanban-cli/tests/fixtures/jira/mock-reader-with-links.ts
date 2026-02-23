@@ -1,6 +1,6 @@
 /**
  * Mock Jira reading script for tests.
- * Reads JSON from stdin, returns appropriate mock responses based on operation.
+ * Same as mock-reader but includes links in get-ticket responses.
  */
 
 function readStdin(): Promise<string> {
@@ -33,7 +33,32 @@ async function main() {
             created: '2024-01-15T10:00:00Z',
           },
         ],
-        links: [],
+        links: [
+          {
+            type: 'confluence',
+            url: 'https://company.atlassian.net/wiki/spaces/TEAM/pages/123',
+            title: 'Design Doc',
+          },
+          {
+            type: 'jira_issue',
+            url: 'https://company.atlassian.net/browse/PROJ-999',
+            key: 'PROJ-999',
+            title: 'Related Issue',
+            relationship: 'blocks',
+          },
+          {
+            type: 'attachment',
+            url: 'https://company.atlassian.net/secure/attachment/456/spec.pdf',
+            title: 'Spec PDF',
+            filename: 'spec.pdf',
+            mime_type: 'application/pdf',
+          },
+          {
+            type: 'external',
+            url: 'https://docs.google.com/document/d/abc123',
+            title: 'External Doc',
+          },
+        ],
       }));
       break;
 
