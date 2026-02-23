@@ -53,8 +53,8 @@ Update `phase-build` to create worktrees based on parent MR branches. Update `ph
 ### What Ships
 
 1. **Code host adapter additions**:
-   - `editPrBase(prNumber, newBase)` — retarget MR to different base branch
-   - `markPrReady(prNumber)` — promote draft MR to ready
+   - `editPRBase(prNumber, newBase)` — retarget MR to different base branch
+   - `markPRReady(prNumber)` — promote draft MR to ready
    - `getBranchHead(branch)` — get commit SHA of branch head
    - Implementations for both GitHub and GitLab adapters
 
@@ -111,6 +111,33 @@ The phase skills are NOT in the kanban-cli tool — they are Claude Code skills.
 
 - `tools/kanban-cli/src/db/repositories/stage-repository.ts` — has `updatePendingMergeParents()`, `upsert()` with `is_draft`, `mr_target_branch`
 - `tools/kanban-cli/src/types/work-items.ts` — `PendingMergeParent` type, `Stage` interface
+
+---
+
+## Implementation Status
+
+**Design doc:** `docs/plans/2026-02-22-stage-5.5b-skill-updates-design.md` ✅
+**Implementation plan:** `docs/plans/2026-02-22-stage-5.5b-implementation-plan.md` ✅
+
+### Completed Deliverables
+
+1. **CodeHostAdapter interface** — Extended with `editPRBase`, `markPRReady`, `getBranchHead` methods
+2. **GitHub adapter** — All three methods implemented with tests (19 tests)
+3. **GitLab adapter** — All three methods implemented with tests (19 tests)
+4. **`resolve-merge-conflicts` skill** — New skill for automated conflict resolution with heuristic priority table
+5. **`phase-build` skill** — Added parent branch merge step (fetch, merge, resolve conflicts, verify)
+6. **`phase-finalize` skill** — Added draft MR creation, target branch logic, Dependencies section in MR body
+
+### Open Questions Resolved
+
+1. **Git fetch in phase-build** → phase-build fetches specific parent branch per merge
+2. **Merge conflict handling** → Best-effort automated resolution via `resolve-merge-conflicts` skill, escalate only for genuinely ambiguous conflicts
+3. **Post-merge verification** → Full `npm run verify` after all parents merged
+
+### Test Suite
+
+- 703 tests across 49 files, all passing
+- 16 new adapter tests added (8 GitHub, 8 GitLab)
 
 ---
 
