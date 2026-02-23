@@ -26,7 +26,7 @@ export interface SessionResult {
  */
 export interface ActiveSession {
   pid: number;
-  kill(signal?: string): void;
+  kill(signal?: NodeJS.Signals): boolean;
 }
 
 /**
@@ -56,7 +56,7 @@ export interface ChildProcessLike {
   stderr: { on(event: 'data', listener: (chunk: Buffer) => void): void };
   on(event: 'close', listener: (code: number | null) => void): void;
   on(event: 'error', listener: (err: Error) => void): void;
-  kill(signal?: string): boolean;
+  kill(signal?: NodeJS.Signals): boolean;
 }
 
 /**
@@ -73,10 +73,12 @@ export interface SessionDeps {
 export interface SessionExecutor {
   spawn(options: SpawnOptions, sessionLogger: SessionLoggerLike): Promise<SessionResult>;
   getActiveSessions(): ActiveSession[];
-  killAll(signal?: string): void;
+  killAll(signal?: NodeJS.Signals): void;
 }
 
 function defaultSpawnProcess(command: string, args: string[], options: SpawnProcessOptions): ChildProcessLike {
+  // Double cast needed: node ChildProcess uses complex overloaded signatures for
+  // on()/kill()/stdin that are structurally incompatible with our minimal interface.
   return nodeSpawn(command, args, options) as unknown as ChildProcessLike;
 }
 
@@ -134,9 +136,8 @@ export function createSessionExecutor(deps: Partial<SessionDeps> = {}): SessionE
           stdio: ['pipe', 'pipe', 'pipe'],
         });
 
-        child.stdin.write(prompt);
-        child.stdin.end();
-
+        // Register all event handlers BEFORE writing to stdin so that
+        // errors during spawn are captured even if they fire synchronously.
         child.stdout.on('data', (chunk: Buffer) => {
           sessionLogger.write(chunk.toString());
         });
@@ -144,17 +145,6 @@ export function createSessionExecutor(deps: Partial<SessionDeps> = {}): SessionE
         child.stderr.on('data', (chunk: Buffer) => {
           sessionLogger.write(chunk.toString());
         });
-
-        // Track as active session if we have a pid
-        if (child.pid !== undefined) {
-          const session: ActiveSession = {
-            pid: child.pid,
-            kill(signal?: string): void {
-              child.kill(signal);
-            },
-          };
-          activeSessions.set(child.pid, session);
-        }
 
         let settled = false;
 
@@ -183,6 +173,24 @@ export function createSessionExecutor(deps: Partial<SessionDeps> = {}): SessionE
 
           reject(err);
         });
+
+        // Track as active session if we have a pid
+        if (child.pid !== undefined) {
+          const session: ActiveSession = {
+            pid: child.pid,
+            kill(signal?: NodeJS.Signals): boolean {
+              return child.kill(signal);
+            },
+          };
+          activeSessions.set(child.pid, session);
+        }
+
+        // Only write to stdin if the process spawned successfully (has a pid).
+        // If pid is undefined, the spawn failed and stdin operations should be skipped.
+        if (child.pid !== undefined) {
+          child.stdin.write(prompt);
+          child.stdin.end();
+        }
       });
     },
 
@@ -190,9 +198,12 @@ export function createSessionExecutor(deps: Partial<SessionDeps> = {}): SessionE
       return Array.from(activeSessions.values());
     },
 
-    killAll(signal?: string): void {
+    killAll(signal?: NodeJS.Signals): void {
       for (const session of activeSessions.values()) {
-        session.kill(signal ?? 'SIGTERM');
+        const killed = session.kill(signal ?? 'SIGTERM');
+        if (!killed) {
+          console.error(`Failed to send ${signal ?? 'SIGTERM'} to session pid=${session.pid}`);
+        }
       }
     },
   };

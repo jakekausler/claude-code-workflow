@@ -410,6 +410,86 @@ describe('createSessionExecutor', () => {
 
       expect(executor.getActiveSessions()).toHaveLength(0);
     });
+
+    it('does not track session when pid is undefined', async () => {
+      const mock = makeMockChild();
+      // Override pid to undefined to simulate a failed spawn
+      (mock.child as { pid: number | undefined }).pid = undefined;
+      const deps = makeDeps(mock);
+      const executor = createSessionExecutor(deps);
+      const logger = makeLogger();
+      const options = makeSpawnOptions();
+
+      const promise = executor.spawn(options, logger);
+
+      // Session should not appear in active list
+      expect(executor.getActiveSessions()).toHaveLength(0);
+
+      // stdin should not have been written to
+      expect(mock.stdinWrite).not.toHaveBeenCalled();
+      expect(mock.stdinEnd).not.toHaveBeenCalled();
+
+      mock.emitClose(1);
+      await promise;
+    });
+
+    it('forwards multiple stdout chunks to logger', async () => {
+      const mock = makeMockChild();
+      const deps = makeDeps(mock);
+      const executor = createSessionExecutor(deps);
+      const logger = makeLogger();
+      const options = makeSpawnOptions();
+
+      const promise = executor.spawn(options, logger);
+      mock.emitStdout('chunk-1');
+      mock.emitStdout('chunk-2');
+      mock.emitStdout('chunk-3');
+      mock.emitClose(0);
+      await promise;
+
+      expect(logger.write).toHaveBeenCalledWith('chunk-1');
+      expect(logger.write).toHaveBeenCalledWith('chunk-2');
+      expect(logger.write).toHaveBeenCalledWith('chunk-3');
+      expect(logger.write).toHaveBeenCalledTimes(3);
+    });
+
+    it('forwards multiple stderr chunks to logger', async () => {
+      const mock = makeMockChild();
+      const deps = makeDeps(mock);
+      const executor = createSessionExecutor(deps);
+      const logger = makeLogger();
+      const options = makeSpawnOptions();
+
+      const promise = executor.spawn(options, logger);
+      mock.emitStderr('err-1');
+      mock.emitStderr('err-2');
+      mock.emitClose(0);
+      await promise;
+
+      expect(logger.write).toHaveBeenCalledWith('err-1');
+      expect(logger.write).toHaveBeenCalledWith('err-2');
+      expect(logger.write).toHaveBeenCalledTimes(2);
+    });
+
+    it('forwards interleaved stdout and stderr chunks to logger', async () => {
+      const mock = makeMockChild();
+      const deps = makeDeps(mock);
+      const executor = createSessionExecutor(deps);
+      const logger = makeLogger();
+      const options = makeSpawnOptions();
+
+      const promise = executor.spawn(options, logger);
+      mock.emitStdout('out-1');
+      mock.emitStderr('err-1');
+      mock.emitStdout('out-2');
+      mock.emitClose(0);
+      await promise;
+
+      expect(logger.write).toHaveBeenCalledTimes(3);
+      expect(logger.write).toHaveBeenNthCalledWith(1, 'out-1');
+      expect(logger.write).toHaveBeenNthCalledWith(2, 'err-1');
+      expect(logger.write).toHaveBeenNthCalledWith(3, 'out-2');
+    });
   });
 
   describe('getActiveSessions', () => {
