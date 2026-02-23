@@ -127,6 +127,164 @@ function adfToText(adf: any): string | null {
   return result.trim() || null;
 }
 
+// ─── Auth helper for direct API calls ─────────────────────────────────────────
+
+interface JiraCredentials {
+  email: string;
+  token: string;
+  baseUrl: string;
+}
+
+/**
+ * Load Jira credentials by dynamically importing the atlassian-tools auth helper.
+ * Falls back to environment variables if the import fails.
+ * Returns null if credentials are unavailable (caller should degrade gracefully).
+ */
+async function getCredentials(): Promise<JiraCredentials | null> {
+  try {
+    const authModule = await import(`${AT_PATH}/lib/auth-helper.js`);
+    return authModule.getCredentials();
+  } catch {
+    const email = process.env.JIRA_EMAIL;
+    const token = process.env.JIRA_TOKEN;
+    const baseUrl = process.env.JIRA_BASE_URL;
+
+    if (email && token && baseUrl) {
+      return { email, token, baseUrl };
+    }
+
+    return null;
+  }
+}
+
+function encodeAuth(email: string, token: string): string {
+  return Buffer.from(`${email}:${token}`).toString('base64');
+}
+
+// ─── Link types ──────────────────────────────────────────────────────────────
+
+interface JiraLink {
+  type: 'confluence' | 'jira_issue' | 'attachment' | 'external';
+  url: string;
+  title: string;
+  key?: string;
+  relationship?: string;
+  filename?: string;
+  mime_type?: string;
+}
+
+/**
+ * Determine whether a URL points to a Confluence wiki page.
+ */
+function isConfluenceUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return parsed.hostname.endsWith('.atlassian.net') && parsed.pathname.includes('/wiki/');
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Extract links from the Jira issue fields and remote links API.
+ *
+ * Collects from three sources:
+ *   1. fields.issuelinks[] — inward/outward Jira issue relationships
+ *   2. fields.attachment[] — file attachments
+ *   3. /rest/api/3/issue/{key}/remotelink — Confluence pages and external URLs
+ *
+ * If any source is missing or fails, the other sources still contribute.
+ * The function never throws; on total failure it returns [].
+ */
+async function extractLinks(key: string, fields: any): Promise<JiraLink[]> {
+  const links: JiraLink[] = [];
+
+  try {
+    // 1. Issue links (inward/outward Jira issues)
+    const issueLinks: any[] = fields.issuelinks ?? [];
+    for (const link of issueLinks) {
+      try {
+        if (link.outwardIssue) {
+          const issue = link.outwardIssue;
+          links.push({
+            type: 'jira_issue',
+            url: issue.self ?? '',
+            title: issue.fields?.summary ?? issue.key ?? '',
+            key: issue.key,
+            relationship: link.type?.outward ?? link.type?.name ?? '',
+          });
+        } else if (link.inwardIssue) {
+          const issue = link.inwardIssue;
+          links.push({
+            type: 'jira_issue',
+            url: issue.self ?? '',
+            title: issue.fields?.summary ?? issue.key ?? '',
+            key: issue.key,
+            relationship: link.type?.inward ?? link.type?.name ?? '',
+          });
+        }
+      } catch {
+        // Skip malformed individual issue link
+      }
+    }
+
+    // 2. Attachments
+    const attachments: any[] = fields.attachment ?? [];
+    for (const att of attachments) {
+      try {
+        links.push({
+          type: 'attachment',
+          url: att.content ?? '',
+          title: att.filename ?? `attachment-${att.id ?? 'unknown'}`,
+          filename: att.filename,
+          mime_type: att.mimeType,
+        });
+      } catch {
+        // Skip malformed individual attachment
+      }
+    }
+
+    // 3. Remote links (Confluence pages, external URLs)
+    try {
+      const creds = await getCredentials();
+      if (creds) {
+        const url = `${creds.baseUrl}/rest/api/3/issue/${encodeURIComponent(key)}/remotelink`;
+        const response = await fetch(url, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Basic ${encodeAuth(creds.email, creds.token)}`,
+            'Accept': 'application/json',
+          },
+        });
+
+        if (response.ok) {
+          const remoteLinks: any[] = await response.json();
+          for (const rl of remoteLinks) {
+            try {
+              const linkUrl = rl.object?.url ?? '';
+              const linkTitle = rl.object?.title ?? '';
+              links.push({
+                type: isConfluenceUrl(linkUrl) ? 'confluence' : 'external',
+                url: linkUrl,
+                title: linkTitle,
+              });
+            } catch {
+              // Skip malformed individual remote link
+            }
+          }
+        }
+        // If response is not ok, silently skip remote links
+      }
+    } catch {
+      // Remote links API call failed; degrade gracefully
+    }
+  } catch {
+    // Total failure in link extraction; return whatever we have so far
+  }
+
+  return links;
+}
+
 // ─── Operations ───────────────────────────────────────────────────────────────
 
 async function getTicket(key: string): Promise<void> {
@@ -178,6 +336,10 @@ async function getTicket(key: string): Promise<void> {
   // to fetch comments when needed.
   const comments: Array<{ author: string; body: string; created: string }> = [];
 
+  // Extract links from issue links, attachments, and remote links.
+  // This never throws; on failure it returns [].
+  const links = await extractLinks(key, fields);
+
   // Reshape to our contract
   const output = {
     key: rawTicket.key,
@@ -189,6 +351,7 @@ async function getTicket(key: string): Promise<void> {
     assignee: fields.assignee?.displayName ?? null,
     labels: fields.labels ?? [],
     comments,
+    links,
   };
 
   console.log(JSON.stringify(output));
