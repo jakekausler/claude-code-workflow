@@ -80,5 +80,26 @@ export function createGitLabAdapter(options: GitLabAdapterOptions = {}): CodeHos
         return { merged: false, hasUnresolvedComments: false, state: 'error' };
       }
     },
+
+    editPRBase(prNumber: number, newBase: string): void {
+      exec('glab', ['mr', 'update', String(prNumber), '--target-branch', newBase]);
+    },
+
+    markPRReady(prNumber: number): void {
+      exec('glab', ['mr', 'update', String(prNumber), '--ready']);
+    },
+
+    getBranchHead(branch: string): string {
+      try {
+        const encoded = encodeURIComponent(branch);
+        const json = exec('glab', [
+          'api', `projects/:id/repository/branches/${encoded}`,
+        ]);
+        const data = JSON.parse(json) as { commit: { id: string } };
+        return data.commit.id;
+      } catch {
+        return '';
+      }
+    },
   };
 }
