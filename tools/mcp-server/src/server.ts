@@ -27,9 +27,12 @@ export function createKanbanMcpServer(): McpServer {
       const raw = readFileSync(fixturePath, 'utf-8');
       const seedData = JSON.parse(raw) as MockSeedData;
       mockState = new MockState(seedData);
-    } catch {
-      // If fixtures not found, create empty state
-      mockState = new MockState();
+    } catch (err: unknown) {
+      if (err instanceof Error && 'code' in err && (err as NodeJS.ErrnoException).code === 'ENOENT') {
+        mockState = new MockState();
+      } else {
+        throw err;
+      }
     }
   }
 
@@ -41,7 +44,7 @@ export function createKanbanMcpServer(): McpServer {
   registerSlackTools(server, {});
 
   // Mock admin tools only in mock mode
-  if (isMockMode() && mockState) {
+  if (mockState) {
     registerMockAdminTools(server, { mockState });
   }
 

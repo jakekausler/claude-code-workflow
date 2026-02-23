@@ -4,6 +4,9 @@
   "description": "MCP server for kanban workflow tools",
   "type": "module",
   "main": "dist/index.js",
+  "bin": {
+    "kanban-mcp": "dist/index.js"
+  },
   "scripts": {
     "build": "tsc",
     "dev": "tsx src/index.ts",

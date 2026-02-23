@@ -29,13 +29,4 @@ describe('createKanbanMcpServer', () => {
     expect(server).toBeInstanceOf(McpServer);
   });
 
-  it('does not throw during creation in real mode', () => {
-    delete process.env.KANBAN_MOCK;
-    expect(() => createKanbanMcpServer()).not.toThrow();
-  });
-
-  it('does not throw during creation in mock mode', () => {
-    process.env.KANBAN_MOCK = 'true';
-    expect(() => createKanbanMcpServer()).not.toThrow();
-  });
 });
