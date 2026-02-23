@@ -82,7 +82,11 @@ export function createLocker(deps: Partial<LockerDeps> = {}): Locker {
         throw new Error(`Missing status field in frontmatter of ${stageFilePath}`);
       }
 
-      return data.status as string;
+      if (typeof data.status !== 'string') {
+        throw new Error(`Invalid status type in frontmatter of ${stageFilePath}: expected string, got ${typeof data.status}`);
+      }
+
+      return data.status;
     },
   };
 }

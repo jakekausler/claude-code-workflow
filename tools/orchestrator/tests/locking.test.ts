@@ -141,6 +141,29 @@ describe('createLocker', () => {
         'Missing status field in frontmatter of /path/to/stage.md',
       );
     });
+
+    it('throws when status is not a string', async () => {
+      const deps = makeDeps({
+        data: { id: 'STAGE-001', status: 42, session_active: false },
+        content: '',
+      });
+      const locker = createLocker(deps);
+
+      await expect(locker.readStatus('/path/to/stage.md')).rejects.toThrow(
+        'Invalid status type in frontmatter of /path/to/stage.md: expected string, got number',
+      );
+    });
+  });
+
+  describe('error propagation', () => {
+    it('propagates read errors', async () => {
+      const deps = {
+        readFrontmatter: vi.fn(async () => { throw new Error('ENOENT'); }),
+        writeFrontmatter: vi.fn(async () => {}),
+      };
+      const locker = createLocker(deps);
+      await expect(locker.acquireLock('/missing.md')).rejects.toThrow('ENOENT');
+    });
   });
 
   describe('data preservation', () => {
