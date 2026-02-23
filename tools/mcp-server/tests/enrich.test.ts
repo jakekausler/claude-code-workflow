@@ -7,10 +7,7 @@ import {
 } from '../src/tools/enrich.js';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import seedData from '../fixtures/mock-data.json';
-
-function parseResult(result: { content: Array<{ type: string; text: string }>; isError?: boolean }) {
-  return JSON.parse(result.content[0].text);
-}
+import { parseResult } from './helpers.js';
 
 describe('Enrich tools', () => {
   let state: MockState;
@@ -37,7 +34,7 @@ describe('Enrich tools', () => {
       const result = await handleEnrichTicket({ ticketPath: '/tmp/tickets/PROJ-101' }, deps);
       expect(result.isError).toBeUndefined();
       const data = parseResult(result);
-      expect(data.ticketId).toBe('MOCK');
+      expect(data.ticketId).toBe('/tmp/tickets/PROJ-101');
       expect(data.enrichmentFilePath).toBeNull();
       expect(data.freshJiraData).toBe(false);
       expect(data.linkResults).toEqual([]);

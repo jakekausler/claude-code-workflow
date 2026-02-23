@@ -6,7 +6,6 @@ import type { MockState } from '../state.js';
 
 export interface ConfluenceToolDeps {
   mockState: MockState | null;
-  // Real mode will use confluence read script
 }
 
 // --- Exported handler functions (testable without MCP server) ---

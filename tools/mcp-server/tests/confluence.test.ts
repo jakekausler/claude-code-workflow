@@ -7,10 +7,7 @@ import {
 } from '../src/tools/confluence.js';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import seedData from '../fixtures/mock-data.json';
-
-function parseResult(result: { content: Array<{ type: string; text: string }>; isError?: boolean }) {
-  return JSON.parse(result.content[0].text);
-}
+import { parseResult } from './helpers.js';
 
 describe('Confluence tools', () => {
   let state: MockState;

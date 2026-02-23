@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { MockState, type MockSeedData } from '../src/state.js';
 import {
   handleJiraGetTicket,
@@ -12,10 +12,7 @@ import {
 } from '../src/tools/jira.js';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import seedData from '../fixtures/mock-data.json';
-
-function parseResult(result: { content: Array<{ type: string; text: string }>; isError?: boolean }) {
-  return JSON.parse(result.content[0].text);
-}
+import { parseResult } from './helpers.js';
 
 describe('Jira tools', () => {
   let state: MockState;
@@ -277,7 +274,9 @@ describe('Jira tools', () => {
   describe('registerJiraTools', () => {
     it('registers all 6 tools on the server without error', () => {
       const server = new McpServer({ name: 'test-server', version: '0.0.1' });
-      expect(() => registerJiraTools(server, deps)).not.toThrow();
+      const spy = vi.spyOn(server, 'tool');
+      registerJiraTools(server, deps);
+      expect(spy).toHaveBeenCalledTimes(6);
     });
   });
 });

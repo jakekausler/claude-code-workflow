@@ -6,7 +6,6 @@ import type { MockState } from '../state.js';
 
 export interface EnrichToolDeps {
   mockState: MockState | null;
-  // Real mode will use enrichTicket() from kanban-cli
 }
 
 // --- Exported handler functions (testable without MCP server) ---
@@ -17,7 +16,7 @@ export async function handleEnrichTicket(
 ): Promise<ToolResult> {
   if (isMockMode() && deps.mockState) {
     return successResult({
-      ticketId: 'MOCK',
+      ticketId: args.ticketPath,
       enrichmentFilePath: null,
       freshJiraData: false,
       linkResults: [],
