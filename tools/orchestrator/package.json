@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "commander": "^12.1.0",
+    "gray-matter": "^4.0.3",
     "kanban-cli": "file:../kanban-cli"
   },
   "devDependencies": {
