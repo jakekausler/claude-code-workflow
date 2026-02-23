@@ -111,4 +111,92 @@ describe('createGitLabAdapter', () => {
     const status = adapter.getPRStatus('https://github.com/org/repo/pull/1');
     expect(status.state).toBe('unknown');
   });
+
+  describe('editPRBase', () => {
+    it('passes correct args to glab CLI', () => {
+      let capturedCmd = '';
+      let capturedArgs: string[] = [];
+      const adapter = createGitLabAdapter({
+        execFn: (cmd, args) => {
+          capturedCmd = cmd;
+          capturedArgs = args;
+          return '';
+        },
+      });
+      adapter.editPRBase(42, 'main');
+      expect(capturedCmd).toBe('glab');
+      expect(capturedArgs).toEqual([
+        'mr', 'update', '42',
+        '--target-branch', 'main',
+      ]);
+    });
+
+    it('throws when CLI fails', () => {
+      const adapter = createGitLabAdapter({
+        execFn: () => { throw new Error('glab not found'); },
+      });
+      expect(() => adapter.editPRBase(42, 'main')).toThrow('glab not found');
+    });
+  });
+
+  describe('markPRReady', () => {
+    it('passes correct args to glab CLI', () => {
+      let capturedArgs: string[] = [];
+      const adapter = createGitLabAdapter({
+        execFn: (_cmd, args) => {
+          capturedArgs = args;
+          return '';
+        },
+      });
+      adapter.markPRReady(42);
+      expect(capturedArgs).toEqual(['mr', 'update', '42', '--ready']);
+    });
+
+    it('throws when CLI fails', () => {
+      const adapter = createGitLabAdapter({
+        execFn: () => { throw new Error('glab not found'); },
+      });
+      expect(() => adapter.markPRReady(42)).toThrow('glab not found');
+    });
+  });
+
+  describe('getBranchHead', () => {
+    it('extracts SHA from glab api response', () => {
+      const apiResponse = JSON.stringify({
+        commit: { id: 'abc123def456' },
+      });
+      const adapter = createGitLabAdapter({
+        execFn: () => apiResponse,
+      });
+      expect(adapter.getBranchHead('feature/auth')).toBe('abc123def456');
+    });
+
+    it('passes correct args to glab api', () => {
+      let capturedArgs: string[] = [];
+      const adapter = createGitLabAdapter({
+        execFn: (_cmd, args) => {
+          capturedArgs = args;
+          return JSON.stringify({ commit: { id: 'abc123' } });
+        },
+      });
+      adapter.getBranchHead('feature/auth');
+      expect(capturedArgs).toEqual([
+        'api', 'projects/:id/repository/branches/feature%2Fauth',
+      ]);
+    });
+
+    it('returns empty string when CLI fails', () => {
+      const adapter = createGitLabAdapter({
+        execFn: () => { throw new Error('glab not found'); },
+      });
+      expect(adapter.getBranchHead('feature/auth')).toBe('');
+    });
+
+    it('returns empty string for malformed JSON response', () => {
+      const adapter = createGitLabAdapter({
+        execFn: () => 'not valid json',
+      });
+      expect(adapter.getBranchHead('feature/auth')).toBe('');
+    });
+  });
 });
