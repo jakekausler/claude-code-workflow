@@ -53,11 +53,11 @@ export function setupShutdownHandlers(
 
   let shutdownInProgress = false;
 
-  async function performShutdown(): Promise<void> {
+  async function performShutdown(signal: string): Promise<void> {
     if (shutdownInProgress) return;
     shutdownInProgress = true;
 
-    logger.info('Received shutdown signal, draining active sessions...');
+    logger.info('Received shutdown signal, draining active sessions...', { signal });
     await orchestrator.stop();
 
     // Wait for active workers to drain
@@ -111,9 +111,9 @@ export function setupShutdownHandlers(
   }
 
   resolved.onSignal('SIGINT', () => {
-    void performShutdown();
+    void performShutdown('SIGINT');
   });
   resolved.onSignal('SIGTERM', () => {
-    void performShutdown();
+    void performShutdown('SIGTERM');
   });
 }

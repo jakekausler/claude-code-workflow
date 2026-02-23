@@ -4,6 +4,9 @@
   "description": "Stage lifecycle orchestrator for Claude Code kanban workflow",
   "type": "module",
   "main": "dist/index.js",
+  "bin": {
+    "orchestrator": "dist/index.js"
+  },
   "scripts": {
     "build": "tsc",
     "dev": "tsx src/index.ts",

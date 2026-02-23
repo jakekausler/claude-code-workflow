@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { setupShutdownHandlers, type ShutdownDeps, type ShutdownOptions } from '../src/shutdown.js';
 import type { Orchestrator } from '../src/loop.js';
 import type { WorktreeManager } from '../src/worktree.js';
@@ -140,6 +140,10 @@ function makeOptions(ctx: TestContext, overrides: Partial<ShutdownOptions> = {})
 describe('setupShutdownHandlers', () => {
   beforeEach(() => {
     vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('registers handlers for both SIGINT and SIGTERM', () => {

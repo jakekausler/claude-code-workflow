@@ -66,7 +66,6 @@ const program = new Command()
 
       // If start() returns (e.g., --once mode completed), exit normally
       logger.info('Orchestrator finished');
-      process.exit(0);
     } catch (err) {
       console.error('Fatal error:', err instanceof Error ? err.message : String(err));
       process.exit(1);
