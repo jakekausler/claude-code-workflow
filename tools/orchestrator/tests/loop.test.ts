@@ -339,12 +339,11 @@ describe('createOrchestrator', () => {
       const startPromise = orchestrator.start();
 
       await vi.waitFor(() => {
-        expect(sessionExecutor.spawn).toHaveBeenCalledTimes(3);
+        expect(sessionExecutor.spawn).toHaveBeenCalledTimes(2);
       });
 
-      // All 3 stages were iterated, but the orchestrator still has maxParallel=2 slots.
-      // The for-loop doesn't enforce the limit; it's about discovery's max arg.
-      // But we set maxParallel=2 so discover is called with availableSlots=2.
+      // Only 2 of 3 stages should be spawned due to maxParallel=2
+      expect(sessionExecutor.spawn).toHaveBeenCalledTimes(2);
       expect(discovery.discover).toHaveBeenCalledWith('/repo', 2);
 
       d1.resolve({ exitCode: 0, durationMs: 1000 });
@@ -678,7 +677,9 @@ describe('createOrchestrator', () => {
       await orchestrator.start();
 
       expect(sessionExecutor.spawn).not.toHaveBeenCalled();
-      expect(locker.acquireLock).not.toHaveBeenCalled();
+      // Lock is acquired before readStatus, then released when resolver state detected
+      expect(locker.acquireLock).toHaveBeenCalledTimes(1);
+      expect(locker.releaseLock).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -740,6 +741,29 @@ describe('createOrchestrator', () => {
         '/repo/epics/EPIC-001/TICKET-001-001/STAGE-001-001-001.md',
       );
       expect(worktreeManager.create).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('re-entrancy guard', () => {
+    it('throws if start() is called while already running', async () => {
+      const { deps, discovery } = makeMockDeps();
+      discovery.discover.mockResolvedValue(makeDiscoveryResult());
+
+      const config = makeConfig({ once: false, idleSeconds: 0 });
+      const orchestrator = createOrchestrator(config, deps);
+
+      const startPromise = orchestrator.start();
+
+      // Wait for the loop to be running
+      await vi.waitFor(() => {
+        expect(orchestrator.isRunning()).toBe(true);
+      });
+
+      // Calling start() again should throw
+      await expect(orchestrator.start()).rejects.toThrow('Orchestrator already running');
+
+      await orchestrator.stop();
+      await startPromise;
     });
   });
 

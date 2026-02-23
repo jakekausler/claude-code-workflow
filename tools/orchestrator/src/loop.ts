@@ -11,7 +11,7 @@ export interface Orchestrator {
   start(): Promise<void>;
   stop(): Promise<void>;
   isRunning(): boolean;
-  getActiveWorkers(): Map<number, WorkerInfo>;
+  getActiveWorkers(): ReadonlyMap<number, WorkerInfo>;
 }
 
 export interface OrchestratorDeps {
@@ -154,6 +154,7 @@ export function createOrchestrator(config: OrchestratorConfig, deps: Orchestrato
 
   return {
     async start(): Promise<void> {
+      if (running) throw new Error('Orchestrator already running');
       running = true;
       isolationValidated = undefined;
 
@@ -170,17 +171,19 @@ export function createOrchestrator(config: OrchestratorConfig, deps: Orchestrato
 
         for (const stage of result.readyStages) {
           if (!running) break;
+          if (activeWorkers.size >= config.maxParallel) break;
 
           const stageFilePath = resolveStageFilePath(config.repoPath, stage);
+
+          await locker.acquireLock(stageFilePath);
           const statusBefore = await locker.readStatus(stageFilePath);
 
           const skillName = lookupSkillName(config.pipelineConfig, statusBefore);
           if (skillName === null) {
             // Resolver state, skip
+            await locker.releaseLock(stageFilePath);
             continue;
           }
-
-          await locker.acquireLock(stageFilePath);
 
           // Validate isolation strategy once per start() call
           if (isolationValidated === undefined) {
@@ -201,7 +204,6 @@ export function createOrchestrator(config: OrchestratorConfig, deps: Orchestrato
           const sessionLogger = logger.createSessionLogger(stage.id, config.logDir);
 
           const workerInfo: WorkerInfo = {
-            pid: 0, // Will be updated if needed; we don't have pid yet
             stageId: stage.id,
             stageFilePath,
             worktreePath: worktreeInfo.path,
@@ -273,8 +275,8 @@ export function createOrchestrator(config: OrchestratorConfig, deps: Orchestrato
       return running;
     },
 
-    getActiveWorkers(): Map<number, WorkerInfo> {
-      return activeWorkers;
+    getActiveWorkers(): ReadonlyMap<number, WorkerInfo> {
+      return new Map(activeWorkers);
     },
   };
 }

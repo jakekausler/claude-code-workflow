@@ -1,7 +1,6 @@
 import type { PipelineConfig } from 'kanban-cli';
 
 export interface WorkerInfo {
-  pid: number;
   stageId: string;
   stageFilePath: string;
   worktreePath: string;
