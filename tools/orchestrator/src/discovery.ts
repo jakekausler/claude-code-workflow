@@ -117,16 +117,20 @@ export function createDiscovery(deps: Partial<DiscoveryDeps> = {}): Discovery {
       const args = ['tsx', cliPath, 'next', '--repo', repoPath, '--max', String(max)];
 
       const stdout = await exec('npx', args);
-      const raw: RawNextOutput = JSON.parse(stdout);
+      const raw = JSON.parse(stdout);
+      if (!raw || !Array.isArray(raw.ready_stages)) {
+        throw new Error('Unexpected kanban-cli next output format');
+      }
+      const typed: RawNextOutput = raw;
 
-      const allStages = raw.ready_stages.map(mapStage);
+      const allStages = typed.ready_stages.map(mapStage);
       const readyStages = allStages.filter((stage) => !stage.needsHuman);
 
       return {
         readyStages,
-        blockedCount: raw.blocked_count,
-        inProgressCount: raw.in_progress_count,
-        toConvertCount: raw.to_convert_count,
+        blockedCount: typed.blocked_count,
+        inProgressCount: typed.in_progress_count,
+        toConvertCount: typed.to_convert_count,
       };
     },
   };

@@ -399,4 +399,24 @@ describe('setupShutdownHandlers', () => {
     // killAll should NOT have been called when no workers
     expect(ctx.sessionExecutor.killAll).not.toHaveBeenCalled();
   });
+
+  it('logs error and continues shutdown when orchestrator.stop() throws', async () => {
+    const ctx = createTestContext();
+    ctx.orchestratorHelper.stopFn.mockRejectedValueOnce(new Error('stop failed'));
+
+    setupShutdownHandlers(makeOptions(ctx), ctx.deps);
+
+    const handler = ctx.signalHandlers.get('SIGINT')!;
+    handler();
+
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(ctx.logger.error).toHaveBeenCalledWith(
+      'Error stopping orchestrator',
+      { error: 'stop failed' },
+    );
+    // Should still complete shutdown
+    expect(ctx.exitFn).toHaveBeenCalledWith(0);
+    expect(ctx.logger.info).toHaveBeenCalledWith('Shutdown complete');
+  });
 });

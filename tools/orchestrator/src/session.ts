@@ -200,10 +200,8 @@ export function createSessionExecutor(deps: Partial<SessionDeps> = {}): SessionE
 
     killAll(signal?: NodeJS.Signals): void {
       for (const session of activeSessions.values()) {
-        const killed = session.kill(signal ?? 'SIGTERM');
-        if (!killed) {
-          console.error(`Failed to send ${signal ?? 'SIGTERM'} to session pid=${session.pid}`);
-        }
+        // kill() returning false is expected during shutdown (process already dead)
+        session.kill(signal ?? 'SIGTERM');
       }
     },
   };

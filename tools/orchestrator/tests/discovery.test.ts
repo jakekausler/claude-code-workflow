@@ -185,6 +185,24 @@ describe('createDiscovery', () => {
 
       await expect(discovery.discover('/tmp/test-repo', 5)).rejects.toThrow();
     });
+
+    it('rejects when JSON has unexpected format (missing ready_stages)', async () => {
+      const execFn: ExecFn = vi.fn(async () => JSON.stringify({ some_other_field: true }));
+      const discovery = createDiscovery({ execFn });
+
+      await expect(discovery.discover('/tmp/test-repo', 5)).rejects.toThrow(
+        'Unexpected kanban-cli next output format',
+      );
+    });
+
+    it('rejects when JSON is null', async () => {
+      const execFn: ExecFn = vi.fn(async () => 'null');
+      const discovery = createDiscovery({ execFn });
+
+      await expect(discovery.discover('/tmp/test-repo', 5)).rejects.toThrow(
+        'Unexpected kanban-cli next output format',
+      );
+    });
   });
 
   describe('command arguments', () => {

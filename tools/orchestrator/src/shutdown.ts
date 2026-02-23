@@ -58,7 +58,11 @@ export function setupShutdownHandlers(
     shutdownInProgress = true;
 
     logger.info('Received shutdown signal, draining active sessions...', { signal });
-    await orchestrator.stop();
+    try {
+      await orchestrator.stop();
+    } catch (err) {
+      logger.error('Error stopping orchestrator', { error: err instanceof Error ? err.message : String(err) });
+    }
 
     // Wait for active workers to drain
     const drainDeadline = Date.now() + drainTimeoutMs;

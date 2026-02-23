@@ -20,6 +20,7 @@ export interface OrchestratorDeps {
   worktreeManager: WorktreeManager;
   sessionExecutor: SessionExecutor;
   logger: Logger;
+  now?: () => number;  // default: Date.now
 }
 
 /**
@@ -209,7 +210,7 @@ export function createOrchestrator(config: OrchestratorConfig, deps: Orchestrato
             worktreePath: worktreeInfo.path,
             worktreeIndex: worktreeInfo.index,
             statusBefore,
-            startTime: Date.now(),
+            startTime: (deps.now ?? Date.now)(),
           };
 
           activeWorkers.set(worktreeInfo.index, workerInfo);
