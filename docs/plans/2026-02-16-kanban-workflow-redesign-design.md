@@ -1101,9 +1101,9 @@ Each system operates independently. The main loop handles the pipeline state mac
 
 **Modularity integration**: The orchestration loop is config-driven. It reads the pipeline config to determine which states are session (skill) vs resolver. For session states: check `session_active`, lock, spawn session. For resolver states: call the resolver function, apply transition. Priority queue ordering uses pipeline phase index. `WORKFLOW_MAX_PARALLEL` is read from config defaults. Cron jobs are hardcoded but toggleable via the `cron` config section.
 
-Stage 6 is decomposed into five sub-stages:
+Stage 6 is decomposed into six sub-stages:
 
-#### Stage 6A: Orchestrator Infrastructure & Session Management
+#### Stage 6A: Orchestrator Infrastructure & Session Management ✅
 
 **Goal**: The base orchestrator script exists, can discover stages, spawn Claude sessions, and manage session lifecycle. No routing logic, no crons — just the scaffolding.
 
@@ -1123,7 +1123,30 @@ Stage 6 is decomposed into five sub-stages:
 
 13. Worktree creation reads `pending_merge_parents` from stage frontmatter and merges parent MR branches into the new worktree before handing off to the Build session (Stage 5.5B provides the schema/skill foundation for this).
 
-**Does NOT include**: Exit gate logic, ticket/epic updates, backlog re-evaluation, cron loops.
+**Does NOT include**: Exit gate logic, ticket/epic updates, backlog re-evaluation, cron loops, MCP server (see 6A.5).
+
+#### Stage 6A.5: MCP Server — External Service Gateway
+
+**Goal**: Wrap all external service interactions (Jira, GitHub/GitLab PR, Confluence, Slack) as MCP tools in a dedicated server. Claude sessions call structured MCP tools instead of raw CLI commands, enabling schema validation, mockability, auditability, and a single gateway for all external calls.
+
+**What ships**:
+1. MCP server package (`tools/mcp-server/`) — stdio transport, auto-discovered via `.mcp.json` at repo root.
+2. Jira tools: `jira_get_ticket`, `jira_search`, `jira_transition`, `jira_assign`, `jira_comment`, `jira_sync` — wrapping existing JiraExecutor pattern.
+3. PR/MR tools: `pr_create`, `pr_update`, `pr_get`, `pr_close`, `pr_get_comments`, `pr_add_comment`, `pr_get_status`, `pr_mark_ready` — wrapping `gh`/`glab` CLI.
+4. Enrichment tool: `enrich_ticket` — wrapping existing enrichTicket() logic.
+5. Confluence tool: `confluence_get_page` — wrapping confluence read script.
+6. Slack placeholder: `slack_notify` — stubbed for future implementation.
+7. Stateful mock mode via `KANBAN_MOCK=true` env var — in-memory state store with seed data, deterministic responses, operations mutate state (create PR → readable via get PR).
+8. Mock admin tools (KANBAN_MOCK only): `mock_inject_comment`, `mock_set_pr_merged`, `mock_set_ticket_status` — for testing review cycles and merge flows.
+9. Updated skills: `phase-finalize`, `review-cycle`, `convert-ticket` reference MCP tool names instead of direct CLI commands.
+10. `.mcp.json` at repo root for Claude Code auto-discovery.
+11. Orchestrator `--mock` sets `KANBAN_MOCK=true` in process env (propagates to MCP server via child process inheritance).
+
+**Does NOT include**: Slack implementation (placeholder only), REST API migration for GitHub/GitLab (staying with CLI wrappers), changes to orchestrator loop logic.
+
+**Depends on**: Stage 6A (orchestrator must exist for session spawning and --mock flag). Must complete before 6B (need mockable services for testing exit gates and resolvers).
+
+**Design doc**: `docs/plans/2026-02-23-stage-6a5-mcp-server-design.md`
 
 #### Stage 6B: Main Work Loop — Exit Gates & Status Propagation
 
@@ -1147,7 +1170,7 @@ Stage 6 is decomposed into five sub-stages:
    - Simpler check (is PR merged?) — comment detection moves to cron.
    - Reads `pr_url` from frontmatter/SQLite.
 
-**Depends on**: Stage 6A (session management must exist).
+**Depends on**: Stage 6A (session management) + Stage 6A.5 (MCP server for mockable service calls during testing).
 
 #### Stage 6C: Main Work Loop — Completion Cascade & Backlog Resolution
 
@@ -1182,7 +1205,7 @@ Stage 6 is decomposed into five sub-stages:
 3. MR comment polling (original scope):
    - Query SQLite for all stages where `status = 'PR Created'`.
    - Read `pr_url` from SQLite (cached from frontmatter).
-   - Fetch comments via `gh pr view` / `glab mr notes list`.
+   - Fetch comments via MCP tools (`pr_get_comments`) or code-host adapters.
    - Track seen comments (store last-seen comment ID or timestamp in SQLite).
    - New actionable comments → transition to Addressing Comments (update stage + ticket + epic + sync).
    - PR merged → transition to Done + trigger completion cascade (6C).
@@ -1229,10 +1252,11 @@ Stage 6 is decomposed into five sub-stages:
 #### Stage 6 Internal Dependency Graph
 
 ```
-Stage 6A (Infrastructure & Sessions)
-  ├── Stage 6B (Exit Gates & Resolvers)
-  │     └── Stage 6C (Completion Cascade & Backlog)
-  │           └── Stage 6D (MR Comment Cron) — also depends on 6B
+Stage 6A (Infrastructure & Sessions) ✅
+  └── Stage 6A.5 (MCP Server — External Service Gateway)
+        └── Stage 6B (Exit Gates & Resolvers)
+              └── Stage 6C (Completion Cascade & Backlog)
+                    └── Stage 6D (MR Comment Cron) — also depends on 6B
   └── Stage 6E (Insights Cron) — depends on 6A + 6D's cron infrastructure
 ```
 
@@ -1302,14 +1326,15 @@ Stage 0 (Pipeline Configuration) ✅
         ├── Stage 3 (Remote Mode + MR/PR) ✅
         ├── Stage 5 (Auto-Design + Auto-Analysis) ✅
         │
-        └── Stage 5.5A (Schema & Sync — MR Dependency Resolution)
-              ├── Stage 5.5B (Skill Updates — Branch Chain & Draft MR)
-              │     └── Stage 6A (Orchestrator Infrastructure & Sessions)
-              │           ├── Stage 6B (Exit Gates & Resolvers)
-              │           │     └── Stage 6C (Completion Cascade & Backlog)
-              │           │           └── Stage 6D (MR Comment Cron + MR Chain Manager) ── also depends on 6B
+        └── Stage 5.5A (Schema & Sync — MR Dependency Resolution) ✅
+              ├── Stage 5.5B (Skill Updates — Branch Chain & Draft MR) ✅
+              │     └── Stage 6A (Orchestrator Infrastructure & Sessions) ✅
+              │           └── Stage 6A.5 (MCP Server — External Service Gateway) ← CURRENT
+              │                 └── Stage 6B (Exit Gates & Resolvers)
+              │                       └── Stage 6C (Completion Cascade & Backlog)
+              │                             └── Stage 6D (MR Comment Cron + MR Chain Manager) ── also depends on 6B
               │           └── Stage 6E (Insights Cron) ── depends on 6A + 6D cron infra
-              ├── Stage 5.5C (Jira Conversion Enrichment) ── independent of 5.5B
+              ├── Stage 5.5C (Jira Conversion Enrichment) ✅ ── independent of 5.5B
               │
               ├── Stage 7 (Slack) ── depends on Stage 3
               └── Stage 8 (Global CLI + Multi-Repo) ── depends on Stage 1
@@ -1317,7 +1342,7 @@ Stage 0 (Pipeline Configuration) ✅
                           └── Stage 10 (Session Monitor Integration)
 ```
 
-**Next up**: Stage 5.5A must complete before 5.5B and 5.5C (both depend on schema). Stage 5.5B must complete before 6A (orchestrator needs branch chain awareness). Stage 5.5C is independent of 5.5B and can run in parallel. Within Stage 6, sub-stages are serial (6A → 6B → 6C → 6D, with 6E branching from 6A + 6D). Stage 6D has expanded scope to include MR dependency chain management.
+**Next up**: Stage 6A.5 (MCP Server) must complete before 6B so external service calls are mockable during exit gate and resolver testing. Within Stage 6, sub-stages are serial (6A ✅ → 6A.5 → 6B → 6C → 6D, with 6E branching from 6A + 6D). Stage 6D has expanded scope to include MR dependency chain management.
 
 ---
 
@@ -1850,7 +1875,7 @@ Every N seconds (configurable via cron.mr_comment_poll.interval_seconds, default
 
   1. Query SQLite for all stages where status = 'PR Created'
   2. For each: read pr_url from SQLite (cached from frontmatter)
-  3. Fetch comments via gh/glab CLI using pr_url
+  3. Fetch comments via MCP tools or code-host adapters using pr_url
   4. Compare against previously seen comments (tracked in SQLite)
   5. If new actionable comments found:
      - Update stage status to 'Addressing Comments'
@@ -1888,10 +1913,58 @@ This cron shares the session spawning infrastructure with the main loop but oper
 | MR comment detection | **MR comment cron** |
 | Insights threshold | **Insights cron** |
 | Journal + lessons-learned | **Session** (skill-internal) |
-| PR/MR creation + `pr_url` write | **Session** (finalize skill-internal) |
-| Jira sync | **Session** (finalize skill-internal, checks all stages in ticket) |
+| PR/MR creation + `pr_url` write | **Session** via MCP tools (`pr_create`, `pr_update`) |
+| Jira sync | **Session** via MCP tools (`jira_sync`, `jira_transition`) |
+| External service calls (Jira, GitHub/GitLab, Confluence, Slack) | **Session** via MCP server (`tools/mcp-server/`). All calls go through structured MCP tools with schema validation. Mock mode via `KANBAN_MOCK=true` env var. |
 
-### 6.6 Pipeline Validator
+### 6.6 MCP Server Architecture (External Service Gateway)
+
+All external service interactions from Claude sessions go through a centralized MCP (Model Context Protocol) server. This provides structured tool calling with schema validation, mockability, and auditability.
+
+#### Architecture
+
+```
+Claude Code Session (in worktree)
+  └── calls MCP tool: mcp__kanban__pr_create({ branch, title, body })
+        └── MCP Server (tools/mcp-server/, stdio transport)
+              ├── KANBAN_MOCK=false → real service call (gh/glab/jira scripts)
+              └── KANBAN_MOCK=true  → stateful mock response
+```
+
+The MCP server is auto-discovered by Claude Code via `.mcp.json` at the repo root. It starts as a stdio subprocess when the Claude session begins.
+
+#### Tool Categories
+
+| Category | Tools | Real Backend |
+|----------|-------|-------------|
+| **Jira** | get_ticket, search, transition, assign, comment, sync | JiraExecutor (script-based) |
+| **PR/MR** | create, update, get, close, get_comments, add_comment, get_status, mark_ready | `gh`/`glab` CLI |
+| **Enrichment** | enrich_ticket | enrichTicket() function |
+| **Confluence** | get_page | Confluence read script |
+| **Slack** | notify | Placeholder (future) |
+| **Mock Admin** | inject_comment, set_pr_merged, set_ticket_status | In-memory mock state (KANBAN_MOCK only) |
+
+#### Mock Mode
+
+When `KANBAN_MOCK=true` is set in the environment:
+- All tools return deterministic responses from an in-memory stateful store
+- Write operations (create PR, transition ticket) mutate the store, readable by subsequent queries
+- Mock admin tools become available for injecting test scenarios (reviewer comments, PR merges)
+- Seed data loaded from fixture files matching the test repo structure
+
+The orchestrator's `--mock` flag sets `KANBAN_MOCK=true` and also uses a mock session executor (auto-advance stages without Claude CLI). For testing with real Claude sessions against mock services, set `KANBAN_MOCK=true` in the shell environment without using `--mock`.
+
+#### Why MCP (Not Direct CLI)
+
+| Concern | Direct CLI | MCP Tools |
+|---------|-----------|-----------|
+| Input validation | No schema, typos possible | Zod schema per tool |
+| Mockability | Would need per-command env vars | Single KANBAN_MOCK flag |
+| Auditability | Scattered across skill markdown | Centralized server logs |
+| Error handling | Parse stderr, check exit codes | Structured error responses |
+| Testing | Must mock each CLI call | Mock the entire gateway |
+
+### 6.7 Pipeline Validator
 
 `kanban-cli validate-pipeline` audits the full pipeline config. Four validation layers:
 
