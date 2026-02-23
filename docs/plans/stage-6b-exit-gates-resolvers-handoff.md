@@ -282,6 +282,8 @@ This means resolver execution happens at the TOP of each tick, before discovery.
 
 6. **What happens when `kanban-cli sync` fails?** The exit gate should probably log and continue rather than crashing, but this needs to be decided.
 
+7. **How should "Not Started" stages be onboarded into the pipeline?** The `kanban-cli next` command reports stages with status "Not Started" as `design_ready`. However, the orchestrator's `lookupSkillName` can't find a pipeline phase matching "Not Started" (the entry phase is "Design"), so these stages are silently skipped. Options: (a) the orchestrator automatically sets status to the entry phase ("Design") before processing, (b) a separate CLI command or lifecycle hook transitions stages from "Not Started" to "Design", (c) the seed/setup process should set the initial status to the entry phase.
+
 ---
 
 ## Instructions
@@ -329,6 +331,8 @@ Invoke the subagent-driven-development skill:
 - Resolver functions must be testable without real GitHub/GitLab APIs (injectable deps)
 - No changes to the session spawning or worktree infrastructure (that's 6A)
 - Follow the existing DI pattern (`Partial<Deps>` with factory functions)
+- The orchestrator's `--mock` mode is available for testing exit gates and resolvers. Set `KANBAN_MOCK=true` to mock external services via the MCP server.
+- The `needsHuman` filtering in discovery over-requests from `kanban-cli next` (3x or +10, whichever is larger) to compensate for human-needing stages being filtered post-discovery.
 
 ### Suggested Sub-Task Breakdown
 
