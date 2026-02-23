@@ -163,6 +163,8 @@ function encodeAuth(email: string, token: string): string {
 
 // ─── Link types ──────────────────────────────────────────────────────────────
 
+// Mirrors jiraLinkSchema in src/parser/frontmatter-schemas.ts.
+// Changes to the schema should be reflected here.
 interface JiraLink {
   type: 'confluence' | 'jira_issue' | 'attachment' | 'external';
   url: string;
@@ -200,67 +202,65 @@ async function extractLinks(key: string, fields: any): Promise<JiraLink[]> {
   const links: JiraLink[] = [];
 
   try {
+    // Fetch credentials once for use in browse URLs and remote links API.
+    const creds = await getCredentials();
+
     // 1. Issue links (inward/outward Jira issues)
     const issueLinks: any[] = fields.issuelinks ?? [];
     for (const link of issueLinks) {
-      try {
-        if (link.outwardIssue) {
-          const issue = link.outwardIssue;
-          links.push({
-            type: 'jira_issue',
-            url: issue.self ?? '',
-            title: issue.fields?.summary ?? issue.key ?? '',
-            key: issue.key,
-            relationship: link.type?.outward ?? link.type?.name ?? '',
-          });
-        } else if (link.inwardIssue) {
-          const issue = link.inwardIssue;
-          links.push({
-            type: 'jira_issue',
-            url: issue.self ?? '',
-            title: issue.fields?.summary ?? issue.key ?? '',
-            key: issue.key,
-            relationship: link.type?.inward ?? link.type?.name ?? '',
-          });
-        }
-      } catch {
-        // Skip malformed individual issue link
+      if (link.outwardIssue) {
+        const issue = link.outwardIssue;
+        links.push({
+          type: 'jira_issue',
+          url: creds ? `${creds.baseUrl}/browse/${issue.key}` : (issue.self ?? ''),
+          title: issue.fields?.summary ?? issue.key ?? '',
+          key: issue.key,
+          relationship: link.type?.outward ?? link.type?.name ?? '',
+        });
+      } else if (link.inwardIssue) {
+        const issue = link.inwardIssue;
+        links.push({
+          type: 'jira_issue',
+          url: creds ? `${creds.baseUrl}/browse/${issue.key}` : (issue.self ?? ''),
+          title: issue.fields?.summary ?? issue.key ?? '',
+          key: issue.key,
+          relationship: link.type?.inward ?? link.type?.name ?? '',
+        });
       }
     }
 
     // 2. Attachments
     const attachments: any[] = fields.attachment ?? [];
     for (const att of attachments) {
-      try {
-        links.push({
-          type: 'attachment',
-          url: att.content ?? '',
-          title: att.filename ?? `attachment-${att.id ?? 'unknown'}`,
-          filename: att.filename,
-          mime_type: att.mimeType,
-        });
-      } catch {
-        // Skip malformed individual attachment
-      }
+      links.push({
+        type: 'attachment',
+        url: att.content ?? '',
+        title: att.filename ?? `attachment-${att.id ?? 'unknown'}`,
+        filename: att.filename,
+        mime_type: att.mimeType,
+      });
     }
 
     // 3. Remote links (Confluence pages, external URLs)
     try {
-      const creds = await getCredentials();
       if (creds) {
         const url = `${creds.baseUrl}/rest/api/3/issue/${encodeURIComponent(key)}/remotelink`;
-        const response = await fetch(url, {
-          method: 'GET',
-          headers: {
-            'Authorization': `Basic ${encodeAuth(creds.email, creds.token)}`,
-            'Accept': 'application/json',
-          },
-        });
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000);
+        try {
+          const response = await fetch(url, {
+            method: 'GET',
+            headers: {
+              'Authorization': `Basic ${encodeAuth(creds.email, creds.token)}`,
+              'Accept': 'application/json',
+            },
+            signal: controller.signal,
+          });
 
-        if (response.ok) {
-          const remoteLinks: any[] = await response.json();
-          for (const rl of remoteLinks) {
-            try {
+          if (response.ok) {
+            const body = await response.json();
+            const remoteLinks: any[] = Array.isArray(body) ? body : [];
+            for (const rl of remoteLinks) {
               const linkUrl = rl.object?.url ?? '';
               const linkTitle = rl.object?.title ?? '';
               links.push({
@@ -268,12 +268,12 @@ async function extractLinks(key: string, fields: any): Promise<JiraLink[]> {
                 url: linkUrl,
                 title: linkTitle,
               });
-            } catch {
-              // Skip malformed individual remote link
             }
           }
+          // If response is not ok, silently skip remote links
+        } finally {
+          clearTimeout(timeoutId);
         }
-        // If response is not ok, silently skip remote links
       }
     } catch {
       // Remote links API call failed; degrade gracefully
