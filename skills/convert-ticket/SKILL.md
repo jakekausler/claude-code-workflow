@@ -97,10 +97,12 @@ If the ticket was imported from Jira, enrich it with the latest Jira data, linke
    - Linked attachments (metadata)
    - External URLs
 
-3. **Read the enrichment file**: After the enrich command completes, read the generated enrichment file located alongside the ticket file:
+   **Note:** The command outputs a JSON summary to stdout; the enrichment content itself is written to the `-enrichment.md` file (see next sub-step). Do not try to parse stdout as the enrichment content.
+
+3. **Read the enrichment file**: After the enrich command completes, read the generated enrichment file located alongside the ticket file. The enrichment file is named after the ticket file: `<ticket-filename-without-.md>-enrichment.md`, in the same directory as the ticket. For example, if the ticket file is `TICKET-001-001.md`, the enrichment file is `TICKET-001-001-enrichment.md`:
 
    ```
-   epics/EPIC-XXX-name/TICKET-XXX-YYY-name/<ticket-id>-enrichment.md
+   epics/EPIC-001/TICKET-001-001-enrichment.md
    ```
 
    This file contains structured context from Jira and linked sources that will improve the quality of the stage breakdown.
