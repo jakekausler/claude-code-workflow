@@ -15,13 +15,14 @@ export const enrichCommand = new Command('enrich')
   .action(async (ticketPath: string, options) => {
     try {
       const repoPath = path.resolve(options.repo);
+      const resolvedTicketPath = path.resolve(ticketPath);
 
       // Load config for Jira executor
       const config = loadConfig({ repoPath });
       const executor = config.jira ? createJiraExecutor(config.jira, repoPath) : undefined;
 
       const result: EnrichResult = await enrichTicket({
-        ticketPath,
+        ticketPath: resolvedTicketPath,
         executor,
       });
 
