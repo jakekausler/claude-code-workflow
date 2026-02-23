@@ -299,91 +299,25 @@ describe('loadOrchestratorConfig', () => {
     ).rejects.toThrow('Config file not found');
   });
 
-  describe('mock mode parsing', () => {
-    it('--mock (no value) sets mockMode to full', async () => {
+  describe('mock flag', () => {
+    it('--mock sets mock to true', async () => {
       const deps = makeDeps();
       const config = await loadOrchestratorConfig(
         makeCliOptions({ mock: true }),
         deps,
       );
 
-      expect(config.mockMode).toBe('full');
-      expect(config.mockServices).toEqual([]);
+      expect(config.mock).toBe(true);
     });
 
-    it('--mock all sets mockMode to full', async () => {
-      const deps = makeDeps();
-      const config = await loadOrchestratorConfig(
-        makeCliOptions({ mock: 'all' }),
-        deps,
-      );
-
-      expect(config.mockMode).toBe('full');
-      expect(config.mockServices).toEqual([]);
-    });
-
-    it('--mock jira,github sets mockMode to selective with services', async () => {
-      const deps = makeDeps();
-      const config = await loadOrchestratorConfig(
-        makeCliOptions({ mock: 'jira,github' }),
-        deps,
-      );
-
-      expect(config.mockMode).toBe('selective');
-      expect(config.mockServices).toEqual(['jira', 'github']);
-    });
-
-    it('selective mock adds MOCK_<SERVICE>=true to workflowEnv', async () => {
-      const deps = makeDeps();
-      const config = await loadOrchestratorConfig(
-        makeCliOptions({ mock: 'jira,github' }),
-        deps,
-      );
-
-      expect(config.workflowEnv['MOCK_JIRA']).toBe('true');
-      expect(config.workflowEnv['MOCK_GITHUB']).toBe('true');
-    });
-
-    it('no --mock sets mockMode to none', async () => {
+    it('no --mock sets mock to false', async () => {
       const deps = makeDeps();
       const config = await loadOrchestratorConfig(
         makeCliOptions(),
         deps,
       );
 
-      expect(config.mockMode).toBe('none');
-      expect(config.mockServices).toEqual([]);
-    });
-
-    it('throws on invalid service name', async () => {
-      const deps = makeDeps();
-
-      await expect(
-        loadOrchestratorConfig(makeCliOptions({ mock: 'jira,invalid' }), deps),
-      ).rejects.toThrow('Invalid mock service "invalid"');
-    });
-
-    it('trims and lowercases service names', async () => {
-      const deps = makeDeps();
-      const config = await loadOrchestratorConfig(
-        makeCliOptions({ mock: ' Jira , GitHub ' }),
-        deps,
-      );
-
-      expect(config.mockServices).toEqual(['jira', 'github']);
-      expect(config.workflowEnv['MOCK_JIRA']).toBe('true');
-      expect(config.workflowEnv['MOCK_GITHUB']).toBe('true');
-    });
-
-    it('accepts all valid services', async () => {
-      const deps = makeDeps();
-      const config = await loadOrchestratorConfig(
-        makeCliOptions({ mock: 'jira,github,gitlab,slack' }),
-        deps,
-      );
-
-      expect(config.mockMode).toBe('selective');
-      expect(config.mockServices).toEqual(['jira', 'github', 'gitlab', 'slack']);
+      expect(config.mock).toBe(false);
     });
   });
 });

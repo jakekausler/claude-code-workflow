@@ -20,7 +20,7 @@ const program = new Command()
   .option('--log-dir <path>', 'Session log directory')
   .option('--model <model>', 'Claude model for sessions', 'sonnet')
   .option('--verbose', 'Verbose output', false)
-  .option('--mock [services]', 'Mock mode: no args = full mock (auto-advance, no CLI), or comma-separated services to mock (jira,github,gitlab,slack)')
+  .option('--mock', 'Full mock mode: auto-advance stages without Claude CLI')
   .action(async (options) => {
     try {
       // 1. Load config
@@ -42,8 +42,8 @@ const program = new Command()
       let worktreeManager;
       let sessionExecutor;
 
-      if (config.mockMode === 'full') {
-        logger.info('Running in full mock mode (auto-advancing stages)');
+      if (config.mock) {
+        logger.info('Running in mock mode (auto-advancing stages)');
         worktreeManager = createMockWorktreeManager();
         sessionExecutor = createMockSessionExecutor({
           readFrontmatter: defaultReadFrontmatter,
@@ -51,9 +51,6 @@ const program = new Command()
           pipelineConfig: config.pipelineConfig,
         });
       } else {
-        if (config.mockMode === 'selective') {
-          logger.info(`Running with mocked services: ${config.mockServices.join(', ')}`);
-        }
         worktreeManager = createWorktreeManager(config.maxParallel);
         sessionExecutor = createSessionExecutor();
       }
