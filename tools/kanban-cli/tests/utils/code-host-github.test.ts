@@ -113,4 +113,85 @@ describe('createGitHubAdapter', () => {
     const status = adapter.getPRStatus('https://bitbucket.org/org/repo/pull/1');
     expect(status.state).toBe('unknown');
   });
+
+  describe('editPRBase', () => {
+    it('passes correct args to gh CLI', () => {
+      let capturedCmd = '';
+      let capturedArgs: string[] = [];
+      const adapter = createGitHubAdapter({
+        execFn: (cmd, args) => {
+          capturedCmd = cmd;
+          capturedArgs = args;
+          return '';
+        },
+      });
+      adapter.editPRBase(42, 'main');
+      expect(capturedCmd).toBe('gh');
+      expect(capturedArgs).toEqual([
+        'pr', 'edit', '42',
+        '--base', 'main',
+      ]);
+    });
+
+    it('throws when CLI fails', () => {
+      const adapter = createGitHubAdapter({
+        execFn: () => { throw new Error('gh not found'); },
+      });
+      expect(() => adapter.editPRBase(42, 'main')).toThrow('gh not found');
+    });
+  });
+
+  describe('markPRReady', () => {
+    it('passes correct args to gh CLI', () => {
+      let capturedArgs: string[] = [];
+      const adapter = createGitHubAdapter({
+        execFn: (_cmd, args) => {
+          capturedArgs = args;
+          return '';
+        },
+      });
+      adapter.markPRReady(42);
+      expect(capturedArgs).toEqual(['pr', 'ready', '42']);
+    });
+
+    it('throws when CLI fails', () => {
+      const adapter = createGitHubAdapter({
+        execFn: () => { throw new Error('gh not found'); },
+      });
+      expect(() => adapter.markPRReady(42)).toThrow('gh not found');
+    });
+  });
+
+  describe('getBranchHead', () => {
+    it('extracts SHA from gh api response', () => {
+      const apiResponse = JSON.stringify({
+        object: { sha: 'abc123def456' },
+      });
+      const adapter = createGitHubAdapter({
+        execFn: () => apiResponse,
+      });
+      expect(adapter.getBranchHead('feature/auth')).toBe('abc123def456');
+    });
+
+    it('passes correct args to gh api', () => {
+      let capturedArgs: string[] = [];
+      const adapter = createGitHubAdapter({
+        execFn: (_cmd, args) => {
+          capturedArgs = args;
+          return JSON.stringify({ object: { sha: 'abc123' } });
+        },
+      });
+      adapter.getBranchHead('feature/auth');
+      expect(capturedArgs).toEqual([
+        'api', 'repos/{owner}/{repo}/git/ref/heads/feature/auth',
+      ]);
+    });
+
+    it('returns empty string when CLI fails', () => {
+      const adapter = createGitHubAdapter({
+        execFn: () => { throw new Error('gh not found'); },
+      });
+      expect(adapter.getBranchHead('feature/auth')).toBe('');
+    });
+  });
 });
