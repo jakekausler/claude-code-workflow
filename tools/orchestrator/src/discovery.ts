@@ -39,10 +39,11 @@ export interface Discovery {
 }
 
 /**
- * Options for creating a Discovery instance.
+ * Dependencies for creating a Discovery instance.
  */
-export interface DiscoveryOptions {
-  execFn?: ExecFn;
+export interface DiscoveryDeps {
+  execFn: ExecFn;
+  cliPath: string;
 }
 
 /**
@@ -87,6 +88,8 @@ function resolveCliPath(): string {
 
 /**
  * Map a raw snake_case stage from kanban-cli to a camelCase ReadyStage.
+ * Note: refinement_type is intentionally omitted — the orchestrator does not
+ * use it; stage routing is based on priority and needs_human only.
  */
 function mapStage(raw: RawNextOutput['ready_stages'][number]): ReadyStage {
   return {
@@ -105,12 +108,12 @@ function mapStage(raw: RawNextOutput['ready_stages'][number]): ReadyStage {
  * Create a Discovery instance that calls `kanban-cli next` as a subprocess
  * and parses its JSON output.
  */
-export function createDiscovery(options?: DiscoveryOptions): Discovery {
-  const exec = options?.execFn ?? defaultExec;
+export function createDiscovery(deps: Partial<DiscoveryDeps> = {}): Discovery {
+  const exec = deps.execFn ?? defaultExec;
+  const cliPath = deps.cliPath ?? resolveCliPath();
 
   return {
     async discover(repoPath: string, max: number): Promise<DiscoveryResult> {
-      const cliPath = resolveCliPath();
       const args = ['tsx', cliPath, 'next', '--repo', repoPath, '--max', String(max)];
 
       const stdout = await exec('npx', args);

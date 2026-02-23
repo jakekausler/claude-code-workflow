@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { createDiscovery, type ExecFn, type DiscoveryResult } from '../src/discovery.js';
+import { createDiscovery, type ExecFn } from '../src/discovery.js';
 
 /** Sample kanban-cli next output with snake_case fields. */
 function makeRawOutput(overrides?: {
@@ -205,7 +205,7 @@ describe('createDiscovery', () => {
       expect(args).toContain('42');
     });
 
-    it('passes --repo before --max in correct argument order', async () => {
+    it('includes both --repo and --max flags with correct values', async () => {
       const execFn: ExecFn = vi.fn(async () => makeRawOutput());
       const discovery = createDiscovery({ execFn });
 
