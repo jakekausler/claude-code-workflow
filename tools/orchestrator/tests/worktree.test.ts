@@ -18,6 +18,16 @@ function makeDeps(overrides: Partial<WorktreeDeps> = {}): WorktreeDeps & {
 }
 
 describe('createWorktreeManager', () => {
+  describe('factory validation', () => {
+    it('throws when maxParallel is less than 1', () => {
+      expect(() => createWorktreeManager(0)).toThrow('maxParallel must be >= 1, got 0');
+    });
+
+    it('throws when maxParallel is negative', () => {
+      expect(() => createWorktreeManager(-3)).toThrow('maxParallel must be >= 1, got -3');
+    });
+  });
+
   describe('acquireIndex', () => {
     it('returns sequential indices starting at 1', () => {
       const deps = makeDeps();
@@ -49,6 +59,13 @@ describe('createWorktreeManager', () => {
       mgr.releaseIndex(1);
 
       expect(mgr.acquireIndex()).toBe(1);
+    });
+
+    it('throws when releasing an index that is not acquired', () => {
+      const deps = makeDeps();
+      const mgr = createWorktreeManager(3, deps);
+
+      expect(() => mgr.releaseIndex(1)).toThrow('Cannot release index 1: not currently acquired');
     });
   });
 
@@ -177,16 +194,14 @@ describe('createWorktreeManager', () => {
 
       expect(deps.execGit).toHaveBeenCalledWith(
         ['worktree', 'remove', worktreePath, '--force'],
-        '/repo/.worktrees',
+        '/repo',
       );
       expect(mgr.listActive()).toHaveLength(0);
     });
 
     it('falls back to rmrf + prune on failure', async () => {
-      let callCount = 0;
       const deps = makeDeps({
         execGit: vi.fn(async (args: string[]) => {
-          callCount++;
           // First calls are for create; the worktree remove call should fail
           if (args[0] === 'worktree' && args[1] === 'remove') {
             throw new Error('worktree remove failed');
@@ -205,8 +220,17 @@ describe('createWorktreeManager', () => {
       await mgr.remove(worktreePath);
 
       expect(deps.rmrf).toHaveBeenCalledWith(worktreePath);
-      expect(deps.execGit).toHaveBeenCalledWith(['worktree', 'prune'], '/repo/.worktrees');
+      expect(deps.execGit).toHaveBeenCalledWith(['worktree', 'prune'], '/repo');
       expect(mgr.listActive()).toHaveLength(0);
+    });
+
+    it('throws when removing an untracked worktree', async () => {
+      const deps = makeDeps();
+      const mgr = createWorktreeManager(3, deps);
+
+      await expect(mgr.remove('/repo/.worktrees/worktree-99')).rejects.toThrow(
+        'Cannot remove untracked worktree: /repo/.worktrees/worktree-99',
+      );
     });
 
     it('releases index after removal', async () => {

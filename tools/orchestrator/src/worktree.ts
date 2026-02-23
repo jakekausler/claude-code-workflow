@@ -68,9 +68,14 @@ const defaultDeps: WorktreeDeps = {
  * for parallel execution.
  */
 export function createWorktreeManager(maxParallel: number, deps: Partial<WorktreeDeps> = {}): WorktreeManager {
+  if (maxParallel < 1) {
+    throw new Error(`maxParallel must be >= 1, got ${maxParallel}`);
+  }
+
   const resolved: WorktreeDeps = { ...defaultDeps, ...deps };
   const inUseIndices = new Set<number>();
   const activeWorktrees = new Map<string, WorktreeInfo>();
+  const worktreeRepoPaths = new Map<string, string>();
 
   return {
     acquireIndex(): number {
@@ -84,12 +89,16 @@ export function createWorktreeManager(maxParallel: number, deps: Partial<Worktre
     },
 
     releaseIndex(index: number): void {
+      if (!inUseIndices.has(index)) {
+        throw new Error(`Cannot release index ${index}: not currently acquired`);
+      }
       inUseIndices.delete(index);
     },
 
     releaseAll(): void {
       inUseIndices.clear();
       activeWorktrees.clear();
+      worktreeRepoPaths.clear();
     },
 
     listActive(): WorktreeInfo[] {
@@ -115,6 +124,7 @@ export function createWorktreeManager(maxParallel: number, deps: Partial<Worktre
 
         const info: WorktreeInfo = { path: worktreePath, branch, index };
         activeWorktrees.set(worktreePath, info);
+        worktreeRepoPaths.set(worktreePath, repoPath);
         return info;
       } catch (err) {
         this.releaseIndex(index);
@@ -124,19 +134,22 @@ export function createWorktreeManager(maxParallel: number, deps: Partial<Worktre
 
     async remove(worktreePath: string): Promise<void> {
       const info = activeWorktrees.get(worktreePath);
-      const parentDir = path.dirname(worktreePath);
+      if (!info) {
+        throw new Error(`Cannot remove untracked worktree: ${worktreePath}`);
+      }
+
+      const repoPath = worktreeRepoPaths.get(worktreePath)!;
 
       try {
-        await resolved.execGit(['worktree', 'remove', worktreePath, '--force'], parentDir);
+        await resolved.execGit(['worktree', 'remove', worktreePath, '--force'], repoPath);
       } catch {
         await resolved.rmrf(worktreePath);
-        await resolved.execGit(['worktree', 'prune'], parentDir);
+        await resolved.execGit(['worktree', 'prune'], repoPath);
       }
 
-      if (info) {
-        this.releaseIndex(info.index);
-        activeWorktrees.delete(worktreePath);
-      }
+      this.releaseIndex(info.index);
+      activeWorktrees.delete(worktreePath);
+      worktreeRepoPaths.delete(worktreePath);
     },
 
     async validateIsolationStrategy(repoPath: string): Promise<boolean> {
