@@ -45,6 +45,9 @@ The MR/PR URL is recorded in the stage file. Extract the number from the URL:
 
 If the URL is not in the stage file, attempt to find it:
 
+**Preferred:** Use the `mcp__kanban__pr_get` tool with the current branch name to retrieve the PR number and URL.
+
+**Fallback (if MCP unavailable):**
 ```bash
 # GitHub: find PR for the current branch
 gh pr view --json number,url --jq '.number'
@@ -61,6 +64,12 @@ glab mr view --output json | jq '.iid'
    - Run `kanban-cli sync --stage STAGE-XXX-YYY-ZZZ`
 
 2. Fetch review comments from MR/PR:
+
+   **Preferred:** Use the `mcp__kanban__pr_get_comments` tool:
+   - pr_number: `<number>`
+   This returns all review comments (general and inline) with path, line, body, id, and author information.
+
+   **Fallback (if MCP unavailable):**
 
    **GitHub:**
    gh pr view <number> --json reviews,comments \
@@ -165,6 +174,15 @@ glab mr view --output json | jq '.iid'
 
 9. Post reply comments on MR/PR:
 
+   **Preferred:** Use the `mcp__kanban__pr_add_comment` tool:
+   - pr_number: `<number>`
+   - body: the comment text (see template below)
+   - comment_id: `<comment_id>` (if replying to a specific review thread; omit for a general comment)
+
+   Use this tool once for the general summary comment and once per specific thread reply.
+
+   **Fallback (if MCP unavailable):**
+
    **GitHub — reply to specific review comments:**
    ```bash
    # Reply to a specific review comment thread
@@ -229,6 +247,16 @@ glab mr view --output json | jq '.iid'
 
 11. [CONDITIONAL: Slack Notification]
     IF `WORKFLOW_SLACK_WEBHOOK` is set:
+
+      **Preferred:** Use the `mcp__kanban__slack_notify` tool:
+      - message: `"Review Comments Addressed"`
+      - stage: `STAGE-XXX-YYY-ZZZ`
+      - title: `<stage title>`
+      - round: `N`
+      - comments_addressed: `M`
+      - url: `<MR/PR URL>`
+
+      **Fallback (if MCP unavailable):**
       ```bash
       curl -s -X POST "$WORKFLOW_SLACK_WEBHOOK" \
         -H 'Content-Type: application/json' \

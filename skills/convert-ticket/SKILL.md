@@ -86,16 +86,22 @@ If the ticket was imported from Jira, enrich it with the latest Jira data, linke
 
 2. **Run the enrich command**:
 
-   ```bash
-   npx tsx tools/kanban-cli/src/cli/index.ts enrich <ticket-path>
-   ```
+   **Preferred:** Use the `mcp__kanban__enrich_ticket` tool:
+   - ticketPath: `<ticket-path>`
 
-   Where `<ticket-path>` is the full path to the ticket markdown file found in Step 1. This fetches:
+   Where `<ticket-path>` is the full path to the ticket markdown file found in Step 1. The tool fetches:
    - Fresh Jira ticket data (latest title, description, status, comments)
    - Linked Confluence pages
    - Linked Jira issues
    - Linked attachments (metadata)
    - External URLs
+
+   The tool returns a JSON summary; the enrichment content itself is written to the `-enrichment.md` file (see next sub-step).
+
+   **Fallback (if MCP unavailable):**
+   ```bash
+   npx tsx tools/kanban-cli/src/cli/index.ts enrich <ticket-path>
+   ```
 
    **Note:** The command outputs a JSON summary to stdout; the enrichment content itself is written to the `-enrichment.md` file (see next sub-step). Do not try to parse stdout as the enrichment content.
 
