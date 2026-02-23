@@ -442,6 +442,223 @@ Existing.
     });
   });
 
+  // ─── jira_links in ticket frontmatter ────────────────────────────────────
+
+  describe('jira_links in ticket frontmatter', () => {
+    function createEpicLocally(epicId: string, jiraKey?: string): void {
+      const epicDir = path.join(repoDir, 'epics', epicId);
+      fs.mkdirSync(epicDir, { recursive: true });
+      const content = `---
+id: ${epicId}
+title: "Test Epic"
+status: Not Started
+jira_key: ${jiraKey ?? 'null'}
+tickets: []
+depends_on: []
+---
+Epic body.
+`;
+      fs.writeFileSync(path.join(epicDir, `${epicId}.md`), content);
+    }
+
+    it('includes jira_links in frontmatter when links are present', async () => {
+      createEpicLocally('EPIC-001');
+
+      const ticketData = createTicketData({
+        key: 'PROJ-LINKS',
+        type: 'Story',
+        summary: 'Ticket with links',
+        description: 'Has links.',
+        links: [
+          {
+            type: 'confluence',
+            url: 'https://company.atlassian.net/wiki/spaces/TEAM/pages/123',
+            title: 'Design Doc',
+          },
+        ],
+      });
+
+      const executor = createMockExecutor({
+        getTicket: async () => ticketData,
+      });
+
+      const result = await jiraImport(
+        { key: 'PROJ-LINKS', repoPath: repoDir, epicOverride: 'EPIC-001' },
+        executor,
+        db,
+      );
+
+      const content = fs.readFileSync(result.file_path, 'utf-8');
+      const parsed = matter(content);
+
+      expect(parsed.data.jira_links).toEqual([
+        {
+          type: 'confluence',
+          url: 'https://company.atlassian.net/wiki/spaces/TEAM/pages/123',
+          title: 'Design Doc',
+        },
+      ]);
+    });
+
+    it('omits jira_links from frontmatter when links array is empty', async () => {
+      createEpicLocally('EPIC-001');
+
+      const ticketData = createTicketData({
+        key: 'PROJ-NO-LINKS',
+        type: 'Story',
+        summary: 'Ticket without links',
+        description: 'No links.',
+        links: [],
+      });
+
+      const executor = createMockExecutor({
+        getTicket: async () => ticketData,
+      });
+
+      const result = await jiraImport(
+        { key: 'PROJ-NO-LINKS', repoPath: repoDir, epicOverride: 'EPIC-001' },
+        executor,
+        db,
+      );
+
+      const content = fs.readFileSync(result.file_path, 'utf-8');
+      const parsed = matter(content);
+
+      // jira_links should not be present in raw frontmatter
+      expect(content).not.toContain('jira_links');
+      // gray-matter won't have it in data either
+      expect(parsed.data.jira_links).toBeUndefined();
+    });
+
+    it('serializes all link types correctly (confluence, jira_issue, attachment, external)', async () => {
+      createEpicLocally('EPIC-001');
+
+      const ticketData = createTicketData({
+        key: 'PROJ-ALL-LINKS',
+        type: 'Story',
+        summary: 'Ticket with all link types',
+        description: 'All types.',
+        links: [
+          {
+            type: 'confluence',
+            url: 'https://company.atlassian.net/wiki/spaces/TEAM/pages/123',
+            title: 'Design Doc',
+          },
+          {
+            type: 'jira_issue',
+            url: 'https://company.atlassian.net/browse/PROJ-999',
+            title: 'Related Issue',
+            key: 'PROJ-999',
+            relationship: 'blocks',
+          },
+          {
+            type: 'attachment',
+            url: 'https://company.atlassian.net/secure/attachment/456/spec.pdf',
+            title: 'Spec PDF',
+            filename: 'spec.pdf',
+            mime_type: 'application/pdf',
+          },
+          {
+            type: 'external',
+            url: 'https://docs.google.com/document/d/abc123',
+            title: 'External Doc',
+          },
+        ],
+      });
+
+      const executor = createMockExecutor({
+        getTicket: async () => ticketData,
+      });
+
+      const result = await jiraImport(
+        { key: 'PROJ-ALL-LINKS', repoPath: repoDir, epicOverride: 'EPIC-001' },
+        executor,
+        db,
+      );
+
+      const content = fs.readFileSync(result.file_path, 'utf-8');
+      const parsed = matter(content);
+
+      expect(parsed.data.jira_links).toHaveLength(4);
+      expect(parsed.data.jira_links[0]).toEqual({
+        type: 'confluence',
+        url: 'https://company.atlassian.net/wiki/spaces/TEAM/pages/123',
+        title: 'Design Doc',
+      });
+      expect(parsed.data.jira_links[1]).toEqual({
+        type: 'jira_issue',
+        url: 'https://company.atlassian.net/browse/PROJ-999',
+        title: 'Related Issue',
+        key: 'PROJ-999',
+        relationship: 'blocks',
+      });
+      expect(parsed.data.jira_links[2]).toEqual({
+        type: 'attachment',
+        url: 'https://company.atlassian.net/secure/attachment/456/spec.pdf',
+        title: 'Spec PDF',
+        filename: 'spec.pdf',
+        mime_type: 'application/pdf',
+      });
+      expect(parsed.data.jira_links[3]).toEqual({
+        type: 'external',
+        url: 'https://docs.google.com/document/d/abc123',
+        title: 'External Doc',
+      });
+    });
+
+    it('jira_links round-trips through frontmatter parsing (write → sync → parse)', async () => {
+      createEpicLocally('EPIC-001');
+
+      const links = [
+        {
+          type: 'confluence' as const,
+          url: 'https://company.atlassian.net/wiki/spaces/TEAM/pages/123',
+          title: 'Design Doc',
+        },
+        {
+          type: 'jira_issue' as const,
+          url: 'https://company.atlassian.net/browse/PROJ-999',
+          title: 'Related Issue',
+          key: 'PROJ-999',
+          relationship: 'blocks',
+        },
+      ];
+
+      const ticketData = createTicketData({
+        key: 'PROJ-ROUNDTRIP',
+        type: 'Story',
+        summary: 'Round trip test',
+        description: 'Testing round-trip.',
+        links,
+      });
+
+      const executor = createMockExecutor({
+        getTicket: async () => ticketData,
+      });
+
+      const result = await jiraImport(
+        { key: 'PROJ-ROUNDTRIP', repoPath: repoDir, epicOverride: 'EPIC-001' },
+        executor,
+        db,
+      );
+
+      // Read the file back and parse with gray-matter
+      const content = fs.readFileSync(result.file_path, 'utf-8');
+      const parsed = matter(content);
+
+      // Verify round-trip: the parsed links match the original input
+      expect(parsed.data.jira_links).toEqual(links);
+
+      // Also verify the file was synced into the DB by re-syncing and reading back
+      syncRepo({ repoPath: repoDir, db, config: testConfig });
+
+      // Read the file again after sync to make sure it's still valid
+      const contentAfterSync = fs.readFileSync(result.file_path, 'utf-8');
+      const parsedAfterSync = matter(contentAfterSync);
+      expect(parsedAfterSync.data.jira_links).toEqual(links);
+    });
+  });
+
   // ─── Error cases ───────────────────────────────────────────────────────
 
   describe('error cases', () => {

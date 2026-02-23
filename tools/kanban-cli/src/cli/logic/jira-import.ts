@@ -1,5 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { stringify as yamlStringify } from 'yaml';
 import { loadConfig } from '../../config/loader.js';
 import { createJiraExecutor } from '../../jira/executor.js';
 import type { JiraExecutor } from '../../jira/types.js';
@@ -246,6 +247,13 @@ ${description}
       const filePath = path.join(repoPath, 'epics', parentEpicId, `${ticketId}.md`);
 
       const escapedTitle = yamlEscapeDoubleQuoted(jiraData.summary);
+      const jiraLinks = jiraData.links ?? [];
+      let jiraLinksBlock = '';
+      if (jiraLinks.length > 0) {
+        const serialized = yamlStringify(jiraLinks).trimEnd();
+        const indented = serialized.split('\n').map((line: string) => '  ' + line).join('\n');
+        jiraLinksBlock = `\njira_links:\n${indented}`;
+      }
       const content = `---
 id: ${ticketId}
 epic: ${parentEpicId}
@@ -254,7 +262,7 @@ status: Not Started
 jira_key: ${key}
 source: jira
 stages: []
-depends_on: []
+depends_on: []${jiraLinksBlock}
 ---
 ${description}
 `;
