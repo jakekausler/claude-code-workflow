@@ -40,6 +40,61 @@ Before implementation begins, check if `worktree_branch` is set in the stage's Y
 
 > **Note**: Full worktree lifecycle management (cleanup, port isolation, `$WORKTREE_INDEX` assignment) ships in Stage 6. For now, create the worktree if it doesn't exist and work within it.
 
+## Parent Branch Merge
+
+After worktree setup, check if the stage has parent dependencies whose MR branches need to be merged into the working branch.
+
+**When to run:** Only if `pending_merge_parents` exists and is non-empty in the stage's YAML frontmatter.
+
+**If `pending_merge_parents` is empty or not present:** Skip this section entirely.
+
+### Merge Flow
+
+1. Read `pending_merge_parents` from stage YAML frontmatter. Each entry has:
+   - `stage_id`: Parent stage ID
+   - `branch`: Parent's MR branch name
+   - `pr_url`: Parent's PR/MR URL
+   - `pr_number`: Parent's PR/MR number
+
+2. For each parent in `pending_merge_parents`:
+   ```bash
+   git fetch origin <parent.branch>
+   git merge origin/<parent.branch> --no-edit
+   ```
+   - If merge succeeds: continue to next parent
+   - If merge conflicts: invoke `resolve-merge-conflicts` skill, then continue
+   - If `origin/<parent.branch>` does not exist after fetch: skip this parent and log a warning — the parent branch may have been merged and deleted, or the frontmatter entry may be stale
+
+3. After ALL parents are merged, run full project verification:
+   ```bash
+   npm run verify  # or project equivalent
+   ```
+
+4. If verification fails:
+   a. Analyze failures using full codebase context plus parent and child stage design docs
+   b. Fix issues (type errors, test failures, lint issues from merge integration)
+   c. Re-run verification
+   d. Repeat until passing or until the direction is genuinely ambiguous
+      (e.g., two patterns with opposite intentions, no clear path from context)
+   e. Only escalate to user via AskUserQuestion if the correct direction cannot be determined from context
+
+5. Proceed to planning phase with a clean, verified, merged baseline.
+
+### Key Rules
+
+- Fetch targets the specific parent branch (`git fetch origin <parent.branch>`) — avoids fetching all refs while ensuring the parent branch is up to date
+- `--no-edit` avoids interactive commit message editing
+- If a parent branch is already fully merged (git reports "Already up to date"), this is expected and not an error — continue to the next parent
+- `resolve-merge-conflicts` runs in the same session (not a subagent) — it needs full context
+- Verification runs once after ALL parents are merged, not after each individual merge
+- The session exhausts its own problem-solving ability before escalating to the user
+
+### What This Step Does NOT Do
+
+- Does not set `is_draft` or `mr_target_branch` — that's `phase-finalize`'s responsibility
+- Does not modify `pending_merge_parents` — that's the sync engine's responsibility
+- Does not push anything — Build phase works locally in the worktree
+
 ## Spec Handoff Protocol (CRITICAL)
 
 **Problem:** Planner output doesn't automatically transfer to implementer subagents. Main agent context is NOT inherited by subagents.
@@ -187,6 +242,14 @@ This is a sunk cost situation. The time spent is gone whether you keep or redo t
      → Ensure git worktree exists (create if needed)
      → Switch to worktree directory for all subsequent work
 
+2.5. [CONDITIONAL: Parent Branch Merge]
+   IF pending_merge_parents is non-empty in stage YAML frontmatter:
+     → For each parent: git fetch origin <parent.branch> && git merge origin/<parent.branch> --no-edit
+     → If conflicts: invoke resolve-merge-conflicts skill
+     → After all parents merged: run full npm run verify (or project equivalent)
+     → If verify fails: analyze and fix using full context; only escalate if genuinely ambiguous
+     → Result: clean, verified, merged baseline before planning begins
+
 3. [CONDITIONAL: Planning]
    IF complex multi-file feature OR architectural change:
      → Delegate to planner (Opus) for detailed implementation spec
@@ -302,6 +365,7 @@ All stage metadata is read from YAML frontmatter in the stage file (`STAGE-XXX-Y
 - `refinement_type`: List of types (frontend, backend, cli, database, infrastructure, custom)
 - `depends_on`: Dependencies
 - `worktree_branch`: Git worktree branch name
+- `pending_merge_parents`: List of parent stages whose MR branches must be merged before build
 
 File paths follow the three-level hierarchy:
 ```
@@ -314,6 +378,7 @@ Before completing Build phase, verify:
 
 - [ ] All sibling files read for context (design, user-design-feedback notes)
 - [ ] Worktree checked out (if `worktree_branch` is set)
+- [ ] Parent branches merged (if `pending_merge_parents` is non-empty) and verification passed
 - [ ] Implementation spec created (planner OR planner-lite OR direct for trivial)
 - [ ] Code written via scribe
 - [ ] Seed data added (if agreed in Design)
