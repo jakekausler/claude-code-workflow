@@ -76,7 +76,41 @@ This skill handles converting tickets that have no stages (`stages: []`) into ti
    ============================================================
    ```
 
-### Step 2: Brainstorm Stage Breakdown
+### Step 2: Enrich Ticket Context
+
+If the ticket was imported from Jira, enrich it with the latest Jira data, linked Confluence pages, and related issues before brainstorming.
+
+1. **Check if enrichment applies**: Look at the frontmatter extracted in Step 1.
+   - If `source: jira` AND `jira_key` is present, proceed with enrichment.
+   - If `source: local` or `jira_key` is missing/null, **skip this step entirely** and proceed to Step 3.
+
+2. **Run the enrich command**:
+
+   ```bash
+   npx tsx tools/kanban-cli/src/cli/index.ts enrich <ticket-path>
+   ```
+
+   Where `<ticket-path>` is the full path to the ticket markdown file found in Step 1. This fetches:
+   - Fresh Jira ticket data (latest title, description, status, comments)
+   - Linked Confluence pages
+   - Linked Jira issues
+   - Linked attachments (metadata)
+   - External URLs
+
+3. **Read the enrichment file**: After the enrich command completes, read the generated enrichment file located alongside the ticket file:
+
+   ```
+   epics/EPIC-XXX-name/TICKET-XXX-YYY-name/<ticket-id>-enrichment.md
+   ```
+
+   This file contains structured context from Jira and linked sources that will improve the quality of the stage breakdown.
+
+4. **Handle enrichment failures gracefully**:
+   - If the enrich command fails entirely, log the error and continue to Step 3 with whatever context is already available from Step 1.
+   - If enrichment produces partial results (some links could not be fetched), note which links failed but use whatever content was retrieved.
+   - Enrichment is **additive, never blocking** — the conversion must proceed even if enrichment completely fails.
+
+### Step 3: Brainstorm Stage Breakdown
 
 Invoke the brainstorming process to explore what stages are needed for this ticket.
 
@@ -85,6 +119,7 @@ Invoke the brainstorming process to explore what stages are needed for this tick
 1. **Provide brainstormer with context**:
    - Ticket description and requirements
    - Parent epic context
+   - Enrichment file content (if Step 2 produced one — includes Jira comments, linked Confluence pages, related issues, and attachments)
    - Existing codebase patterns (if relevant)
    - Any Jira acceptance criteria
 
@@ -136,7 +171,7 @@ Invoke the brainstorming process to explore what stages are needed for this tick
 
 4. **If user wants modifications**: Adjust the breakdown as requested and re-present until approved.
 
-### Step 3: Create Stage Files
+### Step 4: Create Stage Files
 
 Once the user approves a stage breakdown, create the stage files using the `ticket-stage-setup` patterns.
 
@@ -221,7 +256,7 @@ For each approved stage:
    mkdir -p "epics/EPIC-XXX-name/TICKET-XXX-YYY-name/changelog"
    ```
 
-### Step 4: Update Ticket Frontmatter
+### Step 5: Update Ticket Frontmatter
 
 Update the ticket file's YAML frontmatter to list the new stages:
 
@@ -243,7 +278,7 @@ depends_on: [preserved]
 
 The `stages` field changes from `[]` to the list of newly created stage IDs.
 
-### Step 5: Set Dependencies
+### Step 6: Set Dependencies
 
 Set dependencies between stages as identified during brainstorming:
 
@@ -277,7 +312,7 @@ Set dependencies between stages as identified during brainstorming:
    Confirm? (Y/N)
    ```
 
-### Step 6: Validate and Sync
+### Step 7: Validate and Sync
 
 1. **Run validation** to confirm integrity:
 
@@ -324,8 +359,8 @@ Set dependencies between stages as identified during brainstorming:
 
 This skill has TWO mandatory approval gates:
 
-1. **Stage breakdown approval** (Step 2): User selects from brainstormer options or requests modifications
-2. **Dependency approval** (Step 5): User confirms stage dependencies
+1. **Stage breakdown approval** (Step 3): User selects from brainstormer options or requests modifications
+2. **Dependency approval** (Step 6): User confirms stage dependencies
 
 Do NOT create stage files until the breakdown is approved.
 Do NOT finalize until dependencies are confirmed.
