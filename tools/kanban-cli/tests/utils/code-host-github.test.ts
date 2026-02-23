@@ -193,5 +193,12 @@ describe('createGitHubAdapter', () => {
       });
       expect(adapter.getBranchHead('feature/auth')).toBe('');
     });
+
+    it('returns empty string for malformed JSON response', () => {
+      const adapter = createGitHubAdapter({
+        execFn: () => 'not valid json',
+      });
+      expect(adapter.getBranchHead('feature/auth')).toBe('');
+    });
   });
 });
