@@ -129,8 +129,8 @@ export class MockState {
     if (updates.body !== undefined) pr.body = updates.body;
     if (updates.base !== undefined) pr.base = updates.base;
     if (updates.draft !== undefined) pr.draft = updates.draft;
-    if (updates.assignees !== undefined) pr.assignees = updates.assignees;
-    if (updates.reviewers !== undefined) pr.reviewers = updates.reviewers;
+    if (updates.assignees !== undefined) pr.assignees = [...updates.assignees];
+    if (updates.reviewers !== undefined) pr.reviewers = [...updates.reviewers];
     return true;
   }
 

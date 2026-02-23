@@ -248,6 +248,13 @@ describe('MockState', () => {
       expect(status.hasUnresolvedComments).toBe(true);
     });
 
+    it('reflects closed state after closePr', () => {
+      const { number } = state.createPr({ branch: 'feat', title: 'T', body: 'B' });
+      state.closePr(number);
+      const status = state.getPrStatus(number)!;
+      expect(status.state).toBe('closed');
+    });
+
     it('returns null for nonexistent PR', () => {
       expect(state.getPrStatus(9999)).toBeNull();
     });
@@ -355,6 +362,11 @@ describe('MockState', () => {
       state.addPrComment(number, { body: 'PR comment' });
       const ticketComment = state.addTicketComment('PROJ-101', { body: 'Ticket comment' });
       expect(ticketComment!.id).toBe('comment-2');
+    });
+
+    it('defaults author to anonymous', () => {
+      const comment = state.addTicketComment('PROJ-101', { body: 'no author given' });
+      expect(comment!.author).toBe('anonymous');
     });
 
     it('returns null for nonexistent ticket', () => {
