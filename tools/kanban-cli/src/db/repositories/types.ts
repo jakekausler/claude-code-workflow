@@ -70,3 +70,10 @@ export interface SummaryRow {
   created_at: string;
   repo_id: number;
 }
+
+export interface MrCommentTrackingRow {
+  stage_id: string;
+  last_poll_timestamp: string;
+  last_known_unresolved_count: number;
+  repo_id: number;
+}

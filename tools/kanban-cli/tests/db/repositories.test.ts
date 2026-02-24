@@ -10,6 +10,7 @@ import {
   StageRepository,
   DependencyRepository,
   SummaryRepository,
+  CommentTrackingRepository,
 } from '../../src/db/repositories/index.js';
 import type {
   EpicRow,
@@ -17,6 +18,7 @@ import type {
   StageRow,
   DependencyRow,
   SummaryRow,
+  MrCommentTrackingRow,
 } from '../../src/db/repositories/index.js';
 
 describe('Repositories', () => {
@@ -1070,6 +1072,132 @@ describe('Repositories', () => {
       expect(stageSummary!.summary).toBe('Stage summary.');
       expect(ticketSummary!.summary).toBe('Ticket summary.');
       expect(summaries.listByRepo(repoId)).toHaveLength(2);
+    });
+  });
+
+  // ─── CommentTrackingRepository ──────────────────────────────────
+
+  describe('CommentTrackingRepository', () => {
+    function setupCommentTrackingPrereqs() {
+      const repos = new RepoRepository(db);
+      const tracking = new CommentTrackingRepository(db);
+      const repoId = insertRepo(repos);
+      return { repos, tracking, repoId };
+    }
+
+    it('getCommentTracking returns null for unknown stage', () => {
+      const { tracking } = setupCommentTrackingPrereqs();
+      expect(tracking.getCommentTracking('nonexistent-stage')).toBeNull();
+    });
+
+    it('upsertCommentTracking creates a new row', () => {
+      const { tracking, repoId } = setupCommentTrackingPrereqs();
+
+      tracking.upsertCommentTracking({
+        stageId: 'stage-1',
+        timestamp: '2026-02-24T10:00:00Z',
+        count: 3,
+        repoId,
+      });
+
+      const found = tracking.getCommentTracking('stage-1');
+      expect(found).not.toBeNull();
+      expect(found!.stage_id).toBe('stage-1');
+      expect(found!.last_poll_timestamp).toBe('2026-02-24T10:00:00Z');
+      expect(found!.last_known_unresolved_count).toBe(3);
+      expect(found!.repo_id).toBe(repoId);
+    });
+
+    it('upsertCommentTracking updates an existing row', () => {
+      const { tracking, repoId } = setupCommentTrackingPrereqs();
+
+      tracking.upsertCommentTracking({
+        stageId: 'stage-1',
+        timestamp: '2026-02-24T10:00:00Z',
+        count: 3,
+        repoId,
+      });
+      tracking.upsertCommentTracking({
+        stageId: 'stage-1',
+        timestamp: '2026-02-24T11:00:00Z',
+        count: 1,
+        repoId,
+      });
+
+      const found = tracking.getCommentTracking('stage-1');
+      expect(found).not.toBeNull();
+      expect(found!.last_poll_timestamp).toBe('2026-02-24T11:00:00Z');
+      expect(found!.last_known_unresolved_count).toBe(1);
+    });
+
+    it('getCommentTracking returns stored data across multiple inserts', () => {
+      const { tracking, repoId } = setupCommentTrackingPrereqs();
+
+      tracking.upsertCommentTracking({
+        stageId: 'stage-abc',
+        timestamp: '2026-01-15T08:30:00Z',
+        count: 5,
+        repoId,
+      });
+      tracking.upsertCommentTracking({
+        stageId: 'stage-xyz',
+        timestamp: '2026-03-01T16:45:00Z',
+        count: 12,
+        repoId,
+      });
+
+      const first = tracking.getCommentTracking('stage-abc');
+      const second = tracking.getCommentTracking('stage-xyz');
+      expect(first).not.toBeNull();
+      expect(second).not.toBeNull();
+      // Verify each row retains its own distinct values
+      expect(first!.last_poll_timestamp).toBe('2026-01-15T08:30:00Z');
+      expect(first!.last_known_unresolved_count).toBe(5);
+      expect(second!.last_poll_timestamp).toBe('2026-03-01T16:45:00Z');
+      expect(second!.last_known_unresolved_count).toBe(12);
+      // Confirm stage_id and repo_id are correct on each
+      expect(first!.stage_id).toBe('stage-abc');
+      expect(second!.stage_id).toBe('stage-xyz');
+      expect(first!.repo_id).toBe(repoId);
+      expect(second!.repo_id).toBe(repoId);
+    });
+
+    it('upsertCommentTracking with zero count stores correctly', () => {
+      const { tracking, repoId } = setupCommentTrackingPrereqs();
+
+      tracking.upsertCommentTracking({
+        stageId: 'stage-zero',
+        timestamp: '2026-02-24T12:00:00Z',
+        count: 0,
+        repoId,
+      });
+
+      const found = tracking.getCommentTracking('stage-zero');
+      expect(found).not.toBeNull();
+      expect(found!.last_known_unresolved_count).toBe(0);
+    });
+
+    it('tracks multiple stages independently', () => {
+      const { tracking, repoId } = setupCommentTrackingPrereqs();
+
+      tracking.upsertCommentTracking({
+        stageId: 'stage-a',
+        timestamp: '2026-02-24T10:00:00Z',
+        count: 2,
+        repoId,
+      });
+      tracking.upsertCommentTracking({
+        stageId: 'stage-b',
+        timestamp: '2026-02-24T11:00:00Z',
+        count: 7,
+        repoId,
+      });
+
+      const foundA = tracking.getCommentTracking('stage-a');
+      const foundB = tracking.getCommentTracking('stage-b');
+
+      expect(foundA!.last_known_unresolved_count).toBe(2);
+      expect(foundB!.last_known_unresolved_count).toBe(7);
     });
   });
 });

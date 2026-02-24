@@ -99,6 +99,14 @@ CREATE TABLE IF NOT EXISTS parent_branch_tracking (
   UNIQUE(child_stage_id, parent_stage_id)
 )`;
 
+export const CREATE_MR_COMMENT_TRACKING_TABLE = `
+CREATE TABLE IF NOT EXISTS mr_comment_tracking (
+  stage_id TEXT PRIMARY KEY,
+  last_poll_timestamp TEXT NOT NULL,
+  last_known_unresolved_count INTEGER DEFAULT 0,
+  repo_id INTEGER REFERENCES repos(id)
+)`;
+
 export const CREATE_EPICS_JIRA_KEY_INDEX = `CREATE INDEX IF NOT EXISTS idx_epics_jira_key ON epics(jira_key, repo_id)`;
 export const CREATE_TICKETS_JIRA_KEY_INDEX = `CREATE INDEX IF NOT EXISTS idx_tickets_jira_key ON tickets(jira_key, repo_id)`;
 export const CREATE_PARENT_TRACKING_CHILD_INDEX = `CREATE INDEX IF NOT EXISTS idx_parent_tracking_child ON parent_branch_tracking(child_stage_id)`;
@@ -123,6 +131,7 @@ export const ALL_CREATE_STATEMENTS = [
   CREATE_DEPENDENCIES_TABLE,
   CREATE_SUMMARIES_TABLE,
   CREATE_PARENT_BRANCH_TRACKING_TABLE,
+  CREATE_MR_COMMENT_TRACKING_TABLE,
   CREATE_EPICS_JIRA_KEY_INDEX,
   CREATE_TICKETS_JIRA_KEY_INDEX,
   CREATE_PARENT_TRACKING_CHILD_INDEX,

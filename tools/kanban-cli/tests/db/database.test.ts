@@ -176,6 +176,27 @@ describe('KanbanDatabase', () => {
     }
   });
 
+  it('creates the mr_comment_tracking table with correct columns', () => {
+    const db = new KanbanDatabase(dbPath);
+    try {
+      const tables = db.raw()
+        .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='mr_comment_tracking'")
+        .all();
+      expect(tables).toHaveLength(1);
+
+      const columns = db.raw()
+        .prepare("PRAGMA table_info(mr_comment_tracking)")
+        .all() as Array<{ name: string }>;
+      const colNames = columns.map((c) => c.name);
+      expect(colNames).toContain('stage_id');
+      expect(colNames).toContain('last_poll_timestamp');
+      expect(colNames).toContain('last_known_unresolved_count');
+      expect(colNames).toContain('repo_id');
+    } finally {
+      db.close();
+    }
+  });
+
   it('creates indexes on parent_branch_tracking', () => {
     const db = new KanbanDatabase(dbPath);
     try {
