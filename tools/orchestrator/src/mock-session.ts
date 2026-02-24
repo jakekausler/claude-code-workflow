@@ -1,6 +1,7 @@
 import type { SessionExecutor, SpawnOptions, SessionResult, ActiveSession, SessionLoggerLike } from './session.js';
 import type { LockerDeps } from './locking.js';
 import type { PipelineConfig } from 'kanban-cli';
+import { DONE_TARGET, COMPLETE_STATUS } from 'kanban-cli';
 
 /**
  * Injectable dependencies for the mock session executor.
@@ -49,8 +50,11 @@ export function createMockSessionExecutor(deps: MockSessionDeps): SessionExecuto
       }
 
       // 3. If phase has transitions_to, pick the first one
+      //    Map the reserved "Done" target to the canonical "Complete" frontmatter status,
+      //    matching the behavior of the real transition engine.
       if (phase.transitions_to.length > 0) {
-        const newStatus = phase.transitions_to[0];
+        const rawTarget = phase.transitions_to[0];
+        const newStatus = rawTarget === DONE_TARGET ? COMPLETE_STATUS : rawTarget;
         data.status = newStatus;
         await deps.writeFrontmatter(options.stageFilePath, data, content);
         sessionLogger.write(`[MOCK] Advancing stage ${options.stageId} from ${currentStatus} to ${newStatus}\n`);
