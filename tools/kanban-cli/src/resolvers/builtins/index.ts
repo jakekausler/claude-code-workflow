@@ -1,6 +1,6 @@
 import type { ResolverRegistry } from '../registry.js';
 import { prStatusResolver } from './pr-status.js';
-import { testingRouterResolver } from './stage-router.js';
+import { testingRouterResolver } from './testing-router.js';
 
 /**
  * Register all built-in resolvers with the given registry.

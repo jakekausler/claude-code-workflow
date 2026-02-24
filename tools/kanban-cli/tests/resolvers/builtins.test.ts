@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { prStatusResolver } from '../../src/resolvers/builtins/pr-status.js';
-import { testingRouterResolver } from '../../src/resolvers/builtins/stage-router.js';
+import { testingRouterResolver } from '../../src/resolvers/builtins/testing-router.js';
 import { registerBuiltinResolvers } from '../../src/resolvers/builtins/index.js';
 import { ResolverRegistry } from '../../src/resolvers/registry.js';
 import type { ResolverStageInput, ResolverContext } from '../../src/resolvers/types.js';

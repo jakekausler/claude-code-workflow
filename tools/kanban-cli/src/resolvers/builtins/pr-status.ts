@@ -13,6 +13,7 @@ import type { ResolverFn } from '../types.js';
  * Requires `context.codeHost` to be injected by the orchestration loop.
  * If no code host adapter is available or the stage has no `pr_url`, returns null.
  */
+// async: prepares for getPRStatus becoming async when MCP tools replace CLI calls
 export const prStatusResolver: ResolverFn = async (stage, context) => {
   if (!context.codeHost || !stage.pr_url) {
     return null;

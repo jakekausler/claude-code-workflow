@@ -33,7 +33,7 @@ export type { PRStatus, CodeHostAdapter } from './resolvers/types.js';
 export { ResolverRegistry } from './resolvers/registry.js';
 export { registerBuiltinResolvers } from './resolvers/builtins/index.js';
 export { prStatusResolver } from './resolvers/builtins/pr-status.js';
-export { testingRouterResolver } from './resolvers/builtins/stage-router.js';
+export { testingRouterResolver } from './resolvers/builtins/testing-router.js';
 
 // Validators
 export { validateConfig } from './validators/config-validator.js';
