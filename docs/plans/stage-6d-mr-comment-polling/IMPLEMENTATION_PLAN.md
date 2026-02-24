@@ -45,7 +45,7 @@
 - New test: missing cron section is valid (optional)
 - New test: `validate-pipeline` accepts cron section
 
-**Status**: Not Started
+**Status**: Complete
 
 ---
 
@@ -74,7 +74,7 @@
 - Overlapping prevention: slow job skips next interval
 - `isRunning()` returns correct state
 
-**Status**: Not Started
+**Status**: Complete
 
 ---
 
@@ -99,7 +99,7 @@
 - Get returns null for unknown stage
 - Get returns stored data for known stage
 
-**Status**: Not Started
+**Status**: Complete
 
 ---
 
@@ -134,7 +134,7 @@
 - First poll (no tracking row) → creates tracking, no transition on first observation
 - Error fetching PR status → logged, continues to next stage
 
-**Status**: Not Started
+**Status**: Complete
 
 ---
 
@@ -162,7 +162,7 @@
 - Count of 0 when no unresolved threads
 - Count matches number of unresolved threads
 
-**Status**: Not Started
+**Status**: Complete
 
 ---
 
@@ -189,7 +189,7 @@
 - Multiple parents for one child → each checked independently
 - Null code host → skips all checks, logs warning
 
-**Status**: Not Started
+**Status**: Complete
 
 ---
 
@@ -218,7 +218,7 @@
 - Spawn failure → lock released, error logged
 - Session executor receives correct skill name and stage context
 
-**Status**: Not Started
+**Status**: Complete
 
 ---
 
@@ -251,7 +251,7 @@
 - markPRReady called only when promoting
 - Frontmatter updated correctly after promotion
 
-**Status**: Not Started
+**Status**: Complete
 
 ---
 
@@ -281,7 +281,7 @@
 - Cron disabled in config → scheduler created but no jobs execute
 - MR poll job calls poller and chain manager
 
-**Status**: Not Started
+**Status**: Complete
 
 ---
 
@@ -302,7 +302,7 @@
 
 **Tests**: None (documentation only)
 
-**Status**: Not Started
+**Status**: Complete
 
 ---
 
@@ -324,7 +324,7 @@
 - All tests use DI pattern with `makeDeps()` factories
 - `npm run verify` passes in orchestrator
 
-**Status**: Not Started
+**Status**: Complete
 
 ---
 
@@ -345,7 +345,7 @@
 - Integration helpers from `tests/integration/helpers.ts` reused where possible
 - `npm run verify` passes in orchestrator
 
-**Status**: Not Started
+**Status**: Complete
 
 ---
 
@@ -365,7 +365,7 @@
 - Test: rebase_conflict flag prevents repeated spawn attempts
 - `npm run verify` passes in orchestrator
 
-**Status**: Not Started
+**Status**: Complete
 
 ---
 
@@ -387,4 +387,4 @@
 - Test: Stage removed between query and check → handled gracefully
 - `npm run verify` passes in orchestrator
 
-**Status**: Not Started
+**Status**: Complete
