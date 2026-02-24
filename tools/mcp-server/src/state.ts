@@ -1,3 +1,5 @@
+import type { SlackNotifyArgs } from './tools/slack.js';
+
 export interface MockComment {
   id: string;
   body: string;
@@ -39,17 +41,7 @@ export interface MockPage {
   url: string;
 }
 
-export interface SlackNotification {
-  message: string;
-  stage?: string;
-  title?: string;
-  ticket?: string;
-  ticket_title?: string;
-  epic?: string;
-  epic_title?: string;
-  url?: string;
-  timestamp: string;
-}
+export type SlackNotification = SlackNotifyArgs & { timestamp: string };
 
 export interface MockSeedData {
   tickets: Record<string, Omit<MockTicket, 'comments'>>;
