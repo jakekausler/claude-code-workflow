@@ -118,6 +118,9 @@ function buildCronScheduler(
   const { exitGateRunner, readFrontmatter, writeFrontmatter, logger } = shared;
 
   // Build MR comment poller (injectable or default no-op deps)
+  if (!deps.mrCommentPoller) {
+    logger.info('MR comment poller using no-op defaults — wire real DB queries for production use');
+  }
   const poller: MRCommentPoller = deps.mrCommentPoller ?? createMRCommentPoller({
     queryStagesInPRCreated: async () => [],
     getCommentTracking: () => null,
@@ -130,6 +133,9 @@ function buildCronScheduler(
   });
 
   // Build MR chain manager (injectable or default no-op deps)
+  if (!deps.mrChainManager) {
+    logger.info('MR chain manager using no-op defaults — wire real DB queries for production use');
+  }
   const chainManager: MRChainManager = deps.mrChainManager ?? createMRChainManager({
     getActiveTrackingRows: async () => [],
     updateTrackingRow: async () => {},

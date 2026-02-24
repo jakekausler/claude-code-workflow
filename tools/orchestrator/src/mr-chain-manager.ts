@@ -100,6 +100,9 @@ export interface MRChainManagerDeps {
 
   /** Default branch name for retargeting when all parents have merged. Defaults to 'main'. */
   defaultBranch: string;
+
+  /** Clock function for generating timestamps. Defaults to `() => Date.now()`. */
+  now: () => number;
 }
 
 /**
@@ -110,7 +113,7 @@ export interface MRChainManager {
   checkParentChains(repoPath: string): Promise<ChainCheckResult[]>;
 }
 
-const defaultDeps: Pick<MRChainManagerDeps, 'logger' | 'locker' | 'sessionExecutor' | 'readFrontmatter' | 'resolveStageFilePath' | 'createSessionLogger' | 'model' | 'workflowEnv' | 'getTrackingRowsForChild' | 'writeFrontmatter' | 'defaultBranch'> = {
+const defaultDeps: Pick<MRChainManagerDeps, 'logger' | 'locker' | 'sessionExecutor' | 'readFrontmatter' | 'resolveStageFilePath' | 'createSessionLogger' | 'model' | 'workflowEnv' | 'getTrackingRowsForChild' | 'writeFrontmatter' | 'defaultBranch' | 'now'> = {
   logger: {
     info: () => {},
     warn: () => {},
@@ -126,6 +129,7 @@ const defaultDeps: Pick<MRChainManagerDeps, 'logger' | 'locker' | 'sessionExecut
   getTrackingRowsForChild: null,
   writeFrontmatter: null,
   defaultBranch: 'main',
+  now: () => Date.now(),
 };
 
 /**
@@ -157,6 +161,7 @@ export function createMRChainManager(
     getTrackingRowsForChild,
     writeFrontmatter,
     defaultBranch,
+    now,
   } = { ...defaultDeps, ...deps };
 
   return {
@@ -257,7 +262,7 @@ export function createMRChainManager(
         stageId: childStageId,
         stageFilePath,
         skillName: 'rebase-child-mr',
-        worktreePath: repoPath, // TODO(6D): Rebase sessions create their own worktree; passing repo root as placeholder
+        worktreePath: repoPath, // TODO: Rebase sessions need worktree allocation. Currently passing repo root as placeholder — resolve when rebase-child-mr skill is fully implemented.
         worktreeIndex: -1, // -1 = no worktree slot assigned (convention shared with resolvers.ts and mr-comment-poller.ts)
         model,
         workflowEnv,
@@ -453,7 +458,7 @@ export function createMRChainManager(
   }
 
   async function checkSingleParent(row: ParentBranchTrackingRow, host: CodeHostAdapter, repoPath: string): Promise<ChainCheckResult> {
-    const now = new Date().toISOString();
+    const timestamp = new Date(now()).toISOString();
 
     // Check if parent PR is merged
     if (row.parent_pr_url) {
@@ -486,7 +491,7 @@ export function createMRChainManager(
         });
         await updateTrackingRow(row.id, {
           is_merged: 1,
-          last_checked: now,
+          last_checked: timestamp,
         });
 
         // Attempt to spawn rebase session (only if spawn deps are configured)
@@ -542,7 +547,7 @@ export function createMRChainManager(
       });
       await updateTrackingRow(row.id, {
         last_known_head: currentHead,
-        last_checked: now,
+        last_checked: timestamp,
       });
 
       // Attempt to spawn rebase session (only if spawn deps are configured)
@@ -561,7 +566,7 @@ export function createMRChainManager(
     if (currentHead !== '' && row.last_known_head === null) {
       await updateTrackingRow(row.id, {
         last_known_head: currentHead,
-        last_checked: now,
+        last_checked: timestamp,
       });
     }
 

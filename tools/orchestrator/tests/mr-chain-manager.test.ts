@@ -96,6 +96,7 @@ function makeDeps(overrides: Partial<MRChainManagerDeps> = {}): MRChainManagerDe
     createSessionLogger: null,
     model: 'sonnet',
     workflowEnv: {},
+    now: () => 1708732800000, // 2024-02-24T00:00:00.000Z
     ...overrides,
   };
 }
@@ -131,6 +132,7 @@ function makeSpawnDeps(overrides: Partial<MRChainManagerDeps> = {}): MRChainMana
     createSessionLogger: vi.fn((): SessionLoggerLike => ({ write: vi.fn() })),
     model: 'sonnet',
     workflowEnv: { REPO_PATH: '/repo' },
+    now: () => 1708732800000, // 2024-02-24T00:00:00.000Z
     ...overrides,
   };
 }
@@ -905,6 +907,7 @@ describe('createMRChainManager', () => {
           createSessionLogger: null,
           model: 'sonnet' as const,
           workflowEnv: {},
+          now: () => 1708732800000, // 2024-02-24T00:00:00.000Z
           getTrackingRowsForChild: vi.fn(async () => []),
           writeFrontmatter: writeFm,
           defaultBranch: 'main',
