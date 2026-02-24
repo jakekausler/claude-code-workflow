@@ -41,7 +41,10 @@ export function createKanbanMcpServer(): McpServer {
   registerPrTools(server, { mockState });
   registerEnrichTools(server, { mockState });
   registerConfluenceTools(server, { mockState });
-  registerSlackTools(server, {});
+  registerSlackTools(server, {
+    mockState,
+    webhookUrl: process.env.WORKFLOW_SLACK_WEBHOOK,
+  });
 
   // Mock admin tools only in mock mode
   if (mockState) {
