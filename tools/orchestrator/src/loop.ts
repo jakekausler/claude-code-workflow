@@ -12,6 +12,12 @@ import { createExitGateRunner } from './exit-gates.js';
 import type { ResolverRunner } from './resolvers.js';
 import { createResolverRunner } from './resolvers.js';
 import { ResolverRegistry, registerBuiltinResolvers } from 'kanban-cli';
+import type { CronScheduler, CronJob } from './cron.js';
+import { createCronScheduler } from './cron.js';
+import type { MRCommentPoller } from './mr-comment-poller.js';
+import { createMRCommentPoller } from './mr-comment-poller.js';
+import type { MRChainManager } from './mr-chain-manager.js';
+import { createMRChainManager } from './mr-chain-manager.js';
 
 export interface Orchestrator {
   start(): Promise<void>;
@@ -31,6 +37,11 @@ export interface OrchestratorDeps {
   resolverRunner?: ResolverRunner;
   readFrontmatter?: (filePath: string) => Promise<FrontmatterData>;
   writeFrontmatter?: (filePath: string, data: Record<string, unknown>, content: string) => Promise<void>;
+
+  // Cron-related deps (injectable for testing; omit to use defaults/no-ops)
+  cronScheduler?: CronScheduler;
+  mrCommentPoller?: MRCommentPoller;
+  mrChainManager?: MRChainManager;
 }
 
 /**
@@ -87,6 +98,85 @@ function deferred(): { promise: Promise<void>; resolve: () => void } {
   return { promise, resolve: resolveFn! };
 }
 
+/**
+ * Build a CronScheduler from pipeline config cron section.
+ * Returns null if cron config is undefined (cron disabled).
+ */
+function buildCronScheduler(
+  config: OrchestratorConfig,
+  deps: OrchestratorDeps,
+  shared: {
+    exitGateRunner: ExitGateRunner;
+    readFrontmatter: (filePath: string) => Promise<FrontmatterData>;
+    writeFrontmatter: (filePath: string, data: Record<string, unknown>, content: string) => Promise<void>;
+    logger: Logger;
+  },
+): CronScheduler | null {
+  const cronConfig = config.pipelineConfig.cron;
+  if (!cronConfig) return null;
+
+  const { exitGateRunner, readFrontmatter, writeFrontmatter, logger } = shared;
+
+  // Build MR comment poller (injectable or default no-op deps)
+  const poller: MRCommentPoller = deps.mrCommentPoller ?? createMRCommentPoller({
+    queryStagesInPRCreated: async () => [],
+    getCommentTracking: () => null,
+    upsertCommentTracking: () => {},
+    exitGateRunner,
+    readFrontmatter,
+    writeFrontmatter,
+    codeHost: null,
+    logger,
+  });
+
+  // Build MR chain manager (injectable or default no-op deps)
+  const chainManager: MRChainManager = deps.mrChainManager ?? createMRChainManager({
+    getActiveTrackingRows: async () => [],
+    updateTrackingRow: async () => {},
+    codeHost: null,
+    logger,
+    locker: deps.locker,
+    sessionExecutor: deps.sessionExecutor,
+    readFrontmatter,
+    writeFrontmatter,
+    resolveStageFilePath: null,
+    createSessionLogger: (stageId: string) => logger.createSessionLogger(stageId, config.logDir),
+    model: config.model,
+    workflowEnv: config.workflowEnv,
+  });
+
+  const jobs: CronJob[] = [];
+
+  // MR comment poll job
+  if (cronConfig.mr_comment_poll) {
+    const pollConfig = cronConfig.mr_comment_poll;
+    jobs.push({
+      name: 'mr-comment-poll',
+      enabled: pollConfig.enabled,
+      intervalMs: pollConfig.interval_seconds * 1000,
+      async execute(): Promise<void> {
+        await poller.poll(config.repoPath);
+        await chainManager.checkParentChains(config.repoPath);
+      },
+    });
+  }
+
+  // Insights threshold job (placeholder for 6E)
+  if (cronConfig.insights_threshold) {
+    const insightsConfig = cronConfig.insights_threshold;
+    jobs.push({
+      name: 'insights-threshold',
+      enabled: insightsConfig.enabled,
+      intervalMs: insightsConfig.interval_seconds * 1000,
+      async execute(): Promise<void> {
+        // No-op placeholder — 6E fills this in
+      },
+    });
+  }
+
+  return createCronScheduler(jobs, { logger });
+}
+
 export function createOrchestrator(config: OrchestratorConfig, deps: OrchestratorDeps): Orchestrator {
   const { discovery, locker, worktreeManager, sessionExecutor, logger } = deps;
   const activeWorkers = new Map<number, WorkerInfo>();
@@ -108,6 +198,14 @@ export function createOrchestrator(config: OrchestratorConfig, deps: Orchestrato
       logger,
     });
   })();
+
+  // Build cron scheduler (if cron config is present)
+  const cronScheduler: CronScheduler | null = deps.cronScheduler ?? buildCronScheduler(config, deps, {
+    exitGateRunner,
+    readFrontmatter,
+    writeFrontmatter,
+    logger,
+  });
 
   let running = false;
   let pendingSleep: { cancel: () => void } | undefined;
@@ -209,6 +307,11 @@ export function createOrchestrator(config: OrchestratorConfig, deps: Orchestrato
       if (running) throw new Error('Orchestrator already running');
       running = true;
       isolationValidated = undefined;
+
+      // Start cron scheduler if configured
+      if (cronScheduler) {
+        cronScheduler.start();
+      }
 
       while (running) {
         // Run resolver checks at top of each tick
@@ -349,6 +452,12 @@ export function createOrchestrator(config: OrchestratorConfig, deps: Orchestrato
 
     async stop(): Promise<void> {
       running = false;
+
+      // Stop cron scheduler if running
+      if (cronScheduler) {
+        cronScheduler.stop();
+      }
+
       if (pendingSleep) {
         pendingSleep.cancel();
         pendingSleep = undefined;
