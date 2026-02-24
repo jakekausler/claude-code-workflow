@@ -65,10 +65,15 @@ describe('Slack tools', () => {
       expect(data).toContain('mock mode');
     });
 
-    it('notification includes ISO timestamp', async () => {
-      await handleSlackNotify({ message: 'test' }, deps);
+    it('stores notification with deterministic timestamp', async () => {
+      const fixedDate = new Date('2024-01-15T10:30:00.000Z');
+      const result = await handleSlackNotify(
+        { message: 'test' },
+        { ...deps, now: () => fixedDate },
+      );
+      expect(result.isError).toBeUndefined();
       const notifications = mockState.getNotifications();
-      expect(notifications[0].timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+      expect(notifications[0].timestamp).toBe('2024-01-15T10:30:00.000Z');
     });
 
     it('with mockState: null returns success with skipped message', async () => {
@@ -205,6 +210,43 @@ describe('Slack tools', () => {
       const mrkdwn = payload.blocks[0].text.text;
       expect(mrkdwn).toContain('*Workflow Notification*');
       expect(mrkdwn).toContain('Just a message');
+    });
+
+    it('returns error when webhook URL uses http://', async () => {
+      const result = await handleSlackNotify(
+        { message: 'Hello' },
+        { ...deps, webhookUrl: 'http://hooks.slack.com/services/test' },
+      );
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toMatch(/https/i);
+    });
+
+    it('returns error when url field is not a valid URL', async () => {
+      const result = await handleSlackNotify(
+        { message: 'Hello', url: 'not-a-url' },
+        deps,
+      );
+      expect(result.isError).toBe(true);
+    });
+
+    it('renders url as a valid mrkdwn link', async () => {
+      mockFetch.mockResolvedValue({ ok: true, status: 200 });
+      await handleSlackNotify(
+        { message: 'test', url: 'https://example.com/pr/1' },
+        deps,
+      );
+      const [, options] = mockFetch.mock.calls[0];
+      const payload = JSON.parse(options.body);
+      const mrkdwn = payload.blocks[0].text.text;
+      expect(mrkdwn).toContain('<https://example.com/pr/1|View MR/PR>');
+    });
+
+    it('returns warning when fetch rejects with a non-Error value', async () => {
+      mockFetch.mockRejectedValue('raw string error');
+      const result = await handleSlackNotify({ message: 'test' }, deps);
+      expect(result.isError).toBeUndefined();
+      const data = parseResult(result);
+      expect(data).toContain('raw string error');
     });
 
     it('POSTs to the correct webhook URL with correct headers', async () => {
