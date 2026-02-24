@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import type { CodeHostAdapter, PRStatus } from '../resolvers/types.js';
 
 /**
- * JSON shape returned by `gh pr view --json state,mergedAt,reviewDecision,reviews`.
+ * JSON shape returned by `gh pr view --json state,mergedAt,reviewDecision,reviews,reviewThreads`.
  */
 interface GhPrViewOutput {
   state: string;           // 'OPEN' | 'CLOSED' | 'MERGED'
@@ -11,6 +11,11 @@ interface GhPrViewOutput {
   reviews: Array<{
     state: string;         // 'APPROVED' | 'CHANGES_REQUESTED' | 'COMMENTED' | 'DISMISSED' | 'PENDING'
     author: { login: string };
+  }>;
+  // Optional for backward compatibility: older gh CLI versions (< 2.21)
+  // don't support the reviewThreads JSON field.
+  reviewThreads?: Array<{
+    isResolved: boolean;
   }>;
 }
 
@@ -58,7 +63,7 @@ export function createGitHubAdapter(options: GitHubAdapterOptions = {}): CodeHos
     getPRStatus(prUrl: string): PRStatus {
       const parsed = parseGitHubPrUrl(prUrl);
       if (!parsed) {
-        return { merged: false, hasUnresolvedComments: false, state: 'unknown' };
+        return { merged: false, hasUnresolvedComments: false, unresolvedThreadCount: 0, state: 'unknown' };
       }
 
       try {
@@ -66,19 +71,21 @@ export function createGitHubAdapter(options: GitHubAdapterOptions = {}): CodeHos
           'pr', 'view',
           String(parsed.number),
           '--repo', `${parsed.owner}/${parsed.repo}`,
-          '--json', 'state,mergedAt,reviewDecision,reviews',
+          '--json', 'state,mergedAt,reviewDecision,reviews,reviewThreads',
         ]);
 
         const data: GhPrViewOutput = JSON.parse(json);
 
         const merged = data.state === 'MERGED' || data.mergedAt !== null;
         const hasUnresolvedComments = data.reviewDecision === 'CHANGES_REQUESTED';
+        const unresolvedThreadCount = (data.reviewThreads ?? [])
+          .filter(t => !t.isResolved).length;
         const state = data.state.toLowerCase();
 
-        return { merged, hasUnresolvedComments, state };
+        return { merged, hasUnresolvedComments, unresolvedThreadCount, state };
       } catch {
         // gh CLI not installed, not authenticated, network error, etc.
-        return { merged: false, hasUnresolvedComments: false, state: 'error' };
+        return { merged: false, hasUnresolvedComments: false, unresolvedThreadCount: 0, state: 'error' };
       }
     },
 

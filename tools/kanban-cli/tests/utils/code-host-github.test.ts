@@ -92,7 +92,7 @@ describe('createGitHubAdapter', () => {
     expect(capturedArgs).toEqual([
       'pr', 'view', '42',
       '--repo', 'myorg/myrepo',
-      '--json', 'state,mergedAt,reviewDecision,reviews',
+      '--json', 'state,mergedAt,reviewDecision,reviews,reviewThreads',
     ]);
   });
 
@@ -112,6 +112,80 @@ describe('createGitHubAdapter', () => {
     });
     const status = adapter.getPRStatus('https://bitbucket.org/org/repo/pull/1');
     expect(status.state).toBe('unknown');
+  });
+
+  describe('unresolvedThreadCount', () => {
+    it('returns 0 when no review threads', () => {
+      const response = JSON.stringify({
+        state: 'OPEN',
+        mergedAt: null,
+        reviewDecision: '',
+        reviews: [],
+        reviewThreads: [],
+      });
+      const adapter = createGitHubAdapter({ execFn: () => response });
+      const status = adapter.getPRStatus('https://github.com/org/repo/pull/1');
+      expect(status.unresolvedThreadCount).toBe(0);
+    });
+
+    it('counts unresolved threads correctly', () => {
+      const response = JSON.stringify({
+        state: 'OPEN',
+        mergedAt: null,
+        reviewDecision: 'CHANGES_REQUESTED',
+        reviews: [],
+        reviewThreads: [
+          { isResolved: false },
+          { isResolved: true },
+          { isResolved: false },
+        ],
+      });
+      const adapter = createGitHubAdapter({ execFn: () => response });
+      const status = adapter.getPRStatus('https://github.com/org/repo/pull/1');
+      expect(status.unresolvedThreadCount).toBe(2);
+    });
+
+    it('returns 0 when all threads resolved', () => {
+      const response = JSON.stringify({
+        state: 'OPEN',
+        mergedAt: null,
+        reviewDecision: 'APPROVED',
+        reviews: [],
+        reviewThreads: [
+          { isResolved: true },
+          { isResolved: true },
+        ],
+      });
+      const adapter = createGitHubAdapter({ execFn: () => response });
+      const status = adapter.getPRStatus('https://github.com/org/repo/pull/1');
+      expect(status.unresolvedThreadCount).toBe(0);
+    });
+
+    it('returns 0 when reviewThreads is missing from response', () => {
+      const response = JSON.stringify({
+        state: 'OPEN',
+        mergedAt: null,
+        reviewDecision: '',
+        reviews: [],
+      });
+      const adapter = createGitHubAdapter({ execFn: () => response });
+      const status = adapter.getPRStatus('https://github.com/org/repo/pull/1');
+      expect(status.unresolvedThreadCount).toBe(0);
+    });
+
+    it('returns 0 for error state', () => {
+      const adapter = createGitHubAdapter({
+        execFn: () => { throw new Error('gh not found'); },
+      });
+      const status = adapter.getPRStatus('https://github.com/org/repo/pull/1');
+      expect(status.unresolvedThreadCount).toBe(0);
+    });
+
+    it('returns 0 for unparseable URL', () => {
+      const adapter = createGitHubAdapter({ execFn: () => '' });
+      const status = adapter.getPRStatus('https://bitbucket.org/org/repo/pull/1');
+      expect(status.unresolvedThreadCount).toBe(0);
+    });
   });
 
   describe('editPRBase', () => {

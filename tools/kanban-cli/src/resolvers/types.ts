@@ -22,6 +22,8 @@ export interface PRStatus {
   merged: boolean;
   /** Whether there are unresolved review comments */
   hasUnresolvedComments: boolean;
+  /** Number of unresolved review threads/discussions */
+  unresolvedThreadCount: number;
   /** Raw state string from the platform (e.g., 'open', 'closed', 'merged') */
   state: string;
 }

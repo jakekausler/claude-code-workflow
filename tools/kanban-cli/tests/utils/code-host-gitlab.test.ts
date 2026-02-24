@@ -79,18 +79,25 @@ describe('createGitLabAdapter', () => {
   });
 
   it('passes correct args to glab CLI', () => {
-    let capturedArgs: string[] = [];
+    const allCalls: Array<{ cmd: string; args: string[] }> = [];
+    const emptyDiscussions = JSON.stringify([]);
     const adapter = createGitLabAdapter({
-      execFn: (_cmd, args) => {
-        capturedArgs = args;
-        return openResponse;
+      execFn: (cmd, args) => {
+        allCalls.push({ cmd, args });
+        // First call is mr view, second is discussions API
+        if (args[0] === 'mr') return openResponse;
+        return emptyDiscussions;
       },
     });
     adapter.getPRStatus('https://gitlab.com/mygroup/myproject/-/merge_requests/42');
-    expect(capturedArgs).toEqual([
+    expect(allCalls).toHaveLength(2);
+    expect(allCalls[0].args).toEqual([
       'mr', 'view', '42',
       '--repo', 'mygroup/myproject',
       '--output', 'json',
+    ]);
+    expect(allCalls[1].args).toEqual([
+      'api', 'projects/mygroup%2Fmyproject/merge_requests/42/discussions?per_page=100',
     ]);
   });
 
@@ -110,6 +117,92 @@ describe('createGitLabAdapter', () => {
     });
     const status = adapter.getPRStatus('https://github.com/org/repo/pull/1');
     expect(status.state).toBe('unknown');
+  });
+
+  describe('unresolvedThreadCount', () => {
+    it('returns 0 when no unresolved discussions', () => {
+      const discussions = JSON.stringify([
+        { notes: [{ resolvable: true, resolved: true }] },
+        { notes: [{ resolvable: false, resolved: false }] },
+      ]);
+      const adapter = createGitLabAdapter({
+        execFn: (_cmd, args) => {
+          if (args[0] === 'mr') return openResponse;
+          return discussions;
+        },
+      });
+      const status = adapter.getPRStatus('https://gitlab.com/org/repo/-/merge_requests/1');
+      expect(status.unresolvedThreadCount).toBe(0);
+    });
+
+    it('counts unresolved discussions correctly', () => {
+      const discussions = JSON.stringify([
+        { notes: [{ resolvable: true, resolved: false }] },
+        { notes: [{ resolvable: true, resolved: true }] },
+        { notes: [{ resolvable: true, resolved: false }] },
+        { notes: [{ resolvable: false, resolved: false }] },
+      ]);
+      const adapter = createGitLabAdapter({
+        execFn: (_cmd, args) => {
+          if (args[0] === 'mr') return unresolvedResponse;
+          return discussions;
+        },
+      });
+      const status = adapter.getPRStatus('https://gitlab.com/org/repo/-/merge_requests/1');
+      expect(status.unresolvedThreadCount).toBe(2);
+    });
+
+    it('returns 0 when discussions API returns empty array', () => {
+      const adapter = createGitLabAdapter({
+        execFn: (_cmd, args) => {
+          if (args[0] === 'mr') return openResponse;
+          return '[]';
+        },
+      });
+      const status = adapter.getPRStatus('https://gitlab.com/org/repo/-/merge_requests/1');
+      expect(status.unresolvedThreadCount).toBe(0);
+    });
+
+    it('falls back to boolean signal when discussions API fails', () => {
+      let callCount = 0;
+      const adapter = createGitLabAdapter({
+        execFn: (_cmd, args) => {
+          callCount++;
+          if (args[0] === 'mr') return unresolvedResponse;
+          throw new Error('api error');
+        },
+      });
+      const status = adapter.getPRStatus('https://gitlab.com/org/repo/-/merge_requests/1');
+      expect(callCount).toBe(2);
+      // Falls back: hasUnresolvedComments=true -> count=1
+      expect(status.unresolvedThreadCount).toBe(1);
+    });
+
+    it('falls back to 0 when discussions API fails and no unresolved comments', () => {
+      const adapter = createGitLabAdapter({
+        execFn: (_cmd, args) => {
+          if (args[0] === 'mr') return openResponse;
+          throw new Error('api error');
+        },
+      });
+      const status = adapter.getPRStatus('https://gitlab.com/org/repo/-/merge_requests/1');
+      // Falls back: hasUnresolvedComments=false -> count=0
+      expect(status.unresolvedThreadCount).toBe(0);
+    });
+
+    it('returns 0 for error state', () => {
+      const adapter = createGitLabAdapter({
+        execFn: () => { throw new Error('glab not found'); },
+      });
+      const status = adapter.getPRStatus('https://gitlab.com/org/repo/-/merge_requests/1');
+      expect(status.unresolvedThreadCount).toBe(0);
+    });
+
+    it('returns 0 for unparseable URL', () => {
+      const adapter = createGitLabAdapter({ execFn: () => '' });
+      const status = adapter.getPRStatus('https://github.com/org/repo/pull/1');
+      expect(status.unresolvedThreadCount).toBe(0);
+    });
   });
 
   describe('editPRBase', () => {

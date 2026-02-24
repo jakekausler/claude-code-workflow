@@ -14,6 +14,16 @@ interface GlabMrViewOutput {
 }
 
 /**
+ * JSON shape for a single discussion from the GitLab discussions API.
+ */
+interface GlabDiscussion {
+  notes: Array<{
+    resolvable: boolean;
+    resolved: boolean;
+  }>;
+}
+
+/**
  * Options for constructing the GitLab adapter.
  */
 export interface GitLabAdapterOptions {
@@ -57,7 +67,7 @@ export function createGitLabAdapter(options: GitLabAdapterOptions = {}): CodeHos
     getPRStatus(prUrl: string): PRStatus {
       const parsed = parseGitLabMrUrl(prUrl);
       if (!parsed) {
-        return { merged: false, hasUnresolvedComments: false, state: 'unknown' };
+        return { merged: false, hasUnresolvedComments: false, unresolvedThreadCount: 0, state: 'unknown' };
       }
 
       try {
@@ -74,10 +84,28 @@ export function createGitLabAdapter(options: GitLabAdapterOptions = {}): CodeHos
         const hasUnresolvedComments = !data.blocking_discussions_resolved;
         const state = data.state;
 
-        return { merged, hasUnresolvedComments, state };
+        // Fetch unresolved discussion count via API
+        let unresolvedThreadCount = 0;
+        try {
+          const encodedProject = encodeURIComponent(parsed.project);
+          // per_page=100 to reduce chance of missing threads; GitLab API
+          // paginates but glab doesn't auto-paginate for raw API calls.
+          const discussionsJson = exec('glab', [
+            'api', `projects/${encodedProject}/merge_requests/${parsed.number}/discussions?per_page=100`,
+          ]);
+          const discussions: GlabDiscussion[] = JSON.parse(discussionsJson);
+          unresolvedThreadCount = discussions.filter(d =>
+            d.notes.some(n => n.resolvable && !n.resolved),
+          ).length;
+        } catch {
+          // If discussions API fails, fall back to boolean signal
+          unresolvedThreadCount = hasUnresolvedComments ? 1 : 0;
+        }
+
+        return { merged, hasUnresolvedComments, unresolvedThreadCount, state };
       } catch {
         // glab CLI not installed, not authenticated, network error, etc.
-        return { merged: false, hasUnresolvedComments: false, state: 'error' };
+        return { merged: false, hasUnresolvedComments: false, unresolvedThreadCount: 0, state: 'error' };
       }
     },
 

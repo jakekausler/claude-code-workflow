@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { createExitGateRunner } from '../../src/exit-gates.js';
 import { createResolverRunner } from '../../src/resolvers.js';
-import type { PipelineConfig, ResolverContext, CodeHostAdapter } from 'kanban-cli';
+import type { PipelineConfig, ResolverContext, CodeHostAdapter, PRStatus } from 'kanban-cli';
 import { ResolverRegistry, prStatusResolver, testingRouterResolver } from 'kanban-cli';
 import { makeFrontmatterStore, makeLogger } from './helpers.js';
 
@@ -51,9 +51,9 @@ function makeTestingRouterPipelineConfig(): PipelineConfig {
 }
 
 /** Build a mock CodeHostAdapter. */
-function makeCodeHost(prStatus: { merged: boolean; hasUnresolvedComments: boolean; state: string }): CodeHostAdapter {
+function makeCodeHost(prStatus: PRStatus): CodeHostAdapter {
   return {
-    getPRStatus: () => prStatus,
+    getPRStatus: () => ({ unresolvedThreadCount: 0, ...prStatus }),
     editPRBase: () => {},
     markPRReady: () => {},
     getBranchHead: () => '',

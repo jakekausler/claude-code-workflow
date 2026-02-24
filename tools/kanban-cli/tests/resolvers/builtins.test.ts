@@ -13,7 +13,7 @@ describe('prStatusResolver', () => {
     const ctx: ResolverContext = {
       env: {},
       codeHost: {
-        getPRStatus: () => ({ merged: true, hasUnresolvedComments: false, state: 'merged' }),
+        getPRStatus: () => ({ merged: true, hasUnresolvedComments: false, unresolvedThreadCount: 0, state: 'merged' }),
       },
     };
     const result = await prStatusResolver(stage, ctx);
@@ -25,7 +25,7 @@ describe('prStatusResolver', () => {
     const ctx: ResolverContext = {
       env: {},
       codeHost: {
-        getPRStatus: () => ({ merged: false, hasUnresolvedComments: true, state: 'open' }),
+        getPRStatus: () => ({ merged: false, hasUnresolvedComments: true, unresolvedThreadCount: 2, state: 'open' }),
       },
     };
     const result = await prStatusResolver(stage, ctx);
@@ -37,7 +37,7 @@ describe('prStatusResolver', () => {
     const ctx: ResolverContext = {
       env: {},
       codeHost: {
-        getPRStatus: () => ({ merged: false, hasUnresolvedComments: false, state: 'open' }),
+        getPRStatus: () => ({ merged: false, hasUnresolvedComments: false, unresolvedThreadCount: 0, state: 'open' }),
       },
     };
     const result = await prStatusResolver(stage, ctx);
