@@ -78,6 +78,7 @@ export type {
   StageRow,
   DependencyRow,
   SummaryRow,
+  MrCommentTrackingRow,
   EpicUpsertData,
   TicketUpsertData,
   StageUpsertData,

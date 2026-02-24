@@ -130,7 +130,7 @@ export interface MRCommentPollerDeps {
 export interface MRPollResult {
   stageId: string;
   prUrl: string;
-  action: 'new_comments' | 'merged' | 'no_change' | 'error';
+  action: 'new_comments' | 'merged' | 'no_change' | 'error' | 'first_poll';
   newUnresolvedCount?: number;
   previousUnresolvedCount?: number;
 }
