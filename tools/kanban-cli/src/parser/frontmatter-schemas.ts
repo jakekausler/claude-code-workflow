@@ -56,6 +56,7 @@ export const ticketFrontmatterSchema = z.object({
   stages: z.array(z.string()).default([]),
   depends_on: z.array(z.string()).default([]),
   jira_links: z.array(jiraLinkSchema).default([]),
+  stage_statuses: z.record(z.string(), z.string()).default({}),
 });
 
 // ─── Epic frontmatter schema ────────────────────────────────────────────────
@@ -67,4 +68,5 @@ export const epicFrontmatterSchema = z.object({
   jira_key: z.string().nullable().default(null),
   tickets: z.array(z.string()).default([]),
   depends_on: z.array(z.string()).default([]),
+  ticket_statuses: z.record(z.string(), z.string()).default({}),
 });

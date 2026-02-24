@@ -42,6 +42,7 @@ export interface Epic {
   jira_key: string | null;
   tickets: string[];
   depends_on: string[];
+  ticket_statuses: Record<string, string>;
   file_path: string;
 }
 
@@ -58,6 +59,7 @@ export interface Ticket {
   stages: string[];
   depends_on: string[];
   jira_links: JiraLink[];
+  stage_statuses: Record<string, string>;
   file_path: string;
 }
 

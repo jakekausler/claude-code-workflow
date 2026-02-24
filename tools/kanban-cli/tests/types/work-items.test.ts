@@ -32,6 +32,7 @@ describe('Work Item Types', () => {
       jira_key: null,
       tickets: ['TICKET-001-001'],
       depends_on: [],
+      ticket_statuses: {},
       file_path: '/repo/epics/EPIC-001.md',
     };
     expect(epic.id).toBe('EPIC-001');
@@ -49,6 +50,7 @@ describe('Work Item Types', () => {
       stages: ['STAGE-001-001-001'],
       depends_on: [],
       jira_links: [],
+      stage_statuses: {},
       file_path: '/repo/epics/TICKET-001-001.md',
     };
     expect(ticket.id).toBe('TICKET-001-001');

@@ -56,6 +56,9 @@ export function parseEpicFrontmatter(content: string, filePath: string): Epic {
     jira_key: (data.jira_key as string) ?? null,
     tickets: Array.isArray(data.tickets) ? data.tickets : [],
     depends_on: Array.isArray(data.depends_on) ? data.depends_on : [],
+    ticket_statuses: (data.ticket_statuses != null && typeof data.ticket_statuses === 'object' && !Array.isArray(data.ticket_statuses))
+      ? data.ticket_statuses as Record<string, string>
+      : {},
     file_path: filePath,
   };
 }
@@ -86,6 +89,9 @@ export function parseTicketFrontmatter(content: string, filePath: string): Ticke
     stages: Array.isArray(data.stages) ? data.stages : [],
     depends_on: Array.isArray(data.depends_on) ? data.depends_on : [],
     jira_links: jiraLinks,
+    stage_statuses: (data.stage_statuses != null && typeof data.stage_statuses === 'object' && !Array.isArray(data.stage_statuses))
+      ? data.stage_statuses as Record<string, string>
+      : {},
     file_path: filePath,
   };
 }

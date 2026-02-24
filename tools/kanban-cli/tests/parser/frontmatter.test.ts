@@ -122,6 +122,40 @@ depends_on: []
     const result = parseEpicFrontmatter(content, '/repo/epics/EPIC-001.md');
     expect(result.depends_on).toEqual([]);
   });
+
+  it('defaults ticket_statuses to empty object when missing', () => {
+    const content = `---
+id: EPIC-001
+title: Test Epic
+status: In Progress
+tickets: []
+depends_on: []
+---
+`;
+    const result = parseEpicFrontmatter(content, '/repo/epics/EPIC-001.md');
+    expect(result.ticket_statuses).toEqual({});
+  });
+
+  it('parses ticket_statuses when present', () => {
+    const content = `---
+id: EPIC-001
+title: Test Epic
+status: In Progress
+tickets:
+  - TICKET-001-001
+  - TICKET-001-002
+depends_on: []
+ticket_statuses:
+  TICKET-001-001: In Progress
+  TICKET-001-002: Not Started
+---
+`;
+    const result = parseEpicFrontmatter(content, '/repo/epics/EPIC-001.md');
+    expect(result.ticket_statuses).toEqual({
+      'TICKET-001-001': 'In Progress',
+      'TICKET-001-002': 'Not Started',
+    });
+  });
 });
 
 describe('parseTicketFrontmatter', () => {
@@ -222,6 +256,44 @@ depends_on:
 `;
     const result = parseTicketFrontmatter(content, '/repo/epics/TICKET-001-001.md');
     expect(result.depends_on).toEqual(['TICKET-001-002']);
+  });
+
+  it('defaults stage_statuses to empty object when missing', () => {
+    const content = `---
+id: TICKET-001-001
+epic: EPIC-001
+title: Login
+status: In Progress
+source: local
+stages: []
+depends_on: []
+---
+`;
+    const result = parseTicketFrontmatter(content, '/repo/epics/TICKET-001-001.md');
+    expect(result.stage_statuses).toEqual({});
+  });
+
+  it('parses stage_statuses when present', () => {
+    const content = `---
+id: TICKET-001-001
+epic: EPIC-001
+title: Login
+status: In Progress
+source: local
+stages:
+  - STAGE-001-001-001
+  - STAGE-001-001-002
+depends_on: []
+stage_statuses:
+  STAGE-001-001-001: Build
+  STAGE-001-001-002: Not Started
+---
+`;
+    const result = parseTicketFrontmatter(content, '/repo/epics/TICKET-001-001.md');
+    expect(result.stage_statuses).toEqual({
+      'STAGE-001-001-001': 'Build',
+      'STAGE-001-001-002': 'Not Started',
+    });
   });
 });
 
