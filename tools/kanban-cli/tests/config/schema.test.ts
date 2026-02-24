@@ -291,4 +291,194 @@ describe('pipelineConfigSchema', () => {
       }
     });
   });
+
+  describe('cron config', () => {
+    const minimalWorkflow = {
+      workflow: {
+        entry_phase: 'Design',
+        phases: [
+          {
+            name: 'Design',
+            skill: 'phase-design',
+            status: 'Design',
+            transitions_to: ['Done'],
+          },
+        ],
+      },
+    };
+
+    it('accepts cron config with valid values', () => {
+      const config = {
+        ...minimalWorkflow,
+        cron: {
+          mr_comment_poll: { enabled: true, interval_seconds: 300 },
+          insights_threshold: { enabled: false, interval_seconds: 600 },
+        },
+      };
+      const result = pipelineConfigSchema.safeParse(config);
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.cron?.mr_comment_poll?.enabled).toBe(true);
+        expect(result.data.cron?.mr_comment_poll?.interval_seconds).toBe(300);
+        expect(result.data.cron?.insights_threshold?.enabled).toBe(false);
+        expect(result.data.cron?.insights_threshold?.interval_seconds).toBe(600);
+      }
+    });
+
+    it('rejects cron config with interval_seconds below 30', () => {
+      const config = {
+        ...minimalWorkflow,
+        cron: {
+          mr_comment_poll: { enabled: true, interval_seconds: 29 },
+        },
+      };
+      const result = pipelineConfigSchema.safeParse(config);
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects cron config with interval_seconds above 3600', () => {
+      const config = {
+        ...minimalWorkflow,
+        cron: {
+          mr_comment_poll: { enabled: true, interval_seconds: 3601 },
+        },
+      };
+      const result = pipelineConfigSchema.safeParse(config);
+      expect(result.success).toBe(false);
+    });
+
+    it('accepts config with missing cron section (optional)', () => {
+      const result = pipelineConfigSchema.safeParse(minimalWorkflow);
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.cron).toBeUndefined();
+      }
+    });
+
+    it('accepts cron with only mr_comment_poll', () => {
+      const config = {
+        ...minimalWorkflow,
+        cron: {
+          mr_comment_poll: { enabled: true, interval_seconds: 60 },
+        },
+      };
+      const result = pipelineConfigSchema.safeParse(config);
+      expect(result.success).toBe(true);
+    });
+
+    it('accepts cron with only insights_threshold', () => {
+      const config = {
+        ...minimalWorkflow,
+        cron: {
+          insights_threshold: { enabled: true, interval_seconds: 120 },
+        },
+      };
+      const result = pipelineConfigSchema.safeParse(config);
+      expect(result.success).toBe(true);
+    });
+
+    it('accepts interval_seconds at boundary min (30)', () => {
+      const config = {
+        ...minimalWorkflow,
+        cron: {
+          mr_comment_poll: { enabled: true, interval_seconds: 30 },
+        },
+      };
+      const result = pipelineConfigSchema.safeParse(config);
+      expect(result.success).toBe(true);
+    });
+
+    it('accepts interval_seconds at boundary max (3600)', () => {
+      const config = {
+        ...minimalWorkflow,
+        cron: {
+          mr_comment_poll: { enabled: true, interval_seconds: 3600 },
+        },
+      };
+      const result = pipelineConfigSchema.safeParse(config);
+      expect(result.success).toBe(true);
+    });
+
+    it('rejects non-integer interval_seconds', () => {
+      const config = {
+        ...minimalWorkflow,
+        cron: {
+          mr_comment_poll: { enabled: true, interval_seconds: 300.5 },
+        },
+      };
+      const result = pipelineConfigSchema.safeParse(config);
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects non-boolean enabled', () => {
+      const config = {
+        ...minimalWorkflow,
+        cron: {
+          mr_comment_poll: { enabled: 'yes', interval_seconds: 300 },
+        },
+      };
+      const result = pipelineConfigSchema.safeParse(config);
+      expect(result.success).toBe(false);
+    });
+
+    it('accepts empty cron object', () => {
+      const config = {
+        ...minimalWorkflow,
+        cron: {},
+      };
+      const result = pipelineConfigSchema.safeParse(config);
+      expect(result.success).toBe(true);
+    });
+
+    it('rejects unknown cron keys', () => {
+      const config = {
+        ...minimalWorkflow,
+        cron: {
+          mr_comment_poll: { enabled: true, interval_seconds: 300 },
+          mr_coment_poll: { enabled: true, interval_seconds: 300 },
+        },
+      };
+      const result = pipelineConfigSchema.safeParse(config);
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects cron job config missing enabled field', () => {
+      const config = {
+        ...minimalWorkflow,
+        cron: {
+          mr_comment_poll: { interval_seconds: 300 },
+        },
+      };
+      const result = pipelineConfigSchema.safeParse(config);
+      expect(result.success).toBe(false);
+    });
+
+    it('backward compat: existing configs without cron section still parse', () => {
+      const config = {
+        workflow: {
+          entry_phase: 'Design',
+          phases: [
+            {
+              name: 'Design',
+              skill: 'phase-design',
+              status: 'Design',
+              transitions_to: ['Done'],
+            },
+          ],
+          defaults: {
+            WORKFLOW_REMOTE_MODE: true,
+            WORKFLOW_MAX_PARALLEL: 3,
+          },
+        },
+        jira: {
+          reading_script: './scripts/read-jira.sh',
+        },
+      };
+      const result = pipelineConfigSchema.safeParse(config);
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.cron).toBeUndefined();
+      }
+    });
+  });
 });

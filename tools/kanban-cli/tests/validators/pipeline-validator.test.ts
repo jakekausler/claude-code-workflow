@@ -30,6 +30,27 @@ describe('validatePipeline (orchestrator)', () => {
     // Should have errors from Layer 1 (bad entry_phase) and Layer 4 (missing resolver)
   });
 
+  it('accepts a pipeline config with a valid cron section', async () => {
+    const configWithCron = {
+      workflow: {
+        entry_phase: 'Design',
+        phases: [
+          { name: 'Design', skill: 'phase-design', status: 'Design', transitions_to: ['Build'] },
+          { name: 'Build', skill: 'phase-build', status: 'Build', transitions_to: ['Done'] },
+        ],
+      },
+      cron: {
+        mr_comment_poll: { enabled: true, interval_seconds: 300 },
+        insights_threshold: { enabled: false, interval_seconds: 600 },
+      },
+    };
+    const registry = new ResolverRegistry();
+    registerBuiltinResolvers(registry);
+    const result = await validatePipeline(configWithCron as any, { registry });
+    expect(result.valid).toBe(true);
+    expect(result.errors).toHaveLength(0);
+  });
+
   it('returns structured output with layer attribution', async () => {
     const registry = new ResolverRegistry();
     registerBuiltinResolvers(registry);

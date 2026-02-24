@@ -5,6 +5,8 @@ export type {
   WorkflowDefaults,
   JiraConfig,
   JiraStatusMap,
+  CronJobConfig,
+  CronConfig,
   SkillState,
   ResolverState,
 } from './types/pipeline.js';

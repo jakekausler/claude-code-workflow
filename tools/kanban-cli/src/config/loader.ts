@@ -29,6 +29,7 @@ export interface LoadConfigOptions {
  * - If repo defines `entry_phase`, it replaces global entry_phase.
  * - `defaults` are MERGED (repo values override global values, but unset keys are preserved).
  * - If repo defines `jira`, it REPLACES global jira entirely (no merge).
+ * - If repo defines `cron`, it REPLACES global cron entirely (no merge).
  */
 export function mergeConfigs(
   global: PipelineConfig,
@@ -55,6 +56,13 @@ export function mergeConfigs(
     merged.jira = repo.jira;
   } else {
     merged.jira = global.jira;
+  }
+
+  // cron: repo replaces global entirely (same as jira)
+  if ('cron' in repo) {
+    merged.cron = repo.cron;
+  } else {
+    merged.cron = global.cron;
   }
 
   return merged;

@@ -49,6 +49,16 @@ const jiraConfigSchema = z.object({
   status_map: jiraStatusMapSchema,
 }).nullable().optional();
 
+const cronJobConfigSchema = z.object({
+  enabled: z.boolean(),
+  interval_seconds: z.number().int().min(30).max(3600),
+});
+
+const cronConfigSchema = z.object({
+  mr_comment_poll: cronJobConfigSchema.optional(),
+  insights_threshold: cronJobConfigSchema.optional(),
+}).strict().optional();
+
 export const pipelineConfigSchema = z.object({
   workflow: z.object({
     entry_phase: z.string().min(1),
@@ -56,6 +66,7 @@ export const pipelineConfigSchema = z.object({
     defaults: workflowDefaultsSchema.optional(),
   }),
   jira: jiraConfigSchema,
+  cron: cronConfigSchema,
 });
 
 export type ValidatedPipelineConfig = z.infer<typeof pipelineConfigSchema>;

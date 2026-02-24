@@ -172,6 +172,48 @@ describe('mergeConfigs', () => {
     const result = mergeConfigs(globalConfig, null);
     expect(result.jira).toBeUndefined();
   });
+
+  it('repo cron overrides global cron entirely', () => {
+    const globalWithCron = {
+      ...globalConfig,
+      cron: {
+        mr_comment_poll: { enabled: true, interval_seconds: 300 },
+        insights_threshold: { enabled: false, interval_seconds: 600 },
+      },
+    };
+    const repoConfig = {
+      cron: {
+        mr_comment_poll: { enabled: false, interval_seconds: 60 },
+      },
+    };
+    const result = mergeConfigs(globalWithCron, repoConfig);
+    // Repo cron replaces global cron entirely — no merge of individual jobs
+    expect(result.cron).toEqual({
+      mr_comment_poll: { enabled: false, interval_seconds: 60 },
+    });
+    // insights_threshold is NOT inherited from global
+    expect(result.cron?.insights_threshold).toBeUndefined();
+  });
+
+  it('preserves global cron when repo does not define cron', () => {
+    const globalWithCron = {
+      ...globalConfig,
+      cron: {
+        mr_comment_poll: { enabled: true, interval_seconds: 300 },
+      },
+    };
+    const repoConfig = {
+      workflow: {
+        defaults: {
+          WORKFLOW_REMOTE_MODE: true,
+        },
+      },
+    };
+    const result = mergeConfigs(globalWithCron, repoConfig);
+    expect(result.cron).toEqual({
+      mr_comment_poll: { enabled: true, interval_seconds: 300 },
+    });
+  });
 });
 
 describe('loadConfig', () => {

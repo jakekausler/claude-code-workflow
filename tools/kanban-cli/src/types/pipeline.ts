@@ -54,6 +54,29 @@ export interface JiraConfig {
 }
 
 /**
+ * Configuration for a single cron job.
+ */
+export interface CronJobConfig {
+  /** Whether this cron job is enabled */
+  enabled: boolean;
+
+  /** Polling interval in seconds (30–3600) */
+  interval_seconds: number;
+}
+
+/**
+ * Cron job configuration section.
+ * Each field controls a specific periodic task.
+ */
+export interface CronConfig {
+  /** MR comment polling cron job */
+  mr_comment_poll?: CronJobConfig;
+
+  /** Insights threshold checking cron job */
+  insights_threshold?: CronJobConfig;
+}
+
+/**
  * The complete workflow pipeline configuration.
  * Loaded from YAML, validated by Zod schema.
  */
@@ -71,6 +94,9 @@ export interface PipelineConfig {
 
   /** Jira integration configuration. Null or undefined means disabled. */
   jira?: JiraConfig | null;
+
+  /** Cron job configuration. Optional; omit to use defaults or disable cron. */
+  cron?: CronConfig;
 }
 
 /**

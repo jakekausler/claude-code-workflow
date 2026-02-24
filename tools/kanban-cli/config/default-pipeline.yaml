@@ -48,3 +48,11 @@ workflow:
     WORKFLOW_MAX_PARALLEL: 1
     WORKFLOW_GIT_PLATFORM: auto
     WORKFLOW_LEARNINGS_THRESHOLD: 10
+
+cron:
+  mr_comment_poll:
+    enabled: true
+    interval_seconds: 300
+  insights_threshold:
+    enabled: true
+    interval_seconds: 600
