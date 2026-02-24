@@ -106,7 +106,7 @@ git commit -m "feat(exit-gates): add deriveEpicStatus and extend ExitGateResult 
 - All existing exit-gates tests still pass
 - `npm run verify` passes in orchestrator
 
-**Status:** Not Started
+**Status:** Complete
 
 ---
 
@@ -246,7 +246,7 @@ git commit -m "feat(exit-gates): cascade ticket completion — update ticket.sta
 - All existing tests still pass
 - `npm run verify` passes in orchestrator
 
-**Status:** Not Started
+**Status:** Complete
 
 ---
 
@@ -389,7 +389,7 @@ git commit -m "feat(exit-gates): cascade epic completion — update epic.status 
 - Reverse works: if ticket reverts, epic reverts to 'In Progress'
 - `npm run verify` passes in orchestrator
 
-**Status:** Not Started
+**Status:** Complete
 
 ---
 
@@ -473,7 +473,7 @@ git commit -m "test(exit-gates): add reverse cascade tests — status revert pro
 - All existing tests still pass
 - `npm run verify` passes in orchestrator
 
-**Status:** Not Started
+**Status:** Complete
 
 ---
 
@@ -558,7 +558,7 @@ git commit -m "feat(loop): add completion cascade logging for ticket and epic co
 - All existing loop tests still pass
 - `npm run verify` passes in orchestrator
 
-**Status:** Not Started
+**Status:** Complete
 
 ---
 
@@ -740,7 +740,7 @@ git commit -m "test(integration): add completion cascade integration tests — f
 - All existing integration tests still pass
 - `npm run verify` passes in orchestrator
 
-**Status:** Not Started
+**Status:** Complete
 
 ---
 
@@ -785,7 +785,7 @@ git commit -m "docs(6C): mark completion cascade as complete, update handoff for
 - All tests pass in both packages
 - `npm run verify` passes in both packages
 
-**Status:** Not Started
+**Status:** Complete
 
 ---
 

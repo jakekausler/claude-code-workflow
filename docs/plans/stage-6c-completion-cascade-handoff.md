@@ -380,3 +380,33 @@ After this session completes Stage 6C:
 - **Stage 6E** will implement the insights threshold cron loop (auto-triggering meta-insights when learnings accumulate)
 
 Stages 6D and 6E can be developed in parallel since they are independent systems.
+
+---
+
+## Completion Summary
+
+### What Was Delivered
+
+- **Completion cascade in exit gates**: When all stages for a ticket are Complete, ticket.status is set to 'Complete'. When all tickets for an epic are Complete, epic.status is set to 'Complete'.
+- **Extended ExitGateResult**: Added `ticketCompleted` and `epicCompleted` boolean flags for observability.
+- **deriveEpicStatus()**: New pure function mirroring `deriveTicketStatus()` for epic-level status derivation.
+- **Cascade logging**: Dedicated log lines in loop.ts for ticket and epic completion events.
+- **Backlog re-evaluation**: Handled by existing sync infrastructure — no new code needed. Sync runs after cascade and `computeKanbanColumn()` naturally unblocks dependent stages.
+
+### Test Results
+
+- **Orchestrator**: 264 tests across 17 test files (262 passing, 2 pre-existing failures in resolver-flow.test.ts)
+- **kanban-cli**: 738 tests across 51 test files, all passing
+
+### What Changed from Handoff
+
+- Backlog re-evaluation required NO new code — sync + computeKanbanColumn handles it entirely
+- ticket.status was already being updated by existing 6B code; 6C-2 only added the ticketCompleted flag
+- deriveEpicStatus matches the deriveTicketStatus pattern exactly (decision from brainstorming)
+
+### Handoff Notes for Stage 6D
+
+- The orchestrator now fully propagates completion upward through the hierarchy
+- Exit gate results include `ticketCompleted` and `epicCompleted` for downstream consumers
+- No changes needed to session spawning, worktrees, or resolver infrastructure
+- Stage 6D (MR comment polling cron) can proceed independently
