@@ -944,6 +944,176 @@ describe('createOrchestrator', () => {
       expect(runFn).not.toHaveBeenCalled();
     });
 
+    it('logs ticket completion when ticketCompleted is true', async () => {
+      const { deps, discovery, locker, deferSession, sessionExecutor, logger: loggerMock } = makeMockDeps();
+      const runFn = vi.fn(async (): Promise<ExitGateResult> => ({
+        statusChanged: true,
+        statusBefore: 'In Design',
+        statusAfter: 'In Build',
+        ticketUpdated: true,
+        epicUpdated: true,
+        ticketCompleted: true,
+        epicCompleted: false,
+        syncResult: { success: true },
+      }));
+      deps.exitGateRunner = { run: runFn };
+      deps.resolverRunner = { checkAll: vi.fn(async () => []) };
+
+      const stage = makeReadyStage();
+      const deferred = deferSession();
+
+      discovery.discover.mockResolvedValueOnce(makeDiscoveryResult([stage]));
+      locker.readStatus
+        .mockResolvedValueOnce('In Design')  // statusBefore
+        .mockResolvedValueOnce('In Build');   // statusAfter — changed
+
+      const config = makeConfig({ once: true });
+      const orchestrator = createOrchestrator(config, deps);
+
+      const startPromise = orchestrator.start();
+
+      await vi.waitFor(() => {
+        expect(sessionExecutor.spawn).toHaveBeenCalledTimes(1);
+      });
+
+      deferred.resolve({ exitCode: 0, durationMs: 1000 });
+      await startPromise;
+
+      expect(loggerMock.info).toHaveBeenCalledWith('Ticket completed — all stages done', {
+        stageId: 'STAGE-001-001-001',
+      });
+    });
+
+    it('logs epic completion when epicCompleted is true', async () => {
+      const { deps, discovery, locker, deferSession, sessionExecutor, logger: loggerMock } = makeMockDeps();
+      const runFn = vi.fn(async (): Promise<ExitGateResult> => ({
+        statusChanged: true,
+        statusBefore: 'In Design',
+        statusAfter: 'In Build',
+        ticketUpdated: true,
+        epicUpdated: true,
+        ticketCompleted: true,
+        epicCompleted: true,
+        syncResult: { success: true },
+      }));
+      deps.exitGateRunner = { run: runFn };
+      deps.resolverRunner = { checkAll: vi.fn(async () => []) };
+
+      const stage = makeReadyStage();
+      const deferred = deferSession();
+
+      discovery.discover.mockResolvedValueOnce(makeDiscoveryResult([stage]));
+      locker.readStatus
+        .mockResolvedValueOnce('In Design')  // statusBefore
+        .mockResolvedValueOnce('In Build');   // statusAfter — changed
+
+      const config = makeConfig({ once: true });
+      const orchestrator = createOrchestrator(config, deps);
+
+      const startPromise = orchestrator.start();
+
+      await vi.waitFor(() => {
+        expect(sessionExecutor.spawn).toHaveBeenCalledTimes(1);
+      });
+
+      deferred.resolve({ exitCode: 0, durationMs: 1000 });
+      await startPromise;
+
+      expect(loggerMock.info).toHaveBeenCalledWith('Epic completed — all tickets done', {
+        stageId: 'STAGE-001-001-001',
+      });
+    });
+
+    it('includes ticketCompleted and epicCompleted in exit gate log context', async () => {
+      const { deps, discovery, locker, deferSession, sessionExecutor, logger: loggerMock } = makeMockDeps();
+      const runFn = vi.fn(async (): Promise<ExitGateResult> => ({
+        statusChanged: true,
+        statusBefore: 'In Design',
+        statusAfter: 'In Build',
+        ticketUpdated: true,
+        epicUpdated: true,
+        ticketCompleted: true,
+        epicCompleted: false,
+        syncResult: { success: true },
+      }));
+      deps.exitGateRunner = { run: runFn };
+      deps.resolverRunner = { checkAll: vi.fn(async () => []) };
+
+      const stage = makeReadyStage();
+      const deferred = deferSession();
+
+      discovery.discover.mockResolvedValueOnce(makeDiscoveryResult([stage]));
+      locker.readStatus
+        .mockResolvedValueOnce('In Design')  // statusBefore
+        .mockResolvedValueOnce('In Build');   // statusAfter — changed
+
+      const config = makeConfig({ once: true });
+      const orchestrator = createOrchestrator(config, deps);
+
+      const startPromise = orchestrator.start();
+
+      await vi.waitFor(() => {
+        expect(sessionExecutor.spawn).toHaveBeenCalledTimes(1);
+      });
+
+      deferred.resolve({ exitCode: 0, durationMs: 1000 });
+      await startPromise;
+
+      expect(loggerMock.info).toHaveBeenCalledWith('Exit gate completed', {
+        stageId: 'STAGE-001-001-001',
+        ticketUpdated: true,
+        epicUpdated: true,
+        ticketCompleted: true,
+        epicCompleted: false,
+        syncSuccess: true,
+      });
+    });
+
+    it('does not log ticket or epic completion when both are false', async () => {
+      const { deps, discovery, locker, deferSession, sessionExecutor, logger: loggerMock } = makeMockDeps();
+      const runFn = vi.fn(async (): Promise<ExitGateResult> => ({
+        statusChanged: true,
+        statusBefore: 'In Design',
+        statusAfter: 'In Build',
+        ticketUpdated: true,
+        epicUpdated: true,
+        ticketCompleted: false,
+        epicCompleted: false,
+        syncResult: { success: true },
+      }));
+      deps.exitGateRunner = { run: runFn };
+      deps.resolverRunner = { checkAll: vi.fn(async () => []) };
+
+      const stage = makeReadyStage();
+      const deferred = deferSession();
+
+      discovery.discover.mockResolvedValueOnce(makeDiscoveryResult([stage]));
+      locker.readStatus
+        .mockResolvedValueOnce('In Design')  // statusBefore
+        .mockResolvedValueOnce('In Build');   // statusAfter — changed
+
+      const config = makeConfig({ once: true });
+      const orchestrator = createOrchestrator(config, deps);
+
+      const startPromise = orchestrator.start();
+
+      await vi.waitFor(() => {
+        expect(sessionExecutor.spawn).toHaveBeenCalledTimes(1);
+      });
+
+      deferred.resolve({ exitCode: 0, durationMs: 1000 });
+      await startPromise;
+
+      expect(loggerMock.info).not.toHaveBeenCalledWith(
+        'Ticket completed — all stages done',
+        expect.anything(),
+      );
+      expect(loggerMock.info).not.toHaveBeenCalledWith(
+        'Epic completed — all tickets done',
+        expect.anything(),
+      );
+    });
+
     it('catches exit gate errors without crashing', async () => {
       const { deps, discovery, locker, deferSession, sessionExecutor, logger: loggerMock } = makeMockDeps();
       const runFn = vi.fn(async () => { throw new Error('gate failed'); });

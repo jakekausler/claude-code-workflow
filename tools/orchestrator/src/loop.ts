@@ -168,8 +168,16 @@ export function createOrchestrator(config: OrchestratorConfig, deps: Orchestrato
           stageId,
           ticketUpdated: gateResult.ticketUpdated,
           epicUpdated: gateResult.epicUpdated,
+          ticketCompleted: gateResult.ticketCompleted,
+          epicCompleted: gateResult.epicCompleted,
           syncSuccess: gateResult.syncResult.success,
         });
+        if (gateResult.ticketCompleted) {
+          logger.info('Ticket completed — all stages done', { stageId });
+        }
+        if (gateResult.epicCompleted) {
+          logger.info('Epic completed — all tickets done', { stageId });
+        }
       } catch (err) {
         logger.error('Exit gate failed', { stageId, error: (err as Error).message });
       }
