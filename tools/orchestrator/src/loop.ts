@@ -1,7 +1,7 @@
 import * as path from 'node:path';
 import type { PipelineConfig, PipelineState, ResolverContext } from 'kanban-cli';
 import type { Discovery, ReadyStage } from './discovery.js';
-import type { Locker } from './locking.js';
+import type { Locker, FrontmatterData } from './locking.js';
 import { defaultReadFrontmatter, defaultWriteFrontmatter } from './locking.js';
 import type { WorktreeManager } from './worktree.js';
 import type { SessionExecutor } from './session.js';
@@ -29,6 +29,8 @@ export interface OrchestratorDeps {
   now?: () => number;  // default: Date.now
   exitGateRunner?: ExitGateRunner;
   resolverRunner?: ResolverRunner;
+  readFrontmatter?: (filePath: string) => Promise<FrontmatterData>;
+  writeFrontmatter?: (filePath: string, data: Record<string, unknown>, content: string) => Promise<void>;
 }
 
 /**
@@ -89,22 +91,23 @@ export function createOrchestrator(config: OrchestratorConfig, deps: Orchestrato
   const { discovery, locker, worktreeManager, sessionExecutor, logger } = deps;
   const activeWorkers = new Map<number, WorkerInfo>();
 
+  // Frontmatter I/O (injectable for testing)
+  const readFrontmatter = deps.readFrontmatter ?? defaultReadFrontmatter;
+  const writeFrontmatter = deps.writeFrontmatter ?? defaultWriteFrontmatter;
+
   // Create exit gate runner (if not injected)
   const exitGateRunner = deps.exitGateRunner ?? createExitGateRunner({ logger });
 
   // Create resolver runner (if not injected)
-  let resolverRunner: ResolverRunner | undefined;
-  if (deps.resolverRunner !== undefined) {
-    resolverRunner = deps.resolverRunner;
-  } else {
+  const resolverRunner: ResolverRunner = deps.resolverRunner ?? (() => {
     const registry = new ResolverRegistry();
     registerBuiltinResolvers(registry);
-    resolverRunner = createResolverRunner(config.pipelineConfig, {
+    return createResolverRunner(config.pipelineConfig, {
       registry,
       exitGateRunner,
       logger,
     });
-  }
+  })();
 
   let running = false;
   let pendingSleep: { cancel: () => void } | undefined;
@@ -158,7 +161,7 @@ export function createOrchestrator(config: OrchestratorConfig, deps: Orchestrato
     }
 
     // Exit gate — propagate status change
-    if (exitGateRunner && workerInfo.statusBefore !== statusAfter) {
+    if (workerInfo.statusBefore !== statusAfter) {
       try {
         const gateResult = await exitGateRunner.run(workerInfo, config.repoPath, statusAfter);
         logger.info('Exit gate completed', {
@@ -201,7 +204,7 @@ export function createOrchestrator(config: OrchestratorConfig, deps: Orchestrato
 
       while (running) {
         // Run resolver checks at top of each tick
-        if (resolverRunner) {
+        {
           const resolverContext: ResolverContext = {
             env: config.workflowEnv,
           };
@@ -244,9 +247,9 @@ export function createOrchestrator(config: OrchestratorConfig, deps: Orchestrato
               (p: PipelineState) => p.name === entryPhase,
             );
             if (entryState) {
-              const { data, content } = await defaultReadFrontmatter(stageFilePath);
+              const { data, content } = await readFrontmatter(stageFilePath);
               data.status = entryState.status;
-              await defaultWriteFrontmatter(stageFilePath, data, content);
+              await writeFrontmatter(stageFilePath, data, content);
               statusBefore = entryState.status;
               logger.info('Onboarded stage to entry phase', { stageId: stage.id, status: entryState.status });
             }

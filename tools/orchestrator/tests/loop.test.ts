@@ -15,22 +15,6 @@ import type { Logger, SessionLogger } from '../src/logger.js';
 import type { ExitGateRunner, ExitGateResult } from '../src/exit-gates.js';
 import type { ResolverRunner, ResolverResult } from '../src/resolvers.js';
 
-// Mock the frontmatter functions used by "Not Started" onboarding in loop.ts
-const mockReadFrontmatter = vi.fn(async () => ({
-  data: { status: 'Not Started', id: 'STAGE-001-001-001' },
-  content: 'stage content',
-}));
-const mockWriteFrontmatter = vi.fn(async () => {});
-
-vi.mock('../src/locking.js', async (importOriginal) => {
-  const original = await importOriginal<typeof import('../src/locking.js')>();
-  return {
-    ...original,
-    defaultReadFrontmatter: (...args: unknown[]) => mockReadFrontmatter(...args),
-    defaultWriteFrontmatter: (...args: unknown[]) => mockWriteFrontmatter(...args),
-  };
-});
-
 // ---------- Test helpers ----------
 
 function makePipelineConfig(overrides?: Partial<PipelineConfig>): PipelineConfig {
@@ -1078,6 +1062,17 @@ describe('createOrchestrator', () => {
   });
 
   describe('"Not Started" onboarding', () => {
+    const mockReadFrontmatter = vi.fn(async () => ({
+      data: { status: 'Not Started', id: 'STAGE-001-001-001' } as Record<string, unknown>,
+      content: 'stage content',
+    }));
+    const mockWriteFrontmatter = vi.fn(async () => {});
+
+    beforeEach(() => {
+      mockReadFrontmatter.mockClear();
+      mockWriteFrontmatter.mockClear();
+    });
+
     it('transitions "Not Started" stages to entry phase status', async () => {
       const { deps, discovery, locker, deferSession, sessionExecutor, logger: loggerMock } = makeMockDeps();
       deps.resolverRunner = { checkAll: vi.fn(async () => []) };
@@ -1087,21 +1082,17 @@ describe('createOrchestrator', () => {
           ticketUpdated: true, epicUpdated: true, syncResult: { success: true },
         })),
       };
+      deps.readFrontmatter = mockReadFrontmatter;
+      deps.writeFrontmatter = mockWriteFrontmatter;
 
       const stage = makeReadyStage();
       const deferred = deferSession();
 
       discovery.discover.mockResolvedValueOnce(makeDiscoveryResult([stage]));
-      // readStatus returns "Not Started" initially, then "In Design" after session
+      // readStatus returns "Not Started" initially, then "In Build" after session
       locker.readStatus
         .mockResolvedValueOnce('Not Started') // statusBefore in tick
         .mockResolvedValueOnce('In Build');   // statusAfter in handleSessionExit
-
-      // Mock the frontmatter read/write used by onboarding.
-      // The loop imports defaultReadFrontmatter and defaultWriteFrontmatter from locking.js
-      // We can't easily mock those without modifying the module, so we need a different approach.
-      // Since the readFrontmatter/writeFrontmatter are called on the stage file path,
-      // and these are the real fs-based functions, we need to use vi.mock.
 
       const config = makeConfig({ once: true });
       const orchestrator = createOrchestrator(config, deps);
@@ -1123,6 +1114,13 @@ describe('createOrchestrator', () => {
         stageId: 'STAGE-001-001-001',
         status: 'In Design',
       });
+
+      // Verify writeFrontmatter was called with updated status
+      expect(mockWriteFrontmatter).toHaveBeenCalledWith(
+        expect.stringContaining('STAGE-001-001-001'),
+        expect.objectContaining({ status: 'In Design' }),
+        'stage content',
+      );
     });
   });
 });
