@@ -516,6 +516,123 @@ describe('createExitGateRunner', () => {
     });
   });
 
+  describe('reverse cascade', () => {
+    it('reverts ticket and epic from Complete to In Progress when a stage in a multi-stage ticket regresses', async () => {
+      // Both ticket (2 stages, both Complete) and epic (2 tickets, both Complete) are fully Complete.
+      // STAGE-001 regresses from Complete to Build.
+      // Expected: ticket -> In Progress, epic -> In Progress, flags both false.
+      const deps = makeDeps({
+        '/repo/epics/EPIC-001/TICKET-001/STAGE-001.md': {
+          data: { id: 'STAGE-001', ticket: 'TICKET-001', epic: 'EPIC-001', status: 'Complete' },
+          content: '# Stage\n',
+        },
+        '/repo/epics/EPIC-001/TICKET-001/TICKET-001.md': {
+          data: {
+            id: 'TICKET-001', epic: 'EPIC-001', title: 'Ticket 1', status: 'Complete',
+            stage_statuses: { 'STAGE-001': 'Complete', 'STAGE-002': 'Complete' },
+          },
+          content: '# Ticket 1\n',
+        },
+        '/repo/epics/EPIC-001/EPIC-001.md': {
+          data: {
+            id: 'EPIC-001', title: 'Epic', status: 'Complete',
+            ticket_statuses: { 'TICKET-001': 'Complete', 'TICKET-002': 'Complete' },
+          },
+          content: '# Epic\n',
+        },
+      });
+      const runner = createExitGateRunner(deps);
+      const workerInfo = makeWorkerInfo({ statusBefore: 'Complete' });
+
+      const result = await runner.run(workerInfo, REPO_PATH, 'Build');
+
+      // Result flags
+      expect(result.statusChanged).toBe(true);
+      expect(result.statusBefore).toBe('Complete');
+      expect(result.statusAfter).toBe('Build');
+      expect(result.ticketUpdated).toBe(true);
+      expect(result.ticketCompleted).toBe(false);
+      expect(result.epicUpdated).toBe(true);
+      expect(result.epicCompleted).toBe(false);
+
+      // Verify ticket frontmatter: stage_statuses updated, status derived to In Progress
+      const ticketWriteCall = deps.writeFrontmatter.mock.calls.find(
+        (call: unknown[]) => call[0] === '/repo/epics/EPIC-001/TICKET-001/TICKET-001.md',
+      );
+      expect(ticketWriteCall).toBeDefined();
+      const ticketData = ticketWriteCall![1] as Record<string, unknown>;
+      expect((ticketData.stage_statuses as Record<string, string>)['STAGE-001']).toBe('Build');
+      expect((ticketData.stage_statuses as Record<string, string>)['STAGE-002']).toBe('Complete');
+      expect(ticketData.status).toBe('In Progress');
+
+      // Verify epic frontmatter: ticket_statuses updated, status derived to In Progress
+      const epicWriteCall = deps.writeFrontmatter.mock.calls.find(
+        (call: unknown[]) => call[0] === '/repo/epics/EPIC-001/EPIC-001.md',
+      );
+      expect(epicWriteCall).toBeDefined();
+      const epicData = epicWriteCall![1] as Record<string, unknown>;
+      expect((epicData.ticket_statuses as Record<string, string>)['TICKET-001']).toBe('In Progress');
+      expect((epicData.ticket_statuses as Record<string, string>)['TICKET-002']).toBe('Complete');
+      expect(epicData.status).toBe('In Progress');
+    });
+
+    it('reverts single-stage ticket from Complete to In Progress when stage regresses', async () => {
+      // Ticket has only one stage (STAGE-001) which was Complete. Epic has one ticket, also Complete.
+      // STAGE-001 regresses from Complete to Design.
+      // Expected: ticket -> In Progress (single stage not Complete), epic -> In Progress.
+      const deps = makeDeps({
+        '/repo/epics/EPIC-001/TICKET-001/STAGE-001.md': {
+          data: { id: 'STAGE-001', ticket: 'TICKET-001', epic: 'EPIC-001', status: 'Complete' },
+          content: '# Stage\n',
+        },
+        '/repo/epics/EPIC-001/TICKET-001/TICKET-001.md': {
+          data: {
+            id: 'TICKET-001', epic: 'EPIC-001', title: 'Ticket 1', status: 'Complete',
+            stage_statuses: { 'STAGE-001': 'Complete' },
+          },
+          content: '# Ticket 1\n',
+        },
+        '/repo/epics/EPIC-001/EPIC-001.md': {
+          data: {
+            id: 'EPIC-001', title: 'Epic', status: 'Complete',
+            ticket_statuses: { 'TICKET-001': 'Complete' },
+          },
+          content: '# Epic\n',
+        },
+      });
+      const runner = createExitGateRunner(deps);
+      const workerInfo = makeWorkerInfo({ statusBefore: 'Complete' });
+
+      const result = await runner.run(workerInfo, REPO_PATH, 'Design');
+
+      // Result flags
+      expect(result.statusChanged).toBe(true);
+      expect(result.ticketUpdated).toBe(true);
+      expect(result.ticketCompleted).toBe(false);
+      expect(result.epicUpdated).toBe(true);
+      expect(result.epicCompleted).toBe(false);
+
+      // Verify ticket frontmatter
+      const ticketWriteCall = deps.writeFrontmatter.mock.calls.find(
+        (call: unknown[]) => call[0] === '/repo/epics/EPIC-001/TICKET-001/TICKET-001.md',
+      );
+      expect(ticketWriteCall).toBeDefined();
+      const ticketData = ticketWriteCall![1] as Record<string, unknown>;
+      // Single stage with Design -> deriveTicketStatus returns "In Progress" (not Complete, not Not Started)
+      expect((ticketData.stage_statuses as Record<string, string>)['STAGE-001']).toBe('Design');
+      expect(ticketData.status).toBe('In Progress');
+
+      // Verify epic frontmatter
+      const epicWriteCall = deps.writeFrontmatter.mock.calls.find(
+        (call: unknown[]) => call[0] === '/repo/epics/EPIC-001/EPIC-001.md',
+      );
+      expect(epicWriteCall).toBeDefined();
+      const epicData = epicWriteCall![1] as Record<string, unknown>;
+      expect((epicData.ticket_statuses as Record<string, string>)['TICKET-001']).toBe('In Progress');
+      expect(epicData.status).toBe('In Progress');
+    });
+  });
+
   describe('sync', () => {
     it('calls runSync after updates', async () => {
       const deps = makeDeps({
