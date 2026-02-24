@@ -202,12 +202,20 @@ export function createExitGateRunner(deps: Partial<ExitGateDeps> = {}): ExitGate
           ticketStatuses[ticketId] = derivedStatus;
           epicFm.data.ticket_statuses = ticketStatuses;
 
+          // Derive and set epic's own status from ticket_statuses
+          const derivedEpicStatus = deriveEpicStatus(ticketStatuses);
+          if (derivedEpicStatus !== null) {
+            epicFm.data.status = derivedEpicStatus;
+          }
+
           await writeFrontmatter(epicFilePath, epicFm.data, epicFm.content);
           result.epicUpdated = true;
+          result.epicCompleted = derivedEpicStatus === 'Complete';
           logger.info('Updated epic frontmatter', {
             epicId,
             ticketId,
             derivedTicketStatus: derivedStatus,
+            derivedEpicStatus,
           });
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
