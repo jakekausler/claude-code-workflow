@@ -181,6 +181,7 @@ export function createExitGateRunner(deps: Partial<ExitGateDeps> = {}): ExitGate
 
         await writeFrontmatter(ticketFilePath, ticketFm.data, ticketFm.content);
         result.ticketUpdated = true;
+        result.ticketCompleted = derivedStatus === 'Complete';
         logger.info('Updated ticket frontmatter', {
           ticketId,
           stageId: workerInfo.stageId,

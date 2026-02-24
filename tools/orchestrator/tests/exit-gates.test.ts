@@ -257,6 +257,70 @@ describe('createExitGateRunner', () => {
       expect(ticketData.status).toBe('In Progress');
     });
 
+    it('sets ticketCompleted to true when all stages are Complete', async () => {
+      const deps = makeDeps({
+        '/repo/epics/EPIC-001/TICKET-001/STAGE-001.md': {
+          data: { id: 'STAGE-001', ticket: 'TICKET-001', epic: 'EPIC-001', status: 'Complete' },
+          content: '# Stage\n',
+        },
+        '/repo/epics/EPIC-001/TICKET-001/TICKET-001.md': {
+          data: {
+            id: 'TICKET-001', epic: 'EPIC-001', title: 'Ticket', status: 'In Progress',
+            stage_statuses: { 'STAGE-001': 'Implementation', 'STAGE-002': 'Complete' },
+          },
+          content: '# Ticket\n',
+        },
+        '/repo/epics/EPIC-001/EPIC-001.md': {
+          data: { id: 'EPIC-001', title: 'Epic', status: 'In Progress', ticket_statuses: {} },
+          content: '# Epic\n',
+        },
+      });
+      const runner = createExitGateRunner(deps);
+      const workerInfo = makeWorkerInfo({ statusBefore: 'Implementation' });
+
+      const result = await runner.run(workerInfo, REPO_PATH, 'Complete');
+
+      expect(result.ticketCompleted).toBe(true);
+      // Also verify the ticket status was set to Complete
+      const ticketWriteCall = deps.writeFrontmatter.mock.calls.find(
+        (call: unknown[]) => call[0] === '/repo/epics/EPIC-001/TICKET-001/TICKET-001.md',
+      );
+      const ticketData = ticketWriteCall![1] as Record<string, unknown>;
+      expect(ticketData.status).toBe('Complete');
+    });
+
+    it('sets ticketCompleted to false when some stages are still in progress', async () => {
+      const deps = makeDeps({
+        '/repo/epics/EPIC-001/TICKET-001/STAGE-001.md': {
+          data: { id: 'STAGE-001', ticket: 'TICKET-001', epic: 'EPIC-001', status: 'Design' },
+          content: '# Stage\n',
+        },
+        '/repo/epics/EPIC-001/TICKET-001/TICKET-001.md': {
+          data: {
+            id: 'TICKET-001', epic: 'EPIC-001', title: 'Ticket', status: 'Not Started',
+            stage_statuses: { 'STAGE-001': 'Not Started', 'STAGE-002': 'Design' },
+          },
+          content: '# Ticket\n',
+        },
+        '/repo/epics/EPIC-001/EPIC-001.md': {
+          data: { id: 'EPIC-001', title: 'Epic', status: 'In Progress', ticket_statuses: {} },
+          content: '# Epic\n',
+        },
+      });
+      const runner = createExitGateRunner(deps);
+      const workerInfo = makeWorkerInfo({ statusBefore: 'Not Started' });
+
+      const result = await runner.run(workerInfo, REPO_PATH, 'Design');
+
+      expect(result.ticketCompleted).toBe(false);
+      // Ticket status should be In Progress, not Complete
+      const ticketWriteCall = deps.writeFrontmatter.mock.calls.find(
+        (call: unknown[]) => call[0] === '/repo/epics/EPIC-001/TICKET-001/TICKET-001.md',
+      );
+      const ticketData = ticketWriteCall![1] as Record<string, unknown>;
+      expect(ticketData.status).toBe('In Progress');
+    });
+
     it('derives ticket status as "Not Started" when all stages are Not Started', async () => {
       const deps = makeDeps({
         '/repo/epics/EPIC-001/TICKET-001/STAGE-001.md': {
