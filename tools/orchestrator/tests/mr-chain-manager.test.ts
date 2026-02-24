@@ -877,4 +877,584 @@ describe('createMRChainManager', () => {
       expect(results[0].rebaseSpawned).toBe(false);
     });
   });
+
+  describe('MR retargeting and draft promotion', () => {
+    /** Helper to build deps with retargeting infrastructure. */
+    function makeRetargetDeps(overrides: Partial<MRChainManagerDeps> = {}) {
+      const editPRBase = vi.fn();
+      const markPRReady = vi.fn();
+      const writeFm = vi.fn(async () => {});
+
+      return {
+        deps: {
+          getActiveTrackingRows: vi.fn(async () => []),
+          updateTrackingRow: vi.fn(async () => {}),
+          codeHost: makeCodeHost({ editPRBase, markPRReady }),
+          logger: {
+            info: vi.fn(),
+            warn: vi.fn(),
+            error: vi.fn(),
+          },
+          locker: null,
+          sessionExecutor: null,
+          readFrontmatter: vi.fn(async (): Promise<FrontmatterData> => ({
+            data: { pr_number: 42 },
+            content: '# Stage content',
+          })),
+          resolveStageFilePath: vi.fn(async (stageId: string) => `/repo/epics/e1/t1/${stageId}.md`),
+          createSessionLogger: null,
+          model: 'sonnet' as const,
+          workflowEnv: {},
+          getTrackingRowsForChild: vi.fn(async () => []),
+          writeFrontmatter: writeFm,
+          defaultBranch: 'main',
+          ...overrides,
+        } as MRChainManagerDeps & {
+          getActiveTrackingRows: ReturnType<typeof vi.fn>;
+          updateTrackingRow: ReturnType<typeof vi.fn>;
+          getTrackingRowsForChild: ReturnType<typeof vi.fn>;
+          readFrontmatter: ReturnType<typeof vi.fn>;
+          resolveStageFilePath: ReturnType<typeof vi.fn>;
+          writeFrontmatter: ReturnType<typeof vi.fn>;
+          logger: {
+            info: ReturnType<typeof vi.fn>;
+            warn: ReturnType<typeof vi.fn>;
+            error: ReturnType<typeof vi.fn>;
+          };
+        },
+        editPRBase,
+        markPRReady,
+        writeFm,
+      };
+    }
+
+    it('multi-parent, one merges, >1 remain → no retarget, stay draft', async () => {
+      const row = makeRow({
+        id: 1,
+        child_stage_id: 'CHILD-001',
+        parent_stage_id: 'PARENT-A',
+        parent_pr_url: 'https://github.com/owner/repo/pull/10',
+      });
+
+      const { deps } = makeRetargetDeps({
+        getActiveTrackingRows: vi.fn(async () => [row]),
+        codeHost: makeCodeHost({
+          getPRStatus: () => ({
+            merged: true,
+            hasUnresolvedComments: false,
+            unresolvedThreadCount: 0,
+            state: 'merged',
+          }),
+          editPRBase: vi.fn(),
+          markPRReady: vi.fn(),
+        }),
+        // After marking PARENT-A merged, 2 unmerged remain
+        getTrackingRowsForChild: vi.fn(async () => [
+          makeRow({ id: 1, parent_stage_id: 'PARENT-A', is_merged: 1 }),
+          makeRow({ id: 2, parent_stage_id: 'PARENT-B', is_merged: 0, parent_branch: 'epic/parent-b' }),
+          makeRow({ id: 3, parent_stage_id: 'PARENT-C', is_merged: 0, parent_branch: 'epic/parent-c' }),
+        ]),
+      });
+
+      const manager = createMRChainManager(deps);
+      const results = await manager.checkParentChains('/repo');
+
+      expect(results).toHaveLength(1);
+      expect(results[0].event).toBe('parent_merged');
+      expect(results[0].retargeted).toBe(false);
+      expect(results[0].promotedToReady).toBe(false);
+      // editPRBase and markPRReady should NOT have been called
+      expect(deps.codeHost!.editPRBase).not.toHaveBeenCalled();
+      expect(deps.codeHost!.markPRReady).not.toHaveBeenCalled();
+    });
+
+    it('multi-parent, all but one merge → retarget to remaining parent branch', async () => {
+      const row = makeRow({
+        id: 1,
+        child_stage_id: 'CHILD-001',
+        parent_stage_id: 'PARENT-A',
+        parent_pr_url: 'https://github.com/owner/repo/pull/10',
+      });
+
+      const editPRBaseFn = vi.fn();
+      const markPRReadyFn = vi.fn();
+
+      const { deps } = makeRetargetDeps({
+        getActiveTrackingRows: vi.fn(async () => [row]),
+        codeHost: makeCodeHost({
+          getPRStatus: () => ({
+            merged: true,
+            hasUnresolvedComments: false,
+            unresolvedThreadCount: 0,
+            state: 'merged',
+          }),
+          editPRBase: editPRBaseFn,
+          markPRReady: markPRReadyFn,
+        }),
+        // After marking PARENT-A merged, exactly 1 unmerged remains
+        getTrackingRowsForChild: vi.fn(async () => [
+          makeRow({ id: 1, parent_stage_id: 'PARENT-A', is_merged: 1 }),
+          makeRow({ id: 2, parent_stage_id: 'PARENT-B', is_merged: 0, parent_branch: 'epic/parent-b' }),
+        ]),
+        readFrontmatter: vi.fn(async (): Promise<FrontmatterData> => ({
+          data: { pr_number: 42 },
+          content: '# Stage content',
+        })),
+      });
+
+      const manager = createMRChainManager(deps);
+      const results = await manager.checkParentChains('/repo');
+
+      expect(results).toHaveLength(1);
+      expect(results[0].event).toBe('parent_merged');
+      expect(results[0].retargeted).toBe(true);
+      expect(results[0].promotedToReady).toBe(false);
+      // editPRBase should be called with the remaining parent branch
+      expect(editPRBaseFn).toHaveBeenCalledWith(42, 'epic/parent-b');
+      // markPRReady should NOT have been called (still has unmerged parent)
+      expect(markPRReadyFn).not.toHaveBeenCalled();
+    });
+
+    it('single-parent merged → retarget to main, promote to ready', async () => {
+      const row = makeRow({
+        id: 1,
+        child_stage_id: 'CHILD-001',
+        parent_stage_id: 'PARENT-A',
+        parent_pr_url: 'https://github.com/owner/repo/pull/10',
+      });
+
+      const editPRBaseFn = vi.fn();
+      const markPRReadyFn = vi.fn();
+      const writeFmFn = vi.fn(async () => {});
+
+      const { deps } = makeRetargetDeps({
+        getActiveTrackingRows: vi.fn(async () => [row]),
+        codeHost: makeCodeHost({
+          getPRStatus: () => ({
+            merged: true,
+            hasUnresolvedComments: false,
+            unresolvedThreadCount: 0,
+            state: 'merged',
+          }),
+          editPRBase: editPRBaseFn,
+          markPRReady: markPRReadyFn,
+        }),
+        // Single parent, now merged → 0 unmerged
+        getTrackingRowsForChild: vi.fn(async () => [
+          makeRow({ id: 1, parent_stage_id: 'PARENT-A', is_merged: 1 }),
+        ]),
+        readFrontmatter: vi.fn(async (): Promise<FrontmatterData> => ({
+          data: { pr_number: 42, is_draft: true, pending_merge_parents: [{ stage_id: 'PARENT-A', branch: 'epic/parent-a', pr_url: 'x', pr_number: 10 }] },
+          content: '# Stage content',
+        })),
+        writeFrontmatter: writeFmFn,
+      });
+
+      const manager = createMRChainManager(deps);
+      const results = await manager.checkParentChains('/repo');
+
+      expect(results).toHaveLength(1);
+      expect(results[0].event).toBe('parent_merged');
+      expect(results[0].retargeted).toBe(true);
+      expect(results[0].promotedToReady).toBe(true);
+      // editPRBase called with default branch
+      expect(editPRBaseFn).toHaveBeenCalledWith(42, 'main');
+      // markPRReady called for promotion
+      expect(markPRReadyFn).toHaveBeenCalledWith(42);
+      // Frontmatter updated
+      expect(writeFmFn).toHaveBeenCalledWith(
+        '/repo/epics/e1/t1/CHILD-001.md',
+        expect.objectContaining({ is_draft: false, pending_merge_parents: [] }),
+        '# Stage content',
+      );
+    });
+
+    it('all parents merged → retarget to main, promote to ready', async () => {
+      const row = makeRow({
+        id: 3,
+        child_stage_id: 'CHILD-001',
+        parent_stage_id: 'PARENT-C',
+        parent_pr_url: 'https://github.com/owner/repo/pull/12',
+      });
+
+      const editPRBaseFn = vi.fn();
+      const markPRReadyFn = vi.fn();
+      const writeFmFn = vi.fn(async () => {});
+
+      const { deps } = makeRetargetDeps({
+        getActiveTrackingRows: vi.fn(async () => [row]),
+        codeHost: makeCodeHost({
+          getPRStatus: () => ({
+            merged: true,
+            hasUnresolvedComments: false,
+            unresolvedThreadCount: 0,
+            state: 'merged',
+          }),
+          editPRBase: editPRBaseFn,
+          markPRReady: markPRReadyFn,
+        }),
+        // All 3 parents merged → 0 unmerged
+        getTrackingRowsForChild: vi.fn(async () => [
+          makeRow({ id: 1, parent_stage_id: 'PARENT-A', is_merged: 1 }),
+          makeRow({ id: 2, parent_stage_id: 'PARENT-B', is_merged: 1 }),
+          makeRow({ id: 3, parent_stage_id: 'PARENT-C', is_merged: 1 }),
+        ]),
+        readFrontmatter: vi.fn(async (): Promise<FrontmatterData> => ({
+          data: { pr_number: 55, is_draft: true, pending_merge_parents: [] },
+          content: '# Content',
+        })),
+        writeFrontmatter: writeFmFn,
+      });
+
+      const manager = createMRChainManager(deps);
+      const results = await manager.checkParentChains('/repo');
+
+      expect(results).toHaveLength(1);
+      expect(results[0].retargeted).toBe(true);
+      expect(results[0].promotedToReady).toBe(true);
+      expect(editPRBaseFn).toHaveBeenCalledWith(55, 'main');
+      expect(markPRReadyFn).toHaveBeenCalledWith(55);
+      expect(writeFmFn).toHaveBeenCalledWith(
+        '/repo/epics/e1/t1/CHILD-001.md',
+        expect.objectContaining({ is_draft: false, pending_merge_parents: [] }),
+        '# Content',
+      );
+    });
+
+    it('editPRBase called with correct arguments for retargeting', async () => {
+      const row = makeRow({
+        id: 1,
+        child_stage_id: 'CHILD-001',
+        parent_stage_id: 'PARENT-A',
+        parent_pr_url: 'https://github.com/owner/repo/pull/10',
+      });
+
+      const editPRBaseFn = vi.fn();
+
+      const { deps } = makeRetargetDeps({
+        getActiveTrackingRows: vi.fn(async () => [row]),
+        codeHost: makeCodeHost({
+          getPRStatus: () => ({
+            merged: true,
+            hasUnresolvedComments: false,
+            unresolvedThreadCount: 0,
+            state: 'merged',
+          }),
+          editPRBase: editPRBaseFn,
+        }),
+        // 1 unmerged remaining
+        getTrackingRowsForChild: vi.fn(async () => [
+          makeRow({ id: 1, parent_stage_id: 'PARENT-A', is_merged: 1 }),
+          makeRow({ id: 2, parent_stage_id: 'PARENT-B', is_merged: 0, parent_branch: 'feature/parent-b-branch' }),
+        ]),
+        readFrontmatter: vi.fn(async (): Promise<FrontmatterData> => ({
+          data: { pr_number: 99 },
+          content: '',
+        })),
+        defaultBranch: 'develop',
+      });
+
+      const manager = createMRChainManager(deps);
+      await manager.checkParentChains('/repo');
+
+      // Should retarget to the remaining parent branch (not defaultBranch)
+      expect(editPRBaseFn).toHaveBeenCalledTimes(1);
+      expect(editPRBaseFn).toHaveBeenCalledWith(99, 'feature/parent-b-branch');
+    });
+
+    it('markPRReady called only when all parents merged (not for partial retarget)', async () => {
+      const row = makeRow({
+        id: 1,
+        child_stage_id: 'CHILD-001',
+        parent_stage_id: 'PARENT-A',
+        parent_pr_url: 'https://github.com/owner/repo/pull/10',
+      });
+
+      const markPRReadyFn = vi.fn();
+
+      const { deps } = makeRetargetDeps({
+        getActiveTrackingRows: vi.fn(async () => [row]),
+        codeHost: makeCodeHost({
+          getPRStatus: () => ({
+            merged: true,
+            hasUnresolvedComments: false,
+            unresolvedThreadCount: 0,
+            state: 'merged',
+          }),
+          markPRReady: markPRReadyFn,
+        }),
+        // Still 1 unmerged → partial retarget, no promotion
+        getTrackingRowsForChild: vi.fn(async () => [
+          makeRow({ id: 1, parent_stage_id: 'PARENT-A', is_merged: 1 }),
+          makeRow({ id: 2, parent_stage_id: 'PARENT-B', is_merged: 0, parent_branch: 'epic/parent-b' }),
+        ]),
+        readFrontmatter: vi.fn(async (): Promise<FrontmatterData> => ({
+          data: { pr_number: 42 },
+          content: '',
+        })),
+      });
+
+      const manager = createMRChainManager(deps);
+      await manager.checkParentChains('/repo');
+
+      // markPRReady should NOT be called (only on full promotion)
+      expect(markPRReadyFn).not.toHaveBeenCalled();
+    });
+
+    it('frontmatter updated correctly after promotion (is_draft: false, pending_merge_parents cleared)', async () => {
+      const row = makeRow({
+        id: 1,
+        child_stage_id: 'CHILD-001',
+        parent_stage_id: 'PARENT-A',
+        parent_pr_url: 'https://github.com/owner/repo/pull/10',
+      });
+
+      const writeFmFn = vi.fn(async () => {});
+
+      const { deps } = makeRetargetDeps({
+        getActiveTrackingRows: vi.fn(async () => [row]),
+        codeHost: makeCodeHost({
+          getPRStatus: () => ({
+            merged: true,
+            hasUnresolvedComments: false,
+            unresolvedThreadCount: 0,
+            state: 'merged',
+          }),
+        }),
+        // All merged
+        getTrackingRowsForChild: vi.fn(async () => [
+          makeRow({ id: 1, parent_stage_id: 'PARENT-A', is_merged: 1 }),
+        ]),
+        readFrontmatter: vi.fn(async (): Promise<FrontmatterData> => ({
+          data: {
+            pr_number: 42,
+            is_draft: true,
+            pending_merge_parents: [{ stage_id: 'PARENT-A', branch: 'epic/parent-a', pr_url: 'x', pr_number: 10 }],
+            status: 'PR Created',
+          },
+          content: '# My stage',
+        })),
+        writeFrontmatter: writeFmFn,
+      });
+
+      const manager = createMRChainManager(deps);
+      await manager.checkParentChains('/repo');
+
+      expect(writeFmFn).toHaveBeenCalledTimes(1);
+      const [filePath, data, content] = writeFmFn.mock.calls[0];
+      expect(filePath).toBe('/repo/epics/e1/t1/CHILD-001.md');
+      expect(data.is_draft).toBe(false);
+      expect(data.pending_merge_parents).toEqual([]);
+      expect(data.status).toBe('PR Created'); // status not changed
+      expect(content).toBe('# My stage');
+    });
+
+    it('no retarget when getTrackingRowsForChild is null', async () => {
+      const row = makeRow();
+      const editPRBaseFn = vi.fn();
+
+      const deps = makeDeps({
+        getActiveTrackingRows: vi.fn(async () => [row]),
+        codeHost: makeCodeHost({
+          getPRStatus: () => ({
+            merged: true,
+            hasUnresolvedComments: false,
+            unresolvedThreadCount: 0,
+            state: 'merged',
+          }),
+          editPRBase: editPRBaseFn,
+        }),
+        // getTrackingRowsForChild is null (default from makeDeps)
+      });
+      const manager = createMRChainManager(deps);
+
+      const results = await manager.checkParentChains('/repo');
+
+      expect(results).toHaveLength(1);
+      expect(results[0].retargeted).toBe(false);
+      expect(results[0].promotedToReady).toBe(false);
+      expect(editPRBaseFn).not.toHaveBeenCalled();
+    });
+
+    it('no retarget when child has no pr_number in frontmatter', async () => {
+      const row = makeRow({
+        id: 1,
+        child_stage_id: 'CHILD-001',
+        parent_stage_id: 'PARENT-A',
+        parent_pr_url: 'https://github.com/owner/repo/pull/10',
+      });
+
+      const editPRBaseFn = vi.fn();
+
+      const { deps } = makeRetargetDeps({
+        getActiveTrackingRows: vi.fn(async () => [row]),
+        codeHost: makeCodeHost({
+          getPRStatus: () => ({
+            merged: true,
+            hasUnresolvedComments: false,
+            unresolvedThreadCount: 0,
+            state: 'merged',
+          }),
+          editPRBase: editPRBaseFn,
+        }),
+        getTrackingRowsForChild: vi.fn(async () => [
+          makeRow({ id: 1, parent_stage_id: 'PARENT-A', is_merged: 1 }),
+        ]),
+        // No pr_number in frontmatter
+        readFrontmatter: vi.fn(async (): Promise<FrontmatterData> => ({
+          data: { status: 'PR Created' },
+          content: '',
+        })),
+      });
+
+      const manager = createMRChainManager(deps);
+      const results = await manager.checkParentChains('/repo');
+
+      expect(results).toHaveLength(1);
+      expect(results[0].retargeted).toBe(false);
+      expect(results[0].promotedToReady).toBe(false);
+      expect(editPRBaseFn).not.toHaveBeenCalled();
+    });
+
+    it('editPRBase failure prevents promotion', async () => {
+      const row = makeRow({
+        id: 1,
+        child_stage_id: 'CHILD-001',
+        parent_stage_id: 'PARENT-A',
+        parent_pr_url: 'https://github.com/owner/repo/pull/10',
+      });
+
+      const editPRBaseFn = vi.fn(() => { throw new Error('API error: cannot change base'); });
+      const markPRReadyFn = vi.fn();
+
+      const { deps } = makeRetargetDeps({
+        getActiveTrackingRows: vi.fn(async () => [row]),
+        codeHost: makeCodeHost({
+          getPRStatus: () => ({
+            merged: true,
+            hasUnresolvedComments: false,
+            unresolvedThreadCount: 0,
+            state: 'merged',
+          }),
+          editPRBase: editPRBaseFn,
+          markPRReady: markPRReadyFn,
+        }),
+        // All merged → would promote, but editPRBase fails
+        getTrackingRowsForChild: vi.fn(async () => [
+          makeRow({ id: 1, parent_stage_id: 'PARENT-A', is_merged: 1 }),
+        ]),
+        readFrontmatter: vi.fn(async (): Promise<FrontmatterData> => ({
+          data: { pr_number: 42 },
+          content: '',
+        })),
+      });
+
+      const manager = createMRChainManager(deps);
+      const results = await manager.checkParentChains('/repo');
+
+      expect(results).toHaveLength(1);
+      expect(results[0].retargeted).toBe(false);
+      expect(results[0].promotedToReady).toBe(false);
+      // markPRReady should NOT be called since retargeting failed
+      expect(markPRReadyFn).not.toHaveBeenCalled();
+      // Error should be logged
+      expect(deps.logger.error).toHaveBeenCalledWith(
+        'Failed to retarget PR to default branch',
+        expect.objectContaining({
+          childStageId: 'CHILD-001',
+          error: 'API error: cannot change base',
+        }),
+      );
+    });
+
+    it('markPRReady failure returns retargeted=true, promotedToReady=false', async () => {
+      const row = makeRow({
+        id: 1,
+        child_stage_id: 'CHILD-001',
+        parent_stage_id: 'PARENT-A',
+        parent_pr_url: 'https://github.com/owner/repo/pull/10',
+      });
+
+      const editPRBaseFn = vi.fn(); // succeeds
+      const markPRReadyFn = vi.fn(() => { throw new Error('API error: cannot mark ready'); });
+
+      const { deps } = makeRetargetDeps({
+        getActiveTrackingRows: vi.fn(async () => [row]),
+        codeHost: makeCodeHost({
+          getPRStatus: () => ({
+            merged: true,
+            hasUnresolvedComments: false,
+            unresolvedThreadCount: 0,
+            state: 'merged',
+          }),
+          editPRBase: editPRBaseFn,
+          markPRReady: markPRReadyFn,
+        }),
+        // All merged → would promote, but markPRReady fails
+        getTrackingRowsForChild: vi.fn(async () => [
+          makeRow({ id: 1, parent_stage_id: 'PARENT-A', is_merged: 1 }),
+        ]),
+        readFrontmatter: vi.fn(async (): Promise<FrontmatterData> => ({
+          data: { pr_number: 42 },
+          content: '',
+        })),
+      });
+
+      const manager = createMRChainManager(deps);
+      const results = await manager.checkParentChains('/repo');
+
+      expect(results).toHaveLength(1);
+      expect(results[0].retargeted).toBe(true);
+      expect(results[0].promotedToReady).toBe(false);
+      // editPRBase should have been called successfully
+      expect(editPRBaseFn).toHaveBeenCalledWith(42, 'main');
+      // markPRReady was called but threw
+      expect(markPRReadyFn).toHaveBeenCalledWith(42);
+      // Error should be logged
+      expect(deps.logger.error).toHaveBeenCalledWith(
+        'Failed to promote PR to ready',
+        expect.objectContaining({
+          childStageId: 'CHILD-001',
+          error: 'API error: cannot mark ready',
+        }),
+      );
+    });
+
+    it('uses custom defaultBranch for retargeting when all parents merged', async () => {
+      const row = makeRow({
+        id: 1,
+        child_stage_id: 'CHILD-001',
+        parent_stage_id: 'PARENT-A',
+        parent_pr_url: 'https://github.com/owner/repo/pull/10',
+      });
+
+      const editPRBaseFn = vi.fn();
+
+      const { deps } = makeRetargetDeps({
+        getActiveTrackingRows: vi.fn(async () => [row]),
+        codeHost: makeCodeHost({
+          getPRStatus: () => ({
+            merged: true,
+            hasUnresolvedComments: false,
+            unresolvedThreadCount: 0,
+            state: 'merged',
+          }),
+          editPRBase: editPRBaseFn,
+        }),
+        getTrackingRowsForChild: vi.fn(async () => [
+          makeRow({ id: 1, parent_stage_id: 'PARENT-A', is_merged: 1 }),
+        ]),
+        readFrontmatter: vi.fn(async (): Promise<FrontmatterData> => ({
+          data: { pr_number: 42 },
+          content: '',
+        })),
+        defaultBranch: 'develop',
+      });
+
+      const manager = createMRChainManager(deps);
+      await manager.checkParentChains('/repo');
+
+      expect(editPRBaseFn).toHaveBeenCalledWith(42, 'develop');
+    });
+  });
 });

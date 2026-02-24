@@ -335,6 +335,9 @@ export function createMRChainManager(
    *   - Single-parent merged (0 unmerged) → retarget to defaultBranch + promote
    *   - All parents merged (0 unmerged) → retarget to defaultBranch + promote
    */
+  // Note: CodeHostAdapter methods (editPRBase, markPRReady) are synchronous
+  // (execFileSync). If made async, these calls and their try/catch blocks
+  // will need await.
   async function evaluateRetargeting(
     childStageId: string,
     childPrNumber: number | null,
@@ -347,8 +350,8 @@ export function createMRChainManager(
 
     const host = codeHost!;
     const allRows = await getTrackingRowsForChild!(childStageId, repoPath);
-    // is_merged can be boolean true or number 1 (SQLite stores 0/1)
-    const unmergedRows = allRows.filter(r => !r.is_merged && r.is_merged !== 1);
+    // is_merged can be boolean true or number 1 (SQLite stores booleans as 0/1)
+    const unmergedRows = allRows.filter(r => !r.is_merged);
 
     const totalParents = allRows.length;
     const unmergedCount = unmergedRows.length;
@@ -490,8 +493,12 @@ export function createMRChainManager(
         const { event, rebaseSpawned } = await attemptRebaseSpawn(row.child_stage_id, repoPath, 'parent_merged');
 
         // Evaluate retargeting matrix after parent merge
-        const { prNumber: childPrNumber, stageFilePath: childFilePath } = await resolveChildPrNumber(row.child_stage_id, repoPath);
-        const { retargeted, promotedToReady } = await evaluateRetargeting(row.child_stage_id, childPrNumber, repoPath, childFilePath);
+        let retargeted = false;
+        let promotedToReady = false;
+        if (canRetarget()) {
+          const { prNumber: childPrNumber, stageFilePath: childFilePath } = await resolveChildPrNumber(row.child_stage_id, repoPath);
+          ({ retargeted, promotedToReady } = await evaluateRetargeting(row.child_stage_id, childPrNumber, repoPath, childFilePath));
+        }
 
         return {
           childStageId: row.child_stage_id,

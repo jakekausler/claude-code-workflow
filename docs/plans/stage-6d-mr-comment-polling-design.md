@@ -193,10 +193,13 @@ Check cycle:
    d. **Parent branch updated (HEAD changed):**
       - Update `parent_branch_tracking.last_known_head`
       - If not locked: acquire lock, spawn rebase session
-3. **Post-rebase (when session completes successfully and 0 unmerged parents remain):**
-   - Call `codeHost.editPRBase(prNumber, defaultBranch)` to retarget
-   - Call `codeHost.markPRReady(prNumber)` to promote from draft
-   - Update frontmatter: `is_draft: false`, clear `pending_merge_parents`
+3. **Retargeting & promotion (runs immediately on merge detection, not after rebase completes):**
+   Retargeting the PR base branch does not depend on the rebase session completing,
+   so it is evaluated as soon as a parent merge is detected. This avoids waiting for
+   a potentially long-running rebase before updating the PR target.
+   - Call `codeHost.editPRBase(prNumber, newBase)` to retarget (remaining parent or defaultBranch)
+   - If all parents merged: call `codeHost.markPRReady(prNumber)` to promote from draft
+   - If all parents merged: update frontmatter: `is_draft: false`, clear `pending_merge_parents`
 
 ### 4. Retargeting Matrix
 
