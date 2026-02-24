@@ -250,6 +250,203 @@ describe('Exit Gate Flow Integration', () => {
     });
   });
 
+  describe('completion cascade', () => {
+    // Differs from "All stages complete" above: this tests a multi-ticket epic (2 tickets) and asserts epicCompleted.
+    it('cascades stage Complete through ticket to epic', async () => {
+      // Multi-stage ticket (2 stages), multi-ticket epic (2 tickets).
+      // STAGE-001-001-001 transitions to Complete; STAGE-001-001-002 already Complete.
+      // TICKET-001-002 is already Complete in the epic.
+      // Expected: ticket derives Complete -> epic derives Complete.
+      const deps = makeDeps({
+        '/repo/epics/EPIC-001/TICKET-001-001/STAGE-001-001-001.md': {
+          data: {
+            id: 'STAGE-001-001-001',
+            ticket: 'TICKET-001-001',
+            epic: 'EPIC-001',
+            status: 'Complete',
+          },
+          content: '# Stage\n',
+        },
+        '/repo/epics/EPIC-001/TICKET-001-001/TICKET-001-001.md': {
+          data: {
+            id: 'TICKET-001-001',
+            epic: 'EPIC-001',
+            stages: ['STAGE-001-001-001', 'STAGE-001-001-002'],
+            status: 'In Progress',
+            stage_statuses: {
+              'STAGE-001-001-001': 'Finalize',
+              'STAGE-001-001-002': 'Complete',
+            },
+          },
+          content: '# Ticket\n',
+        },
+        '/repo/epics/EPIC-001/EPIC-001.md': {
+          data: {
+            id: 'EPIC-001',
+            tickets: ['TICKET-001-001', 'TICKET-001-002'],
+            ticket_statuses: {
+              'TICKET-001-001': 'In Progress',
+              'TICKET-001-002': 'Complete',
+            },
+          },
+          content: '# Epic\n',
+        },
+      });
+
+      const runner = createExitGateRunner(deps);
+      const workerInfo = makeWorkerInfo({ statusBefore: 'Finalize' });
+
+      const result = await runner.run(workerInfo, REPO_PATH, 'Complete');
+
+      // Full cascade: stage -> ticket -> epic all Complete
+      expect(result.statusChanged).toBe(true);
+      expect(result.ticketUpdated).toBe(true);
+      expect(result.epicUpdated).toBe(true);
+      expect(result.ticketCompleted).toBe(true);
+      expect(result.epicCompleted).toBe(true);
+
+      // Ticket derived to Complete
+      const ticketData = deps.store['/repo/epics/EPIC-001/TICKET-001-001/TICKET-001-001.md'].data;
+      expect(ticketData.status).toBe('Complete');
+
+      // Epic derived to Complete (both tickets now Complete)
+      const epicData = deps.store['/repo/epics/EPIC-001/EPIC-001.md'].data;
+      expect(epicData.status).toBe('Complete');
+
+      // Sync was called exactly once (no retry needed since mock returns success)
+      expect(deps.runSync).toHaveBeenCalledTimes(1);
+    });
+
+    it('partial completion — ticket completes but epic does not', async () => {
+      // Stage completes -> ticket derives Complete
+      // But epic has another ticket still In Progress -> epic stays In Progress
+      const deps = makeDeps({
+        '/repo/epics/EPIC-001/TICKET-001-001/STAGE-001-001-001.md': {
+          data: {
+            id: 'STAGE-001-001-001',
+            ticket: 'TICKET-001-001',
+            epic: 'EPIC-001',
+            status: 'Complete',
+          },
+          content: '# Stage\n',
+        },
+        '/repo/epics/EPIC-001/TICKET-001-001/TICKET-001-001.md': {
+          data: {
+            id: 'TICKET-001-001',
+            epic: 'EPIC-001',
+            stages: ['STAGE-001-001-001'],
+            status: 'In Progress',
+            stage_statuses: {
+              'STAGE-001-001-001': 'Finalize',
+            },
+          },
+          content: '# Ticket\n',
+        },
+        '/repo/epics/EPIC-001/EPIC-001.md': {
+          data: {
+            id: 'EPIC-001',
+            tickets: ['TICKET-001-001', 'TICKET-001-002'],
+            ticket_statuses: {
+              'TICKET-001-001': 'In Progress',
+              'TICKET-001-002': 'In Progress',
+            },
+          },
+          content: '# Epic\n',
+        },
+      });
+
+      const runner = createExitGateRunner(deps);
+      const workerInfo = makeWorkerInfo({ statusBefore: 'Finalize' });
+
+      const result = await runner.run(workerInfo, REPO_PATH, 'Complete');
+
+      // Ticket completes, but epic does NOT
+      expect(result.statusChanged).toBe(true);
+      expect(result.ticketUpdated).toBe(true);
+      expect(result.epicUpdated).toBe(true);
+      expect(result.ticketCompleted).toBe(true);
+      expect(result.epicCompleted).toBe(false);
+
+      // Ticket derived to Complete (single stage, now Complete)
+      const ticketData = deps.store['/repo/epics/EPIC-001/TICKET-001-001/TICKET-001-001.md'].data;
+      expect(ticketData.status).toBe('Complete');
+
+      // Epic remains In Progress (TICKET-001-002 still In Progress)
+      const epicData = deps.store['/repo/epics/EPIC-001/EPIC-001.md'].data;
+      expect(epicData.status).toBe('In Progress');
+
+      // Sync was called
+      expect(deps.runSync).toHaveBeenCalledTimes(1);
+    });
+
+    it('reverse cascade — revert stage un-completes ticket and epic', async () => {
+      // Everything was Complete. Stage reverts from Complete to Build.
+      // Ticket should derive In Progress (one stage Build, one Complete).
+      // Epic should derive In Progress (ticket no longer Complete).
+      const deps = makeDeps({
+        '/repo/epics/EPIC-001/TICKET-001-001/STAGE-001-001-001.md': {
+          data: {
+            id: 'STAGE-001-001-001',
+            ticket: 'TICKET-001-001',
+            epic: 'EPIC-001',
+            status: 'Build',
+          },
+          content: '# Stage\n',
+        },
+        '/repo/epics/EPIC-001/TICKET-001-001/TICKET-001-001.md': {
+          data: {
+            id: 'TICKET-001-001',
+            epic: 'EPIC-001',
+            stages: ['STAGE-001-001-001', 'STAGE-001-001-002'],
+            status: 'Complete',
+            stage_statuses: {
+              'STAGE-001-001-001': 'Complete',
+              'STAGE-001-001-002': 'Complete',
+            },
+          },
+          content: '# Ticket\n',
+        },
+        '/repo/epics/EPIC-001/EPIC-001.md': {
+          data: {
+            id: 'EPIC-001',
+            tickets: ['TICKET-001-001'],
+            ticket_statuses: {
+              'TICKET-001-001': 'Complete',
+            },
+            status: 'Complete',
+          },
+          content: '# Epic\n',
+        },
+      });
+
+      const runner = createExitGateRunner(deps);
+      const workerInfo = makeWorkerInfo({ statusBefore: 'Complete' });
+
+      const result = await runner.run(workerInfo, REPO_PATH, 'Build');
+
+      // Reverse cascade: neither ticket nor epic remain Complete
+      expect(result.statusChanged).toBe(true);
+      expect(result.ticketUpdated).toBe(true);
+      expect(result.epicUpdated).toBe(true);
+      expect(result.ticketCompleted).toBe(false);
+      expect(result.epicCompleted).toBe(false);
+
+      // Ticket derives In Progress (one stage Build, one Complete)
+      const ticketData = deps.store['/repo/epics/EPIC-001/TICKET-001-001/TICKET-001-001.md'].data;
+      expect(ticketData.status).toBe('In Progress');
+      const stageStatuses = ticketData.stage_statuses as Record<string, string>;
+      expect(stageStatuses['STAGE-001-001-001']).toBe('Build');
+      expect(stageStatuses['STAGE-001-001-002']).toBe('Complete');
+
+      // Epic derives In Progress (ticket is no longer Complete)
+      const epicData = deps.store['/repo/epics/EPIC-001/EPIC-001.md'].data;
+      expect(epicData.status).toBe('In Progress');
+
+      // Sync was called
+      expect(deps.runSync).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('Multi-ticket epic propagation', () => {
     it('updates epic with correct ticket status when multiple tickets exist', async () => {
       const deps = makeDeps({
