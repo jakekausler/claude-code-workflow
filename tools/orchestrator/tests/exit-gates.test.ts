@@ -21,7 +21,7 @@ function makeFrontmatterStore(entries: Record<string, FrontmatterData>): Record<
   // Deep clone each entry so mutations in tests don't bleed across calls
   const store: Record<string, FrontmatterData> = {};
   for (const [key, value] of Object.entries(entries)) {
-    store[key] = { data: { ...value.data }, content: value.content };
+    store[key] = structuredClone({ data: value.data, content: value.content });
   }
   return store;
 }
@@ -47,11 +47,11 @@ function makeDeps(
       const entry = store[filePath];
       if (!entry) throw new Error(`ENOENT: ${filePath}`);
       // Return a fresh copy so mutations within the runner are captured by writeFrontmatter
-      return { data: { ...entry.data }, content: entry.content };
+      return structuredClone({ data: entry.data, content: entry.content });
     }),
     writeFrontmatter: vi.fn(async (filePath: string, data: Record<string, unknown>, content: string) => {
       // Update the store so subsequent reads reflect writes
-      store[filePath] = { data: { ...data }, content };
+      store[filePath] = structuredClone({ data, content });
     }),
     runSync: vi.fn(async () => ({ ...syncResult })),
     logger: {
@@ -409,7 +409,8 @@ describe('createExitGateRunner', () => {
       const result = await runner.run(workerInfo, REPO_PATH, 'Implementation');
 
       expect(result.ticketUpdated).toBe(false);
-      expect(result.epicUpdated).toBe(true);
+      // Epic is not updated because derivedStatus is null when ticket read fails
+      expect(result.epicUpdated).toBe(false);
       expect(deps.logger.warn).toHaveBeenCalledWith(
         'Failed to update ticket frontmatter',
         expect.objectContaining({ ticketFilePath: '/repo/epics/EPIC-001/TICKET-001/TICKET-001.md' }),
@@ -443,6 +444,35 @@ describe('createExitGateRunner', () => {
       );
       // Should still have called sync
       expect(deps.runSync).toHaveBeenCalledWith(REPO_PATH);
+    });
+
+    it('handles stage file read failure gracefully (no ticket/epic updates, sync still runs)', async () => {
+      const deps = makeDeps({
+        // No stage file — readFrontmatter will throw for the stage path
+        '/repo/epics/EPIC-001/TICKET-001/TICKET-001.md': {
+          data: { id: 'TICKET-001', epic: 'EPIC-001', title: 'Ticket', status: 'Not Started', stage_statuses: {} },
+          content: '# Ticket\n',
+        },
+        '/repo/epics/EPIC-001/EPIC-001.md': {
+          data: { id: 'EPIC-001', title: 'Epic', status: 'Not Started', ticket_statuses: {} },
+          content: '# Epic\n',
+        },
+      });
+      const runner = createExitGateRunner(deps);
+      const workerInfo = makeWorkerInfo({ statusBefore: 'Not Started' });
+
+      const result = await runner.run(workerInfo, REPO_PATH, 'Implementation');
+
+      expect(result.statusChanged).toBe(true);
+      expect(result.ticketUpdated).toBe(false);
+      expect(result.epicUpdated).toBe(false);
+      expect(deps.logger.error).toHaveBeenCalledWith(
+        'Failed to read stage frontmatter',
+        expect.objectContaining({ stageFilePath: workerInfo.stageFilePath }),
+      );
+      // Sync should still run even when stage read fails
+      expect(deps.runSync).toHaveBeenCalledWith(REPO_PATH);
+      expect(result.syncResult.success).toBe(true);
     });
 
     it('never throws even when all operations fail', async () => {

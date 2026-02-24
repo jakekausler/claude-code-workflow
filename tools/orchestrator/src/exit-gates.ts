@@ -133,6 +133,16 @@ export function createExitGateRunner(deps: Partial<ExitGateDeps> = {}): ExitGate
         return result;
       }
 
+      if (!ticketId || !epicId) {
+        logger.warn('Stage file missing ticket or epic ID', {
+          stageFilePath: workerInfo.stageFilePath,
+          ticketId,
+          epicId,
+        });
+        result.syncResult = await runSyncWithRetry(repoPath);
+        return result;
+      }
+
       // 3. Resolve ticket file path and update ticket frontmatter
       const ticketFilePath = path.join(repoPath, 'epics', epicId, ticketId, `${ticketId}.md`);
       let derivedStatus: string | null = null;
@@ -161,26 +171,26 @@ export function createExitGateRunner(deps: Partial<ExitGateDeps> = {}): ExitGate
         logger.warn('Failed to update ticket frontmatter', { ticketFilePath, error: msg });
       }
 
-      // 5. Resolve epic file path and update epic frontmatter
-      const epicFilePath = path.join(repoPath, 'epics', epicId, `${epicId}.md`);
-      try {
-        const epicFm = await readFrontmatter(epicFilePath);
-        const ticketStatuses = (epicFm.data.ticket_statuses as Record<string, string>) ?? {};
-        if (derivedStatus !== null) {
+      // 5. Resolve epic file path and update epic frontmatter (only if we derived a status)
+      if (derivedStatus !== null) {
+        const epicFilePath = path.join(repoPath, 'epics', epicId, `${epicId}.md`);
+        try {
+          const epicFm = await readFrontmatter(epicFilePath);
+          const ticketStatuses = (epicFm.data.ticket_statuses as Record<string, string>) ?? {};
           ticketStatuses[ticketId] = derivedStatus;
           epicFm.data.ticket_statuses = ticketStatuses;
-        }
 
-        await writeFrontmatter(epicFilePath, epicFm.data, epicFm.content);
-        result.epicUpdated = true;
-        logger.info('Updated epic frontmatter', {
-          epicId,
-          ticketId,
-          derivedTicketStatus: derivedStatus,
-        });
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        logger.warn('Failed to update epic frontmatter', { epicFilePath, error: msg });
+          await writeFrontmatter(epicFilePath, epicFm.data, epicFm.content);
+          result.epicUpdated = true;
+          logger.info('Updated epic frontmatter', {
+            epicId,
+            ticketId,
+            derivedTicketStatus: derivedStatus,
+          });
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          logger.warn('Failed to update epic frontmatter', { epicFilePath, error: msg });
+        }
       }
 
       // 6. Call syncRepo with retry
