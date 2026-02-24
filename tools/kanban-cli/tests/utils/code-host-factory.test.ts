@@ -24,7 +24,7 @@ describe('createCodeHostAdapter', () => {
 });
 
 describe('end-to-end: platform detection -> adapter -> resolver', () => {
-  it('GitHub flow: detects platform, creates adapter, resolves PR merged', () => {
+  it('GitHub flow: detects platform, creates adapter, resolves PR merged', async () => {
     // 1. Detect platform
     const platform = detectGitPlatform({
       envValue: 'github',
@@ -52,11 +52,11 @@ describe('end-to-end: platform detection -> adapter -> resolver', () => {
       env: {},
       codeHost: adapter,
     };
-    const result = prStatusResolver(stage, ctx);
+    const result = await prStatusResolver(stage, ctx);
     expect(result).toBe('Done');
   });
 
-  it('GitLab flow: detects platform, creates adapter, resolves MR with unresolved comments', () => {
+  it('GitLab flow: detects platform, creates adapter, resolves MR not merged', async () => {
     // 1. Detect platform
     const platform = detectGitPlatform({
       getRemoteUrl: () => 'git@gitlab.com:org/repo.git',
@@ -73,7 +73,7 @@ describe('end-to-end: platform detection -> adapter -> resolver', () => {
       }),
     });
 
-    // 3. Run resolver
+    // 3. Run resolver — pr-status only checks merge, so open MR returns null
     const stage: ResolverStageInput = {
       id: 'STAGE-001',
       status: 'PR Created',
@@ -83,11 +83,11 @@ describe('end-to-end: platform detection -> adapter -> resolver', () => {
       env: {},
       codeHost: adapter,
     };
-    const result = prStatusResolver(stage, ctx);
-    expect(result).toBe('Addressing Comments');
+    const result = await prStatusResolver(stage, ctx);
+    expect(result).toBeNull();
   });
 
-  it('unknown platform: no adapter, resolver returns null', () => {
+  it('unknown platform: no adapter, resolver returns null', async () => {
     const platform = detectGitPlatform({
       getRemoteUrl: () => 'https://bitbucket.org/org/repo.git',
     });
@@ -105,7 +105,7 @@ describe('end-to-end: platform detection -> adapter -> resolver', () => {
       env: {},
       codeHost: adapter ?? undefined,
     };
-    const result = prStatusResolver(stage, ctx);
+    const result = await prStatusResolver(stage, ctx);
     expect(result).toBeNull();
   });
 });

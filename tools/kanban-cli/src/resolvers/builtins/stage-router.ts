@@ -1,15 +1,22 @@
 import type { ResolverFn } from '../types.js';
 
+/** Refinement types that require manual testing. */
+const MANUAL_TESTING_TYPES = new Set(['frontend', 'ux', 'accessibility']);
+
 /**
- * Built-in stub resolver for stage routing.
+ * Built-in resolver for testing phase routing.
  *
- * This is a no-op placeholder. Users who need routing create custom resolvers
- * that read stage metadata (e.g., refinement_type) and return the appropriate
- * first phase. See docs/plans/2026-02-16-kanban-workflow-redesign-design.md
- * Section 6.4 for examples.
+ * Routes stages to the appropriate testing phase based on the
+ * `refinement_type` array in stage frontmatter:
  *
- * Returns null (no routing — stages should use entry_phase directly).
+ * - If refinement_type contains "frontend", "ux", or "accessibility"
+ *   → returns "Manual Testing"
+ * - Otherwise → returns "Finalize"
+ *
+ * This resolver always returns a transition target (never null).
  */
-export const stageRouterResolver: ResolverFn = (_stage, _context) => {
-  return null;
+export const testingRouterResolver: ResolverFn = (stage, _context) => {
+  const types = stage.refinement_type ?? [];
+  const needsManualTesting = types.some((t) => MANUAL_TESTING_TYPES.has(t));
+  return needsManualTesting ? 'Manual Testing' : 'Finalize';
 };
