@@ -12,6 +12,24 @@ import type { Locker } from '../src/locking.js';
 import type { WorktreeManager, WorktreeInfo } from '../src/worktree.js';
 import type { SessionExecutor, SessionResult } from '../src/session.js';
 import type { Logger, SessionLogger } from '../src/logger.js';
+import type { ExitGateRunner, ExitGateResult } from '../src/exit-gates.js';
+import type { ResolverRunner, ResolverResult } from '../src/resolvers.js';
+
+// Mock the frontmatter functions used by "Not Started" onboarding in loop.ts
+const mockReadFrontmatter = vi.fn(async () => ({
+  data: { status: 'Not Started', id: 'STAGE-001-001-001' },
+  content: 'stage content',
+}));
+const mockWriteFrontmatter = vi.fn(async () => {});
+
+vi.mock('../src/locking.js', async (importOriginal) => {
+  const original = await importOriginal<typeof import('../src/locking.js')>();
+  return {
+    ...original,
+    defaultReadFrontmatter: (...args: unknown[]) => mockReadFrontmatter(...args),
+    defaultWriteFrontmatter: (...args: unknown[]) => mockWriteFrontmatter(...args),
+  };
+});
 
 // ---------- Test helpers ----------
 
@@ -860,6 +878,251 @@ describe('createOrchestrator', () => {
       await new Promise((r) => setTimeout(r, 50));
       await orchestrator.stop();
       await startPromise;
+    });
+  });
+
+  describe('exit gate integration', () => {
+    function makeMockExitGateRunner(): { runner: ExitGateRunner; runFn: ReturnType<typeof vi.fn> } {
+      const runFn = vi.fn(async (): Promise<ExitGateResult> => ({
+        statusChanged: true,
+        statusBefore: 'In Design',
+        statusAfter: 'In Build',
+        ticketUpdated: true,
+        epicUpdated: true,
+        syncResult: { success: true },
+      }));
+      return { runner: { run: runFn }, runFn };
+    }
+
+    it('calls exit gate runner when status changes', async () => {
+      const { deps, discovery, locker, deferSession, sessionExecutor } = makeMockDeps();
+      const { runner, runFn } = makeMockExitGateRunner();
+      deps.exitGateRunner = runner;
+      // Disable resolver runner to keep test focused
+      deps.resolverRunner = { checkAll: vi.fn(async () => []) };
+
+      const stage = makeReadyStage();
+      const deferred = deferSession();
+
+      discovery.discover.mockResolvedValueOnce(makeDiscoveryResult([stage]));
+      locker.readStatus
+        .mockResolvedValueOnce('In Design')  // statusBefore
+        .mockResolvedValueOnce('In Build');   // statusAfter — changed
+
+      const config = makeConfig({ once: true });
+      const orchestrator = createOrchestrator(config, deps);
+
+      const startPromise = orchestrator.start();
+
+      await vi.waitFor(() => {
+        expect(sessionExecutor.spawn).toHaveBeenCalledTimes(1);
+      });
+
+      deferred.resolve({ exitCode: 0, durationMs: 1000 });
+      await startPromise;
+
+      expect(runFn).toHaveBeenCalledTimes(1);
+      const callArgs = runFn.mock.calls[0];
+      expect(callArgs[0].stageId).toBe('STAGE-001-001-001');
+      expect(callArgs[0].statusBefore).toBe('In Design');
+      expect(callArgs[1]).toBe('/repo'); // repoPath
+      expect(callArgs[2]).toBe('In Build'); // statusAfter
+    });
+
+    it('does NOT call exit gate runner when status unchanged', async () => {
+      const { deps, discovery, locker, deferSession, sessionExecutor } = makeMockDeps();
+      const { runner, runFn } = makeMockExitGateRunner();
+      deps.exitGateRunner = runner;
+      deps.resolverRunner = { checkAll: vi.fn(async () => []) };
+
+      const stage = makeReadyStage();
+      const deferred = deferSession();
+
+      discovery.discover.mockResolvedValueOnce(makeDiscoveryResult([stage]));
+      locker.readStatus
+        .mockResolvedValueOnce('In Design')  // statusBefore
+        .mockResolvedValueOnce('In Design'); // statusAfter — unchanged
+
+      const config = makeConfig({ once: true });
+      const orchestrator = createOrchestrator(config, deps);
+
+      const startPromise = orchestrator.start();
+
+      await vi.waitFor(() => {
+        expect(sessionExecutor.spawn).toHaveBeenCalledTimes(1);
+      });
+
+      deferred.resolve({ exitCode: 0, durationMs: 1000 });
+      await startPromise;
+
+      expect(runFn).not.toHaveBeenCalled();
+    });
+
+    it('catches exit gate errors without crashing', async () => {
+      const { deps, discovery, locker, deferSession, sessionExecutor, logger: loggerMock } = makeMockDeps();
+      const runFn = vi.fn(async () => { throw new Error('gate failed'); });
+      deps.exitGateRunner = { run: runFn };
+      deps.resolverRunner = { checkAll: vi.fn(async () => []) };
+
+      const stage = makeReadyStage();
+      const deferred = deferSession();
+
+      discovery.discover.mockResolvedValueOnce(makeDiscoveryResult([stage]));
+      locker.readStatus
+        .mockResolvedValueOnce('In Design')
+        .mockResolvedValueOnce('In Build');
+
+      const config = makeConfig({ once: true });
+      const orchestrator = createOrchestrator(config, deps);
+
+      const startPromise = orchestrator.start();
+
+      await vi.waitFor(() => {
+        expect(sessionExecutor.spawn).toHaveBeenCalledTimes(1);
+      });
+
+      deferred.resolve({ exitCode: 0, durationMs: 1000 });
+      await startPromise;
+
+      expect(loggerMock.error).toHaveBeenCalledWith('Exit gate failed', {
+        stageId: 'STAGE-001-001-001',
+        error: 'gate failed',
+      });
+      // Cleanup should still happen
+      expect(locker.releaseLock).toHaveBeenCalled();
+    });
+  });
+
+  describe('resolver runner integration', () => {
+    it('calls resolver runner checkAll before discovery on each tick', async () => {
+      const { deps, discovery } = makeMockDeps();
+      const checkAllFn = vi.fn(async (): Promise<ResolverResult[]> => []);
+      deps.resolverRunner = { checkAll: checkAllFn };
+
+      let discoverCallCount = 0;
+      discovery.discover.mockImplementation(async () => {
+        discoverCallCount++;
+        return makeDiscoveryResult();
+      });
+
+      const config = makeConfig({ once: false, idleSeconds: 0 });
+      const orchestrator = createOrchestrator(config, deps);
+
+      const startPromise = orchestrator.start();
+
+      // Wait for at least 2 ticks
+      await vi.waitFor(() => {
+        expect(discoverCallCount).toBeGreaterThanOrEqual(2);
+      });
+
+      await orchestrator.stop();
+      await startPromise;
+
+      // checkAll should be called at least as many times as discover
+      expect(checkAllFn.mock.calls.length).toBeGreaterThanOrEqual(discoverCallCount);
+      // Verify it's called with correct args
+      expect(checkAllFn).toHaveBeenCalledWith('/repo', {
+        env: { WORKFLOW_AUTO_DESIGN: 'true' },
+      });
+    });
+
+    it('logs resolver transitions', async () => {
+      const { deps, discovery, logger: loggerMock } = makeMockDeps();
+      const checkAllFn = vi.fn(async (): Promise<ResolverResult[]> => [{
+        stageId: 'STAGE-001-001-001',
+        resolverName: 'pr-status',
+        previousStatus: 'In Review',
+        newStatus: 'Addressing Comments',
+        propagated: true,
+      }]);
+      deps.resolverRunner = { checkAll: checkAllFn };
+
+      discovery.discover.mockResolvedValueOnce(makeDiscoveryResult());
+
+      const config = makeConfig({ once: true });
+      const orchestrator = createOrchestrator(config, deps);
+
+      await orchestrator.start();
+
+      expect(loggerMock.info).toHaveBeenCalledWith('Resolver transition', {
+        stageId: 'STAGE-001-001-001',
+        resolver: 'pr-status',
+        from: 'In Review',
+        to: 'Addressing Comments',
+      });
+    });
+
+    it('does not log when resolver returns no transition', async () => {
+      const { deps, discovery, logger: loggerMock } = makeMockDeps();
+      const checkAllFn = vi.fn(async (): Promise<ResolverResult[]> => [{
+        stageId: 'STAGE-001-001-001',
+        resolverName: 'pr-status',
+        previousStatus: 'In Review',
+        newStatus: null,
+        propagated: false,
+      }]);
+      deps.resolverRunner = { checkAll: checkAllFn };
+
+      discovery.discover.mockResolvedValueOnce(makeDiscoveryResult());
+
+      const config = makeConfig({ once: true });
+      const orchestrator = createOrchestrator(config, deps);
+
+      await orchestrator.start();
+
+      expect(loggerMock.info).not.toHaveBeenCalledWith(
+        'Resolver transition',
+        expect.anything(),
+      );
+    });
+  });
+
+  describe('"Not Started" onboarding', () => {
+    it('transitions "Not Started" stages to entry phase status', async () => {
+      const { deps, discovery, locker, deferSession, sessionExecutor, logger: loggerMock } = makeMockDeps();
+      deps.resolverRunner = { checkAll: vi.fn(async () => []) };
+      deps.exitGateRunner = {
+        run: vi.fn(async (): Promise<ExitGateResult> => ({
+          statusChanged: true, statusBefore: 'In Design', statusAfter: 'In Build',
+          ticketUpdated: true, epicUpdated: true, syncResult: { success: true },
+        })),
+      };
+
+      const stage = makeReadyStage();
+      const deferred = deferSession();
+
+      discovery.discover.mockResolvedValueOnce(makeDiscoveryResult([stage]));
+      // readStatus returns "Not Started" initially, then "In Design" after session
+      locker.readStatus
+        .mockResolvedValueOnce('Not Started') // statusBefore in tick
+        .mockResolvedValueOnce('In Build');   // statusAfter in handleSessionExit
+
+      // Mock the frontmatter read/write used by onboarding.
+      // The loop imports defaultReadFrontmatter and defaultWriteFrontmatter from locking.js
+      // We can't easily mock those without modifying the module, so we need a different approach.
+      // Since the readFrontmatter/writeFrontmatter are called on the stage file path,
+      // and these are the real fs-based functions, we need to use vi.mock.
+
+      const config = makeConfig({ once: true });
+      const orchestrator = createOrchestrator(config, deps);
+
+      const startPromise = orchestrator.start();
+
+      await vi.waitFor(() => {
+        expect(sessionExecutor.spawn).toHaveBeenCalledTimes(1);
+      });
+
+      // The session should be spawned with skill 'design' (entry phase skill)
+      const spawnCall = sessionExecutor.spawn.mock.calls[0][0];
+      expect(spawnCall.skillName).toBe('design');
+
+      deferred.resolve({ exitCode: 0, durationMs: 1000 });
+      await startPromise;
+
+      expect(loggerMock.info).toHaveBeenCalledWith('Onboarded stage to entry phase', {
+        stageId: 'STAGE-001-001-001',
+        status: 'In Design',
+      });
     });
   });
 });

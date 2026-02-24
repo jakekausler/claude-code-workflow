@@ -1,11 +1,17 @@
 import * as path from 'node:path';
-import type { PipelineConfig, PipelineState } from 'kanban-cli';
+import type { PipelineConfig, PipelineState, ResolverContext } from 'kanban-cli';
 import type { Discovery, ReadyStage } from './discovery.js';
 import type { Locker } from './locking.js';
+import { defaultReadFrontmatter, defaultWriteFrontmatter } from './locking.js';
 import type { WorktreeManager } from './worktree.js';
 import type { SessionExecutor } from './session.js';
 import type { Logger, SessionLogger } from './logger.js';
 import type { OrchestratorConfig, WorkerInfo } from './types.js';
+import type { ExitGateRunner } from './exit-gates.js';
+import { createExitGateRunner } from './exit-gates.js';
+import type { ResolverRunner } from './resolvers.js';
+import { createResolverRunner } from './resolvers.js';
+import { ResolverRegistry, registerBuiltinResolvers } from 'kanban-cli';
 
 export interface Orchestrator {
   start(): Promise<void>;
@@ -21,6 +27,8 @@ export interface OrchestratorDeps {
   sessionExecutor: SessionExecutor;
   logger: Logger;
   now?: () => number;  // default: Date.now
+  exitGateRunner?: ExitGateRunner;
+  resolverRunner?: ResolverRunner;
 }
 
 /**
@@ -81,6 +89,23 @@ export function createOrchestrator(config: OrchestratorConfig, deps: Orchestrato
   const { discovery, locker, worktreeManager, sessionExecutor, logger } = deps;
   const activeWorkers = new Map<number, WorkerInfo>();
 
+  // Create exit gate runner (if not injected)
+  const exitGateRunner = deps.exitGateRunner ?? createExitGateRunner({ logger });
+
+  // Create resolver runner (if not injected)
+  let resolverRunner: ResolverRunner | undefined;
+  if (deps.resolverRunner !== undefined) {
+    resolverRunner = deps.resolverRunner;
+  } else {
+    const registry = new ResolverRegistry();
+    registerBuiltinResolvers(registry);
+    resolverRunner = createResolverRunner(config.pipelineConfig, {
+      registry,
+      exitGateRunner,
+      logger,
+    });
+  }
+
   let running = false;
   let pendingSleep: { cancel: () => void } | undefined;
   let workerWaiter: { promise: Promise<void>; resolve: () => void } | undefined;
@@ -132,6 +157,21 @@ export function createOrchestrator(config: OrchestratorConfig, deps: Orchestrato
       });
     }
 
+    // Exit gate — propagate status change
+    if (exitGateRunner && workerInfo.statusBefore !== statusAfter) {
+      try {
+        const gateResult = await exitGateRunner.run(workerInfo, config.repoPath, statusAfter);
+        logger.info('Exit gate completed', {
+          stageId,
+          ticketUpdated: gateResult.ticketUpdated,
+          epicUpdated: gateResult.epicUpdated,
+          syncSuccess: gateResult.syncResult.success,
+        });
+      } catch (err) {
+        logger.error('Exit gate failed', { stageId, error: (err as Error).message });
+      }
+    }
+
     await locker.releaseLock(workerInfo.stageFilePath);
     await worktreeManager.remove(workerInfo.worktreePath);
     await sessionLogger.close();
@@ -160,6 +200,24 @@ export function createOrchestrator(config: OrchestratorConfig, deps: Orchestrato
       isolationValidated = undefined;
 
       while (running) {
+        // Run resolver checks at top of each tick
+        if (resolverRunner) {
+          const resolverContext: ResolverContext = {
+            env: config.workflowEnv,
+          };
+          const resolverResults = await resolverRunner.checkAll(config.repoPath, resolverContext);
+          for (const r of resolverResults) {
+            if (r.newStatus) {
+              logger.info('Resolver transition', {
+                stageId: r.stageId,
+                resolver: r.resolverName,
+                from: r.previousStatus,
+                to: r.newStatus,
+              });
+            }
+          }
+        }
+
         const availableSlots = config.maxParallel - activeWorkers.size;
 
         if (availableSlots <= 0) {
@@ -177,7 +235,22 @@ export function createOrchestrator(config: OrchestratorConfig, deps: Orchestrato
           const stageFilePath = resolveStageFilePath(config.repoPath, stage);
 
           await locker.acquireLock(stageFilePath);
-          const statusBefore = await locker.readStatus(stageFilePath);
+          let statusBefore = await locker.readStatus(stageFilePath);
+
+          // Onboard "Not Started" stages to entry phase
+          if (statusBefore === 'Not Started') {
+            const entryPhase = config.pipelineConfig.workflow.entry_phase;
+            const entryState = config.pipelineConfig.workflow.phases.find(
+              (p: PipelineState) => p.name === entryPhase,
+            );
+            if (entryState) {
+              const { data, content } = await defaultReadFrontmatter(stageFilePath);
+              data.status = entryState.status;
+              await defaultWriteFrontmatter(stageFilePath, data, content);
+              statusBefore = entryState.status;
+              logger.info('Onboarded stage to entry phase', { stageId: stage.id, status: entryState.status });
+            }
+          }
 
           const skillName = lookupSkillName(config.pipelineConfig, statusBefore);
           if (skillName === null) {
