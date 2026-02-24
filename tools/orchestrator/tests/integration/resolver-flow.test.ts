@@ -1,9 +1,9 @@
 import { describe, it, expect, vi } from 'vitest';
 import { createExitGateRunner } from '../../src/exit-gates.js';
 import { createResolverRunner } from '../../src/resolvers.js';
-import type { FrontmatterData } from '../../src/locking.js';
 import type { PipelineConfig, ResolverContext, CodeHostAdapter } from 'kanban-cli';
 import { ResolverRegistry, prStatusResolver, testingRouterResolver } from 'kanban-cli';
+import { makeFrontmatterStore, makeLogger } from './helpers.js';
 
 /**
  * Integration tests for the resolver flow.
@@ -18,34 +18,6 @@ import { ResolverRegistry, prStatusResolver, testingRouterResolver } from 'kanba
  */
 
 const REPO_PATH = '/repo';
-
-/** Build a mock frontmatter store with deep-cloned entries. */
-function makeFrontmatterStore(entries: Record<string, FrontmatterData>) {
-  const store: Record<string, FrontmatterData> = {};
-  for (const [key, value] of Object.entries(entries)) {
-    store[key] = structuredClone(value);
-  }
-
-  return {
-    readFrontmatter: vi.fn(async (filePath: string) => {
-      const entry = store[filePath];
-      if (!entry) throw new Error(`ENOENT: ${filePath}`);
-      return structuredClone(entry);
-    }),
-    writeFrontmatter: vi.fn(async (filePath: string, data: Record<string, unknown>, content: string) => {
-      store[filePath] = structuredClone({ data, content });
-    }),
-    store,
-  };
-}
-
-function makeLogger() {
-  return {
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  };
-}
 
 /** Pipeline config with PR Created as a resolver state. */
 function makePRPipelineConfig(): PipelineConfig {

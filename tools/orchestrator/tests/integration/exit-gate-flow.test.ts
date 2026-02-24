@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { createExitGateRunner, type ExitGateDeps } from '../../src/exit-gates.js';
 import type { FrontmatterData } from '../../src/locking.js';
 import type { WorkerInfo } from '../../src/types.js';
+import { makeFrontmatterStore, makeLogger } from './helpers.js';
 
 /**
  * Integration tests for the exit gate flow.
@@ -28,15 +29,6 @@ function makeWorkerInfo(overrides: Partial<WorkerInfo> = {}): WorkerInfo {
   };
 }
 
-/** Build a mock frontmatter store keyed by file path with structuredClone. */
-function makeFrontmatterStore(entries: Record<string, FrontmatterData>): Record<string, FrontmatterData> {
-  const store: Record<string, FrontmatterData> = {};
-  for (const [key, value] of Object.entries(entries)) {
-    store[key] = structuredClone(value);
-  }
-  return store;
-}
-
 /** Build mock deps backed by the frontmatter store. */
 function makeDeps(
   frontmatterEntries: Record<string, FrontmatterData>,
@@ -52,24 +44,15 @@ function makeDeps(
   };
   store: Record<string, FrontmatterData>;
 } {
-  const store = makeFrontmatterStore(frontmatterEntries);
+  const fm = makeFrontmatterStore(frontmatterEntries);
+  const logger = makeLogger();
 
   return {
-    readFrontmatter: vi.fn(async (filePath: string) => {
-      const entry = store[filePath];
-      if (!entry) throw new Error(`ENOENT: ${filePath}`);
-      return structuredClone(entry);
-    }),
-    writeFrontmatter: vi.fn(async (filePath: string, data: Record<string, unknown>, content: string) => {
-      store[filePath] = structuredClone({ data, content });
-    }),
+    readFrontmatter: fm.readFrontmatter,
+    writeFrontmatter: fm.writeFrontmatter,
     runSync: vi.fn(async () => ({ ...syncResult })),
-    logger: {
-      info: vi.fn(),
-      warn: vi.fn(),
-      error: vi.fn(),
-    },
-    store,
+    logger,
+    store: fm.store,
   };
 }
 
