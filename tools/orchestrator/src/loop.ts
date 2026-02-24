@@ -18,6 +18,9 @@ import type { MRCommentPoller } from './mr-comment-poller.js';
 import { createMRCommentPoller } from './mr-comment-poller.js';
 import type { MRChainManager } from './mr-chain-manager.js';
 import { createMRChainManager } from './mr-chain-manager.js';
+import { execFile } from 'node:child_process';
+import { createInsightsThresholdChecker } from './insights-threshold.js';
+import type { LearningsResult } from './insights-threshold.js';
 
 export interface Orchestrator {
   start(): Promise<void>;
@@ -167,15 +170,55 @@ function buildCronScheduler(
     });
   }
 
-  // Insights threshold job (placeholder for 6E)
+  // Insights threshold job
   if (cronConfig.insights_threshold) {
     const insightsConfig = cronConfig.insights_threshold;
+    const threshold = config.pipelineConfig.workflow.defaults?.WORKFLOW_LEARNINGS_THRESHOLD ?? 10;
+    const scriptPath = path.join(config.repoPath, 'skills', 'meta-insights', 'scripts', 'count-unanalyzed.sh');
+    const sessionLogger = logger.createSessionLogger('insights-threshold', config.logDir);
+
+    const checker = createInsightsThresholdChecker({
+      countLearnings: (_repoPath: string): Promise<LearningsResult> => {
+        return new Promise((resolve) => {
+          execFile('bash', [scriptPath], { encoding: 'utf-8', timeout: 30_000, cwd: config.repoPath }, (err, stdout) => {
+            if (err) {
+              logger.warn('count-unanalyzed.sh failed', { error: err.message ?? String(err) });
+              resolve({ count: 0, threshold, exceeded: false });
+              return;
+            }
+            const lines = stdout.trim().split('\n').filter((line) => line.trim().length > 0);
+            const count = lines.length;
+            resolve({ count, threshold, exceeded: count > threshold });
+          });
+        });
+      },
+      spawnSession: async (repoPath: string): Promise<void> => {
+        const spawnOpts = {
+          stageId: 'meta-insights',
+          stageFilePath: '', // meta-insights has no stage file — operates on ~/docs/ learnings
+          skillName: 'meta-insights',
+          worktreePath: repoPath,
+          worktreeIndex: -1,
+          model: config.model,
+          workflowEnv: config.workflowEnv,
+        };
+        deps.sessionExecutor.spawn(spawnOpts, sessionLogger).catch((err: unknown) => {
+          const msg = err instanceof Error ? err.message : String(err);
+          logger.error('Meta-insights session failed', { error: msg });
+        });
+      },
+      logger,
+      now: deps.now ?? (() => Date.now()),
+      // Cooldown matches cron interval — defense in depth against overlapping triggers
+      intervalMs: insightsConfig.interval_seconds * 1000,
+    });
+
     jobs.push({
       name: 'insights-threshold',
       enabled: insightsConfig.enabled,
       intervalMs: insightsConfig.interval_seconds * 1000,
       async execute(): Promise<void> {
-        // No-op placeholder — 6E fills this in
+        await checker.check(config.repoPath);
       },
     });
   }
