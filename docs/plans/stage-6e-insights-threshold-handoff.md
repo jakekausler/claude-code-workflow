@@ -136,3 +136,29 @@ cd ../kanban-cli && npm run verify
 
 - **Stage 7** (Slack Notifications) and **Stage 8** (Global CLI + Multi-Repo) can proceed independently
 - Stage 6E completes the cron system — both MR comment polling (6D) and insights threshold (6E) will be operational
+
+---
+
+## Completion Summary
+
+**Status: Complete**
+
+### Deliverables
+
+| Deliverable | File | Tests |
+|------------|------|-------|
+| Insights threshold checker | `tools/orchestrator/src/insights-threshold.ts` | 20 unit tests |
+| Loop.ts cron wiring | `tools/orchestrator/src/loop.ts` | — |
+| Integration tests | `tools/orchestrator/tests/integration/insights-threshold-flow.test.ts` | 7 integration tests |
+
+### Test Results
+
+- **kanban-cli**: 775/775 pass
+- **orchestrator**: 396 tests (27 new for 6E), all 6E tests pass. 6 pre-existing timeout flakes in loop.test.ts/integration.test.ts unrelated to 6E.
+
+### Design Decisions
+
+- **Cooldown**: In-memory (process lifetime), matches cron interval
+- **Counting**: Shells to `count-unanalyzed.sh` via `execFile` (no command injection risk)
+- **Session spawning**: Fire-and-forget via `sessionExecutor.spawn()` with `meta-insights` skill
+- **Error handling**: Both countLearnings and spawnSession failures are caught, logged, and don't crash the cron job

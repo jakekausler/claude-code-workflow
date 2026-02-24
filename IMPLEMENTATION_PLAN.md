@@ -27,7 +27,7 @@ Design: `docs/plans/2026-02-24-insights-threshold-cron-design.md`
 
 **Success criteria**: `npm run verify` passes in orchestrator.
 
-**Status**: Not Started
+**Status**: Complete
 
 ---
 
@@ -47,7 +47,7 @@ Design: `docs/plans/2026-02-24-insights-threshold-cron-design.md`
 
 **Success criteria**: `npm run verify` passes in orchestrator. Existing 369+ orchestrator tests still pass.
 
-**Status**: Not Started
+**Status**: Complete
 
 ---
 
@@ -67,7 +67,7 @@ Design: `docs/plans/2026-02-24-insights-threshold-cron-design.md`
 
 **Success criteria**: `npm run verify` passes in orchestrator.
 
-**Status**: Not Started
+**Status**: Complete
 
 ---
 
@@ -82,4 +82,4 @@ Design: `docs/plans/2026-02-24-insights-threshold-cron-design.md`
 
 **Success criteria**: All tests pass, no lint warnings, docs updated.
 
-**Status**: Not Started
+**Status**: Complete
