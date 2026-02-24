@@ -2,7 +2,7 @@
 
 ## Context
 
-Stages 0-5 are complete on the `kanban` branch. Stage 5.5A (Schema & Sync), Stage 5.5B (Skill Updates), Stage 5.5C (Jira Conversion Enrichment), and Stage 6A (Orchestrator Infrastructure) are also complete. This session implements **Stage 6B: Exit Gates & Resolver Execution** — the deterministic post-session logic that verifies status changes, propagates updates to ticket/epic files, syncs SQLite, and handles resolver state transitions.
+Stages 0-5 are complete on the `kanban` branch. Stage 5.5A (Schema & Sync), Stage 5.5B (Skill Updates), Stage 5.5C (Jira Conversion Enrichment), Stage 6A (Orchestrator Infrastructure), and Stage 6A.5 (MCP Server) are also complete. This session implements **Stage 6B: Exit Gates & Resolver Execution** — the deterministic post-session logic that verifies status changes, propagates updates to ticket/epic files, syncs SQLite, and handles resolver state transitions.
 
 ### Dependency Graph
 
@@ -10,6 +10,7 @@ Stages 0-5 are complete on the `kanban` branch. Stage 5.5A (Schema & Sync), Stag
 Stage 5.5A (Schema & Sync) ✅
   ├── Stage 5.5B (Skill Updates) ✅
   │     └── Stage 6A (Orchestrator Infrastructure) ✅
+  │           ├── Stage 6A.5 (MCP Server) ✅
   │           └── Stage 6B (Exit Gates & Resolvers) ← THIS STAGE
   └── Stage 5.5C (Jira Conversion Enrichment) ✅
 ```
@@ -83,6 +84,16 @@ orchestrator [options]
 
 When a Claude session exits, the orchestrator runs a deterministic **exit gate** sequence: verify the status change, update ticket and epic files to reflect the new status, and sync to SQLite. Additionally, the orchestrator executes **resolver functions** on each tick for stages in resolver states (like `PR Created`), allowing programmatic state transitions without Claude sessions.
 
+### What Changed Since Initial Handoff (Stage 6A.5 Delivered)
+
+Stage 6A.5 added an **MCP server** (`tools/mcp-server/`) that wraps external service interactions (Jira, PR/MR, Confluence, Slack) as structured MCP tools. This affects 6B in three ways:
+
+1. **Resolvers and exit gates should use MCP tools instead of raw CLI commands.** For example, the `pr-status` resolver should call `mcp__kanban__pr_get_status` (or the equivalent MCP tool) rather than shelling out to `gh pr view` or using the code host adapter directly. The MCP server is auto-discovered via `.mcp.json` and uses stdio transport.
+
+2. **Mock admin tools are available for testing resolver logic.** Three mock-only tools — `mock_set_pr_merged`, `mock_inject_comment`, `mock_set_ticket_status` — allow tests to seed external service state without real API calls. This simplifies test setup for exit gate and resolver integration tests significantly.
+
+3. **`KANBAN_MOCK` propagation is already wired.** The orchestrator propagates `KANBAN_MOCK=true` to child sessions (commit 38f05ea), so mock mode is available throughout the pipeline. The skills (`phase-finalize`, `review-cycle`, `convert-ticket`) have already been updated with MCP tool references as preferred alternatives to CLI commands (commit 77dbee7).
+
 ### What Ships
 
 1. **Exit gate sequence in `handleSessionExit`** — After a session completes:
@@ -100,7 +111,7 @@ When a Claude session exits, the orchestrator runs a deterministic **exit gate**
 
 3. **`testing-router` resolver (new builtin)** — Reads `refinement_type` from stage frontmatter and config to decide: route to Manual Testing or skip directly to Finalize.
 
-4. **Updated `pr-status` resolver** — Simplified check: is the PR merged? If yes → Done. Comment detection moves to Stage 6D (MR comment cron). Reads `pr_url` from stage frontmatter.
+4. **Updated `pr-status` resolver** — Simplified check: is the PR merged? If yes → Done. Comment detection moves to Stage 6D (MR comment cron). Reads `pr_url` from stage frontmatter. Should call `mcp__kanban__pr_get_status` (or the underlying MCP tool) rather than `gh pr view` or raw CLI — the MCP server handles provider abstraction (GitHub/GitLab).
 
 5. **Ticket file update logic** — After a stage status change, find the parent ticket file and update its stage status table (a YAML section listing each stage's current status).
 
@@ -140,8 +151,14 @@ When a Claude session exits, the orchestrator runs a deterministic **exit gate**
 - **Stage file discovery**: `discoverStageFiles()` recursively walks `epics/` directory.
 - **Resolver registry**: `tools/kanban-cli/src/resolvers/registry.ts` — existing resolver infrastructure.
 - **Builtin resolvers**: `tools/kanban-cli/src/resolvers/builtins/` — `pr-status.ts` and `stage-router.ts` already exist.
-- **Code host adapters**: `createCodeHostAdapter()` with `getPRStatus()` for GitHub and GitLab.
+- **Code host adapters**: `createCodeHostAdapter()` with `getPRStatus()` for GitHub and GitLab. (Note: the MCP server now wraps these — prefer `mcp__kanban__pr_get_status` for new code.)
 - **State machine**: `tools/kanban-cli/src/engine/state-machine.ts` — transition validation.
+
+**From MCP server (Stage 6A.5):**
+- **PR/MR tools**: `pr_get`, `pr_get_status`, `pr_create`, `pr_get_comments`, `pr_add_comment`, `pr_list`, `pr_get_diff`, `pr_get_checks` — wraps GitHub/GitLab APIs.
+- **Jira tools**: `jira_get_issue`, `jira_search`, `jira_create_issue`, `jira_update_issue`, `jira_transition_issue`, `jira_sync` — wraps Jira API.
+- **Mock admin tools** (available when `KANBAN_MOCK=true`): `mock_inject_comment`, `mock_set_pr_merged`, `mock_set_ticket_status` — seed external state for testing.
+- **Mock mode**: Stateful in-memory `MockState` with seed data from fixtures. Auto-discovered via `.mcp.json`, stdio transport.
 
 **From orchestrator (Stage 6A):**
 - **`handleSessionExit()`** in `loop.ts` (lines 106-140): The extension point. Currently resets locks, removes worktrees, closes loggers. 6B adds exit gate logic here.
@@ -162,7 +179,7 @@ When a Claude session exits, the orchestrator runs a deterministic **exit gate**
 - `kanban-cli sync` call from orchestrator
 - Resolver execution loop (checking resolver states each tick)
 - `testing-router` resolver
-- Updated `pr-status` resolver (merge-only check)
+- Updated `pr-status` resolver (merge-only check, using `mcp__kanban__pr_get_status` instead of raw CLI)
 
 ---
 
@@ -270,7 +287,7 @@ This means resolver execution happens at the TOP of each tick, before discovery.
 
 ## Open Questions (Resolve During Design Phase)
 
-1. **How should the orchestrator call `kanban-cli sync`?** Options: as a subprocess (`npx tsx ... sync --repo`), or import the sync function directly from kanban-cli. The discovery module uses subprocess calls; the locker uses direct library imports. Which pattern for sync?
+1. **How should the orchestrator call `kanban-cli sync`?** Options: as a subprocess (`npx tsx ... sync --repo`), or import the sync function directly from kanban-cli. The discovery module uses subprocess calls; the locker uses direct library imports. Which pattern for sync? (Note: for Jira-specific sync, `mcp__kanban__jira_sync` is available as an MCP tool alternative.)
 
 2. **How should ticket and epic files be updated?** The orchestrator needs to modify YAML frontmatter in ticket and epic files. Options: use the existing `readYamlFrontmatter`/`writeYamlFrontmatter` pattern from the locker module, or call kanban-cli commands.
 
@@ -337,13 +354,13 @@ Invoke the subagent-driven-development skill:
 ### Suggested Sub-Task Breakdown
 
 - **6B-1**: Ticket/epic file update utilities — read/write ticket stage status table, epic ticket status
-- **6B-2**: Sync wrapper — callable `kanban-cli sync` from orchestrator
+- **6B-2**: Sync wrapper — callable `kanban-cli sync` from orchestrator (note: `mcp__kanban__jira_sync` also exists as an MCP alternative for Jira sync specifically)
 - **6B-3**: Exit gate logic — extend `handleSessionExit` with status verification, file updates, sync
 - **6B-4**: Resolver execution framework — find resolver-state stages, call resolver, update on result
 - **6B-5**: `testing-router` resolver — route Automatic Testing → Manual Testing or Finalize
 - **6B-6**: Updated `pr-status` resolver — merge-only check (comment detection deferred to 6D)
 - **6B-7**: Resolver integration into tick cycle — add resolver check before discovery
-- **6B-8**: Integration tests — end-to-end exit gate flow, resolver execution
+- **6B-8**: Integration tests — end-to-end exit gate flow, resolver execution. Mock admin tools (`mock_set_pr_merged`, `mock_inject_comment`, `mock_set_ticket_status`) can seed external service state for test setup — no need to mock at the adapter level.
 
 ### Testing the Current System
 
@@ -382,3 +399,86 @@ After this session completes Stage 6B:
 - **Stage 6E** will implement the insights threshold cron loop (auto-triggering meta-insights)
 
 Stage 6C depends on 6B (needs exit gates to trigger cascade). Stages 6D and 6E can be developed in parallel with 6C since they are independent systems.
+
+---
+
+## Stage 6B Completion Summary
+
+### Status: Complete
+
+Stage 6B has been fully implemented and verified. All tests pass across both packages.
+
+### What Was Delivered
+
+1. **Frontmatter schema changes** (`kanban-cli`):
+   - Added `stage_statuses: Record<string, string>` to ticket frontmatter schema (Zod + parser)
+   - Added `ticket_statuses: Record<string, string>` to epic frontmatter schema (Zod + parser)
+   - Both fields default to `{}` and are optional for backward compatibility
+   - Added corresponding fields to `Epic` and `Ticket` TypeScript types in `work-items.ts`
+
+2. **Exit gate module** (`tools/orchestrator/src/exit-gates.ts`):
+   - `createExitGateRunner()` factory function with full DI (`ExitGateDeps`)
+   - After a session exits with a status change: reads stage frontmatter for ticket/epic IDs, updates ticket's `stage_statuses`, derives ticket status, updates epic's `ticket_statuses`, calls `kanban-cli sync` as a subprocess
+   - `deriveTicketStatus()` function: "Complete" if all stages complete, "Not Started" if all not started, "In Progress" otherwise
+   - Sync uses retry-once strategy; failures are logged but do not crash the orchestrator
+   - `ExitGateResult` type provides structured reporting of each step
+
+3. **Resolver execution module** (`tools/orchestrator/src/resolvers.ts`):
+   - `createResolverRunner()` factory function with full DI (`ResolverRunnerDeps`)
+   - Discovers all stage files, filters for resolver-state stages (session_active=false), executes matching resolver, writes new status, and propagates via exit gate runner
+   - `ResolverResult` type tracks each resolver check outcome
+
+4. **Updated resolver builtins** (`kanban-cli`):
+   - `pr-status` resolver: simplified to merge-only check; returns "Done" if PR is merged, null otherwise. Comment detection deferred to Stage 6D.
+   - `testing-router` resolver (new): routes based on `refinement_type` from stage frontmatter. If type includes "frontend" or "integration", routes to "Manual Testing"; otherwise routes to "Finalize".
+   - Both resolvers registered via `registerBuiltinResolvers()` in `builtins/index.ts`
+
+5. **Loop integration** (`tools/orchestrator/src/loop.ts`):
+   - Exit gate runner called in `handleSessionExit` when status changes (between logging and cleanup)
+   - Resolver runner called at top of each tick cycle, before discovery
+   - "Not Started" onboarding: stages discovered with status "Not Started" are automatically transitioned to the pipeline's `entry_phase` before session spawning
+   - Both runners are injectable via `OrchestratorDeps` for testing
+
+6. **Integration tests**:
+   - `tests/integration/exit-gate-flow.test.ts` — end-to-end exit gate propagation (ticket + epic updates, sync)
+   - `tests/integration/resolver-flow.test.ts` — resolver discovery, execution, and propagation
+   - `tests/integration/onboarding-flow.test.ts` — "Not Started" to entry phase onboarding
+   - Unit tests in `tests/exit-gates.test.ts` and `tests/resolvers.test.ts`
+
+7. **Seed script updates** (`tools/kanban-cli/scripts/seed-test-repo.sh`):
+   - All ticket files now include `stage_statuses` mapping each stage ID to its status
+   - All epic files now include `ticket_statuses` mapping each ticket ID to its derived status
+   - TICKET-002-003 (no stages) has `stage_statuses: {}` for completeness
+
+### Test Suite Results
+
+- **kanban-cli**: 738 tests across 51 test files, all passing
+- **orchestrator**: 245 tests across 17 test files, all passing
+
+### Decisions That Changed from Original Plan
+
+| Original Plan | Actual Implementation | Rationale |
+|---------------|----------------------|-----------|
+| Sync via direct import or subprocess (open question) | Subprocess (`npx kanban-cli sync --repo`) | Follows the discovery module's existing pattern; avoids coupling to kanban-cli internals (database, pipeline config) |
+| `repoPath` on config vs method params (open question) | Method parameter on `run()` and `checkAll()` | Keeps runners stateless; allows the same runner to operate on different repos if needed |
+| MCP tools for resolver PR checks (suggested in handoff) | Direct resolver function pattern in registry | Resolvers run in-process as TypeScript functions; MCP tools are for Claude sessions, not orchestrator internals |
+| `testing-router` in pipeline config (mentioned in design doc) | Builtin resolver registered in code, not in default pipeline config | Can be added to pipeline config when a project needs it; not forced on all projects |
+
+### Handoff Notes for Stage 6C
+
+Stage 6C implements **completion cascade** and **backlog re-evaluation**:
+
+1. **Completion cascade**: When a stage reaches "Done", check if all stages in the parent ticket are "Complete" -> if so, set ticket to "Complete". When a ticket becomes "Complete", check if all tickets in the parent epic are "Complete" -> if so, set epic to "Complete".
+
+2. **Backlog re-evaluation**: When a stage reaches "Done", check if any dependent stages (stages with `depends_on` referencing this stage/ticket/epic) can now be unblocked. If all dependencies are satisfied, those stages become eligible for the next `kanban-cli next` discovery.
+
+3. **Key infrastructure from 6B to extend**:
+   - The `deriveTicketStatus()` function in `exit-gates.ts` already computes ticket status from stage statuses -- this is the starting point for cascade logic
+   - The `stage_statuses` and `ticket_statuses` frontmatter fields are now available for cascade tracking
+   - The exit gate runner's `run()` method is the natural place to trigger cascade after a status change
+   - The `ExitGateResult` type may need extending to report cascade outcomes
+
+4. **Architecture considerations**:
+   - Cascade should be triggered from within the exit gate (after ticket/epic updates), not as a separate loop phase
+   - Backlog re-evaluation likely needs to query the dependency graph (available via `kanban-cli graph` or direct database query)
+   - Consider whether cascade should be recursive (epic completion triggers further cascades) or single-level

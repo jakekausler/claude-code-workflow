@@ -41,6 +41,9 @@ status: In Progress
 tickets:
   - TICKET-001-001
   - TICKET-001-002
+ticket_statuses:
+  TICKET-001-001: In Progress
+  TICKET-001-002: In Progress
 depends_on: []
 ---
 
@@ -67,6 +70,13 @@ stages:
   - STAGE-001-001-004
   - STAGE-001-001-005
   - STAGE-001-001-006
+stage_statuses:
+  STAGE-001-001-001: Complete
+  STAGE-001-001-002: Complete
+  STAGE-001-001-003: Build
+  STAGE-001-001-004: Not Started
+  STAGE-001-001-005: Design
+  STAGE-001-001-006: Not Started
 depends_on: []
 ---
 
@@ -219,6 +229,13 @@ stages:
   - STAGE-001-002-004
   - STAGE-001-002-005
   - STAGE-001-002-006
+stage_statuses:
+  STAGE-001-002-001: Automatic Testing
+  STAGE-001-002-002: Complete
+  STAGE-001-002-003: Not Started
+  STAGE-001-002-004: Not Started
+  STAGE-001-002-005: Not Started
+  STAGE-001-002-006: Design
 depends_on: []
 ---
 
@@ -370,6 +387,10 @@ tickets:
   - TICKET-002-001
   - TICKET-002-002
   - TICKET-002-003
+ticket_statuses:
+  TICKET-002-001: In Progress
+  TICKET-002-002: In Progress
+  TICKET-002-003: Not Started
 depends_on: []
 ---
 
@@ -396,6 +417,13 @@ stages:
   - STAGE-002-001-004
   - STAGE-002-001-005
   - STAGE-002-001-006
+stage_statuses:
+  STAGE-002-001-001: Complete
+  STAGE-002-001-002: Manual Testing
+  STAGE-002-001-003: Not Started
+  STAGE-002-001-004: Not Started
+  STAGE-002-001-005: Not Started
+  STAGE-002-001-006: Not Started
 depends_on: []
 ---
 
@@ -558,6 +586,13 @@ stages:
   - STAGE-002-002-004
   - STAGE-002-002-005
   - STAGE-002-002-006
+stage_statuses:
+  STAGE-002-002-001: Finalize
+  STAGE-002-002-002: Build
+  STAGE-002-002-003: Not Started
+  STAGE-002-002-004: Not Started
+  STAGE-002-002-005: Not Started
+  STAGE-002-002-006: Not Started
 depends_on: []
 ---
 
@@ -710,6 +745,7 @@ status: Not Started
 source: jira
 jira_key: PAY-456
 stages: []
+stage_statuses: {}
 depends_on:
   - TICKET-002-001
 ---
@@ -732,6 +768,8 @@ title: Notifications
 status: Not Started
 tickets:
   - TICKET-003-001
+ticket_statuses:
+  TICKET-003-001: Not Started
 depends_on:
   - EPIC-001
 ---
@@ -756,6 +794,10 @@ stages:
   - STAGE-003-001-001
   - STAGE-003-001-002
   - STAGE-003-001-003
+stage_statuses:
+  STAGE-003-001-001: Not Started
+  STAGE-003-001-002: Not Started
+  STAGE-003-001-003: Not Started
 depends_on: []
 ---
 
