@@ -19,7 +19,6 @@ export type SlackNotifyArgs = {
   epic?: string;
   epic_title?: string;
   url?: string;
-  channel?: string;
 };
 
 // --- Exported handler functions (testable without MCP server) ---
@@ -28,7 +27,11 @@ export async function handleSlackNotify(
   args: SlackNotifyArgs,
   deps: SlackToolDeps,
 ): Promise<ToolResult> {
-  // Mock mode: store in MockState
+  // Mock mode: store in MockState.
+  // When KANBAN_MOCK=true, the server always provides mockState. If mockState is null here,
+  // it means mock mode is active but no state object was wired up — return early with a
+  // "skipped" message. Even if a real webhookUrl is configured, it will NOT fire in this
+  // path; the null-state early-return is intentional.
   if (isMockMode()) {
     if (deps.mockState) {
       deps.mockState.addNotification({
@@ -111,7 +114,6 @@ export function registerSlackTools(server: McpServer, deps: SlackToolDeps): void
       epic: z.string().optional(),
       epic_title: z.string().optional(),
       url: z.string().optional(),
-      channel: z.string().optional(),
     },
     (args) => handleSlackNotify(args, deps),
   );

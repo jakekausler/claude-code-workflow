@@ -437,7 +437,7 @@ Steps 1-8 are IDENTICAL for local and remote mode. Steps 9+ diverge.
               "type": "section",
               "text": {
                 "type": "mrkdwn",
-                "text": "*New MR/PR Ready for Review*\n\n*Stage:* STAGE-XXX-YYY-ZZZ — <stage title>\n*Ticket:* TICKET-XXX-YYY — <ticket title>\n*Epic:* EPIC-XXX — <epic title>\n*URL:* <MR/PR URL>"
+                "text": "*<stage title>*\n\nNew MR/PR Ready for Review\n*Stage:* STAGE-XXX-YYY-ZZZ — <stage title>\n*Ticket:* TICKET-XXX-YYY — <ticket title>\n*Epic:* EPIC-XXX — <epic title>\n<MR/PR URL|View MR/PR>"
               }
             }
           ]
