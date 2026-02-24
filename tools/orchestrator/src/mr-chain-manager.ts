@@ -1,4 +1,6 @@
 import type { CodeHostAdapter, PRStatus } from 'kanban-cli';
+import type { Locker, FrontmatterData } from './locking.js';
+import type { SessionExecutor, SpawnOptions, SessionLoggerLike } from './session.js';
 
 /**
  * A row from the parent_branch_tracking table.
@@ -21,8 +23,10 @@ export interface ParentBranchTrackingRow {
 export interface ChainCheckResult {
   childStageId: string;
   parentStageId: string;
-  event: 'parent_merged' | 'parent_updated' | 'no_change';
-  // rebaseSpawned, retargeted, promotedToReady will be added in 6D-7/6D-8
+  event: 'parent_merged' | 'parent_updated' | 'no_change' | 'skipped_conflict' | 'skipped_locked' | 'skipped_no_file';
+  rebaseSpawned: boolean;
+  retargeted: boolean;
+  promotedToReady: boolean;
 }
 
 /**
@@ -55,6 +59,47 @@ export interface MRChainManagerDeps {
     warn: (message: string, context?: Record<string, unknown>) => void;
     error: (message: string, context?: Record<string, unknown>) => void;
   };
+
+  /** Locker for session_active locking (nullable — when null, rebase spawning is skipped). */
+  locker: Locker | null;
+
+  /** Session executor for spawning rebase sessions (nullable — when null, rebase spawning is skipped). */
+  sessionExecutor: SessionExecutor | null;
+
+  /** Read frontmatter from a stage file (for checking rebase_conflict). */
+  readFrontmatter: ((filePath: string) => Promise<FrontmatterData>) | null;
+
+  /**
+   * Resolve a child stage ID to its absolute file path.
+   * Returns null if the stage file cannot be resolved (e.g., stage not found).
+   */
+  resolveStageFilePath: ((childStageId: string, repoPath: string) => Promise<string | null>) | null;
+
+  /** Create a session logger for rebase session output. */
+  createSessionLogger: ((stageId: string) => SessionLoggerLike) | null;
+
+  /** Model name for spawning Claude sessions. */
+  model: string;
+
+  /** Workflow environment variables for spawned sessions. */
+  workflowEnv: Record<string, string>;
+
+  /**
+   * Query ALL parent_branch_tracking rows for a given child stage (both merged and unmerged).
+   * Used to determine how many unmerged parents remain after one merges.
+   * When null, retargeting/promotion is skipped.
+   */
+  getTrackingRowsForChild: ((childStageId: string, repoPath: string) => Promise<ParentBranchTrackingRow[]>) | null;
+
+  /**
+   * Write frontmatter data + content back to a stage file.
+   * Used to update `is_draft` and `pending_merge_parents` on promotion.
+   * When null, frontmatter promotion updates are skipped.
+   */
+  writeFrontmatter: ((filePath: string, data: Record<string, unknown>, content: string) => Promise<void>) | null;
+
+  /** Default branch name for retargeting when all parents have merged. Defaults to 'main'. */
+  defaultBranch: string;
 }
 
 /**
@@ -65,12 +110,22 @@ export interface MRChainManager {
   checkParentChains(repoPath: string): Promise<ChainCheckResult[]>;
 }
 
-const defaultDeps: Pick<MRChainManagerDeps, 'logger'> = {
+const defaultDeps: Pick<MRChainManagerDeps, 'logger' | 'locker' | 'sessionExecutor' | 'readFrontmatter' | 'resolveStageFilePath' | 'createSessionLogger' | 'model' | 'workflowEnv' | 'getTrackingRowsForChild' | 'writeFrontmatter' | 'defaultBranch'> = {
   logger: {
     info: () => {},
     warn: () => {},
     error: () => {},
   },
+  locker: null,
+  sessionExecutor: null,
+  readFrontmatter: null,
+  resolveStageFilePath: null,
+  createSessionLogger: null,
+  model: 'sonnet',
+  workflowEnv: {},
+  getTrackingRowsForChild: null,
+  writeFrontmatter: null,
+  defaultBranch: 'main',
 };
 
 /**
@@ -80,13 +135,29 @@ const defaultDeps: Pick<MRChainManagerDeps, 'logger'> = {
  * is in a reviewable state (PR Created / Addressing Comments), then checks each
  * parent's merge status and HEAD via the code host adapter.
  *
- * Returns structured results indicating what changed. Rebase spawning (6D-7) and
- * retargeting (6D-8) are NOT handled here — they will extend this module later.
+ * When a parent merge or HEAD update is detected, the manager will attempt to
+ * spawn a `rebase-child-mr` session — provided the child stage is not locked
+ * and has no `rebase_conflict` flag in frontmatter.
  */
 export function createMRChainManager(
   deps: Partial<MRChainManagerDeps> & Pick<MRChainManagerDeps, 'getActiveTrackingRows' | 'updateTrackingRow'>,
 ): MRChainManager {
-  const { getActiveTrackingRows, updateTrackingRow, codeHost = null, logger } = { ...defaultDeps, ...deps };
+  const {
+    getActiveTrackingRows,
+    updateTrackingRow,
+    codeHost = null,
+    logger,
+    locker,
+    sessionExecutor,
+    readFrontmatter,
+    resolveStageFilePath,
+    createSessionLogger,
+    model,
+    workflowEnv,
+    getTrackingRowsForChild,
+    writeFrontmatter,
+    defaultBranch,
+  } = { ...defaultDeps, ...deps };
 
   return {
     async checkParentChains(repoPath: string): Promise<ChainCheckResult[]> {
@@ -105,7 +176,7 @@ export function createMRChainManager(
 
       for (const row of rows) {
         try {
-          const result = await checkSingleParent(row, codeHost);
+          const result = await checkSingleParent(row, codeHost, repoPath);
           results.push(result);
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
@@ -122,7 +193,263 @@ export function createMRChainManager(
     },
   };
 
-  async function checkSingleParent(row: ParentBranchTrackingRow, host: CodeHostAdapter): Promise<ChainCheckResult> {
+  /**
+   * Whether all spawn dependencies are configured.
+   */
+  function canSpawn(): boolean {
+    return !!(locker && sessionExecutor && readFrontmatter && resolveStageFilePath && createSessionLogger);
+  }
+
+  /**
+   * Check whether rebase spawning prerequisites are met.
+   * Only call when canSpawn() is true.
+   * Returns the blocking reason if a precondition blocks spawning, or the resolved stageFilePath if clear to proceed.
+   */
+  async function checkRebasePreconditions(
+    childStageId: string,
+    repoPath: string,
+  ): Promise<{ blocked: true; event: 'skipped_conflict' | 'skipped_locked' | 'skipped_no_file' } | { blocked: false; stageFilePath: string }> {
+    const stageFilePath = await resolveStageFilePath!(childStageId, repoPath);
+    if (!stageFilePath) {
+      logger.warn('Cannot resolve stage file path for rebase spawn', { childStageId });
+      return { blocked: true, event: 'skipped_no_file' };
+    }
+
+    // Check rebase_conflict in frontmatter
+    const fm = await readFrontmatter!(stageFilePath);
+    if (fm.data.rebase_conflict === true) {
+      logger.info('Skipping rebase spawn: rebase_conflict flagged', { childStageId, stageFilePath });
+      return { blocked: true, event: 'skipped_conflict' };
+    }
+
+    // Check session_active lock
+    const locked = await locker!.isLocked(stageFilePath);
+    if (locked) {
+      logger.info('Skipping rebase spawn: stage already locked', { childStageId, stageFilePath });
+      return { blocked: true, event: 'skipped_locked' };
+    }
+
+    return { blocked: false, stageFilePath };
+  }
+
+  /**
+   * Attempt to spawn a rebase-child-mr session for the given child stage.
+   * Acquires lock before spawning; releases lock on failure.
+   * On success the lock is released by the normal session exit flow (not here).
+   */
+  async function spawnRebaseSession(childStageId: string, stageFilePath: string, repoPath: string): Promise<boolean> {
+    // These are guaranteed non-null by checkRebasePreconditions succeeding
+    const lck = locker!;
+    const executor = sessionExecutor!;
+    const makeLogger = createSessionLogger!;
+
+    try {
+      await lck.acquireLock(stageFilePath);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      logger.error('Failed to acquire lock for rebase spawn', { childStageId, stageFilePath, error: msg });
+      return false;
+    }
+
+    try {
+      const sessionLogger = makeLogger(childStageId);
+      const spawnOpts: SpawnOptions = {
+        stageId: childStageId,
+        stageFilePath,
+        skillName: 'rebase-child-mr',
+        worktreePath: repoPath, // TODO(6D): Rebase sessions create their own worktree; passing repo root as placeholder
+        worktreeIndex: -1, // -1 = no worktree slot assigned (convention shared with resolvers.ts and mr-comment-poller.ts)
+        model,
+        workflowEnv,
+      };
+
+      logger.info('Spawning rebase-child-mr session', { childStageId, stageFilePath });
+
+      // Fire-and-forget: the session runs in the background.
+      // We only need to catch immediate spawn errors (e.g., process failed to start).
+      // The lock is released by the session's normal exit flow.
+      executor.spawn(spawnOpts, sessionLogger).catch((err: unknown) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        logger.error('Rebase session failed', { childStageId, stageFilePath, error: msg });
+        // Release lock on session failure
+        lck.releaseLock(stageFilePath).catch((releaseErr: unknown) => {
+          const releaseMsg = releaseErr instanceof Error ? releaseErr.message : String(releaseErr);
+          logger.error('Failed to release lock after rebase session failure', { childStageId, stageFilePath, error: releaseMsg });
+        });
+      });
+
+      return true;
+    } catch (err) {
+      // Synchronous error during spawn setup — release lock
+      const msg = err instanceof Error ? err.message : String(err);
+      logger.error('Failed to spawn rebase session', { childStageId, stageFilePath, error: msg });
+      await lck.releaseLock(stageFilePath);
+      return false;
+    }
+  }
+
+  /**
+   * Attempt to spawn a rebase session after a parent event.
+   * Returns `{ event, rebaseSpawned }` — the caller fills in childStageId/parentStageId.
+   *
+   * If spawn deps are not configured, returns the original event with rebaseSpawned: false.
+   * If preconditions block spawning, returns skipped_conflict or skipped_locked.
+   * Otherwise, spawns the session and returns the original event with rebaseSpawned reflecting success.
+   */
+  async function attemptRebaseSpawn(
+    childStageId: string,
+    repoPath: string,
+    originalEvent: 'parent_merged' | 'parent_updated',
+  ): Promise<{ event: ChainCheckResult['event']; rebaseSpawned: boolean }> {
+    // If spawn deps are not configured, preserve the original event
+    if (!canSpawn()) {
+      return { event: originalEvent, rebaseSpawned: false };
+    }
+
+    const precondition = await checkRebasePreconditions(childStageId, repoPath);
+    if (precondition.blocked) {
+      return { event: precondition.event, rebaseSpawned: false };
+    }
+
+    const spawned = await spawnRebaseSession(childStageId, precondition.stageFilePath, repoPath);
+    return { event: originalEvent, rebaseSpawned: spawned };
+  }
+
+  /**
+   * Whether retargeting/promotion dependencies are configured.
+   */
+  function canRetarget(): boolean {
+    return !!(codeHost && getTrackingRowsForChild);
+  }
+
+  /**
+   * Evaluate the retargeting matrix and optionally promote a draft MR to ready.
+   *
+   * Called after a parent_merged event. Queries all tracking rows for the child
+   * to count unmerged parents (NOTE: the just-merged row has already been updated
+   * to is_merged=1 at this point).
+   *
+   * Retargeting matrix:
+   *   - Multi-parent, >1 remain unmerged → no retarget, stay draft
+   *   - Multi-parent, exactly 1 remains unmerged → retarget to remaining parent branch
+   *   - Single-parent merged (0 unmerged) → retarget to defaultBranch + promote
+   *   - All parents merged (0 unmerged) → retarget to defaultBranch + promote
+   */
+  async function evaluateRetargeting(
+    childStageId: string,
+    childPrNumber: number | null,
+    repoPath: string,
+    stageFilePath: string | null,
+  ): Promise<{ retargeted: boolean; promotedToReady: boolean }> {
+    if (!canRetarget() || childPrNumber === null) {
+      return { retargeted: false, promotedToReady: false };
+    }
+
+    const host = codeHost!;
+    const allRows = await getTrackingRowsForChild!(childStageId, repoPath);
+    // is_merged can be boolean true or number 1 (SQLite stores 0/1)
+    const unmergedRows = allRows.filter(r => !r.is_merged && r.is_merged !== 1);
+
+    const totalParents = allRows.length;
+    const unmergedCount = unmergedRows.length;
+
+    logger.info('Evaluating retargeting matrix', {
+      childStageId,
+      totalParents,
+      unmergedCount,
+    });
+
+    if (unmergedCount > 1) {
+      // Multi-parent, >1 remain → no retarget, stay draft
+      logger.info('Multiple unmerged parents remain, no retarget', { childStageId, unmergedCount });
+      return { retargeted: false, promotedToReady: false };
+    }
+
+    if (unmergedCount === 1) {
+      // Multi-parent, exactly 1 remains → retarget to remaining parent branch
+      const remainingParent = unmergedRows[0];
+      logger.info('Retargeting to remaining parent branch', {
+        childStageId,
+        newBase: remainingParent.parent_branch,
+      });
+      try {
+        host.editPRBase(childPrNumber, remainingParent.parent_branch);
+        return { retargeted: true, promotedToReady: false };
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        logger.error('Failed to retarget PR', { childStageId, prNumber: childPrNumber, error: msg });
+        return { retargeted: false, promotedToReady: false };
+      }
+    }
+
+    // unmergedCount === 0 → all parents merged → retarget to defaultBranch + promote
+    logger.info('All parents merged, retargeting to default branch and promoting', {
+      childStageId,
+      defaultBranch,
+    });
+
+    let retargeted = false;
+    let promotedToReady = false;
+
+    try {
+      host.editPRBase(childPrNumber, defaultBranch);
+      retargeted = true;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      logger.error('Failed to retarget PR to default branch', { childStageId, prNumber: childPrNumber, error: msg });
+      // Don't promote if retargeting failed
+      return { retargeted: false, promotedToReady: false };
+    }
+
+    try {
+      host.markPRReady(childPrNumber);
+      promotedToReady = true;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      logger.error('Failed to promote PR to ready', { childStageId, prNumber: childPrNumber, error: msg });
+    }
+
+    // Update frontmatter if we promoted and have the necessary deps
+    if (promotedToReady && stageFilePath && readFrontmatter && writeFrontmatter) {
+      try {
+        const fm = await readFrontmatter(stageFilePath);
+        fm.data.is_draft = false;
+        fm.data.pending_merge_parents = [];
+        await writeFrontmatter(stageFilePath, fm.data, fm.content);
+        logger.info('Updated frontmatter after promotion', { childStageId, stageFilePath });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        logger.error('Failed to update frontmatter after promotion', { childStageId, stageFilePath, error: msg });
+      }
+    }
+
+    return { retargeted, promotedToReady };
+  }
+
+  /**
+   * Resolve the child stage's PR number from frontmatter.
+   * Returns null if the file can't be resolved or frontmatter doesn't contain pr_number.
+   */
+  async function resolveChildPrNumber(childStageId: string, repoPath: string): Promise<{ prNumber: number | null; stageFilePath: string | null }> {
+    if (!resolveStageFilePath || !readFrontmatter) {
+      return { prNumber: null, stageFilePath: null };
+    }
+
+    const filePath = await resolveStageFilePath(childStageId, repoPath);
+    if (!filePath) {
+      return { prNumber: null, stageFilePath: null };
+    }
+
+    try {
+      const fm = await readFrontmatter(filePath);
+      const prNumber = typeof fm.data.pr_number === 'number' ? fm.data.pr_number : null;
+      return { prNumber, stageFilePath: filePath };
+    } catch {
+      return { prNumber: null, stageFilePath: filePath };
+    }
+  }
+
+  async function checkSingleParent(row: ParentBranchTrackingRow, host: CodeHostAdapter, repoPath: string): Promise<ChainCheckResult> {
     const now = new Date().toISOString();
 
     // Check if parent PR is merged
@@ -142,6 +469,9 @@ export function createMRChainManager(
           childStageId: row.child_stage_id,
           parentStageId: row.parent_stage_id,
           event: 'no_change',
+          rebaseSpawned: false,
+          retargeted: false,
+          promotedToReady: false,
         };
       }
 
@@ -155,10 +485,21 @@ export function createMRChainManager(
           is_merged: 1,
           last_checked: now,
         });
+
+        // Attempt to spawn rebase session (only if spawn deps are configured)
+        const { event, rebaseSpawned } = await attemptRebaseSpawn(row.child_stage_id, repoPath, 'parent_merged');
+
+        // Evaluate retargeting matrix after parent merge
+        const { prNumber: childPrNumber, stageFilePath: childFilePath } = await resolveChildPrNumber(row.child_stage_id, repoPath);
+        const { retargeted, promotedToReady } = await evaluateRetargeting(row.child_stage_id, childPrNumber, repoPath, childFilePath);
+
         return {
           childStageId: row.child_stage_id,
           parentStageId: row.parent_stage_id,
-          event: 'parent_merged',
+          event,
+          rebaseSpawned,
+          retargeted,
+          promotedToReady,
         };
       }
     }
@@ -178,6 +519,9 @@ export function createMRChainManager(
         childStageId: row.child_stage_id,
         parentStageId: row.parent_stage_id,
         event: 'no_change',
+        rebaseSpawned: false,
+        retargeted: false,
+        promotedToReady: false,
       };
     }
 
@@ -193,10 +537,16 @@ export function createMRChainManager(
         last_known_head: currentHead,
         last_checked: now,
       });
+
+      // Attempt to spawn rebase session (only if spawn deps are configured)
+      const { event, rebaseSpawned } = await attemptRebaseSpawn(row.child_stage_id, repoPath, 'parent_updated');
       return {
         childStageId: row.child_stage_id,
         parentStageId: row.parent_stage_id,
-        event: 'parent_updated',
+        event,
+        rebaseSpawned,
+        retargeted: false,
+        promotedToReady: false,
       };
     }
 
@@ -216,6 +566,9 @@ export function createMRChainManager(
       childStageId: row.child_stage_id,
       parentStageId: row.parent_stage_id,
       event: 'no_change',
+      rebaseSpawned: false,
+      retargeted: false,
+      promotedToReady: false,
     };
   }
 }
