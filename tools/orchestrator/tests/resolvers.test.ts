@@ -440,6 +440,145 @@ describe('createResolverRunner', () => {
     );
   });
 
+  it('returns empty array when discoverStageFiles throws', async () => {
+    const registry = makeRegistry({ 'pr-status': () => null });
+    const exitGateRunner = makeExitGateRunner();
+    const logger = makeLogger();
+
+    const runner = createResolverRunner(makePipelineConfig(), {
+      registry,
+      exitGateRunner,
+      discoverStageFiles: vi.fn(async () => { throw new Error('Permission denied'); }),
+      logger,
+    });
+
+    const results = await runner.checkAll(REPO_PATH, CONTEXT);
+
+    expect(results).toEqual([]);
+    expect(logger.error).toHaveBeenCalledWith(
+      'Failed to discover stage files',
+      expect.objectContaining({
+        repoPath: REPO_PATH,
+        error: 'Permission denied',
+      }),
+    );
+  });
+
+  it('skips stage and continues when writeFrontmatter throws', async () => {
+    const registry = makeRegistry({ 'pr-status': () => 'Complete' });
+    const exitGateRunner = makeExitGateRunner();
+
+    let writeCallCount = 0;
+    const fm = makeFrontmatterStore({
+      '/repo/epics/EPIC-001/TICKET-001/STAGE-001.md': {
+        data: { id: 'STAGE-001', status: 'PR Created', ticket: 'TICKET-001', epic: 'EPIC-001' },
+        content: '# Stage 1\n',
+      },
+      '/repo/epics/EPIC-001/TICKET-001/STAGE-002.md': {
+        data: { id: 'STAGE-002', status: 'PR Created', ticket: 'TICKET-001', epic: 'EPIC-001' },
+        content: '# Stage 2\n',
+      },
+    });
+
+    // Override writeFrontmatter to throw on first call, succeed on second
+    fm.writeFrontmatter = vi.fn(async (filePath: string, data: Record<string, unknown>, content: string) => {
+      writeCallCount++;
+      if (writeCallCount === 1) throw new Error('Disk full');
+      fm.store[filePath] = structuredClone({ data, content });
+    });
+
+    const logger = makeLogger();
+
+    const runner = createResolverRunner(makePipelineConfig(), {
+      registry,
+      exitGateRunner,
+      readFrontmatter: fm.readFrontmatter,
+      writeFrontmatter: fm.writeFrontmatter,
+      discoverStageFiles: vi.fn(async () => [
+        '/repo/epics/EPIC-001/TICKET-001/STAGE-001.md',
+        '/repo/epics/EPIC-001/TICKET-001/STAGE-002.md',
+      ]),
+      logger,
+    });
+
+    const results = await runner.checkAll(REPO_PATH, CONTEXT);
+
+    // First stage's writeFrontmatter failed -> skipped (no result entry for it)
+    // Second stage succeeded -> included in results
+    expect(results).toHaveLength(1);
+    expect(results[0].stageId).toBe('STAGE-002');
+    expect(results[0].newStatus).toBe('Complete');
+    expect(results[0].propagated).toBe(true);
+
+    // Error was logged for the failed write
+    expect(logger.error).toHaveBeenCalledWith(
+      'Failed to write updated status',
+      expect.objectContaining({
+        stageId: 'STAGE-001',
+        resolverName: 'pr-status',
+        newStatus: 'Complete',
+        error: 'Disk full',
+      }),
+    );
+
+    // Exit gate was NOT called for the failed stage, only for the successful one
+    expect(exitGateRunner.run).toHaveBeenCalledTimes(1);
+    expect(exitGateRunner.run.mock.calls[0][0].stageId).toBe('STAGE-002');
+  });
+
+  it('skips stages missing id or status fields and logs warning', async () => {
+    const registry = makeRegistry({ 'pr-status': () => 'Complete' });
+    const exitGateRunner = makeExitGateRunner();
+    const fm = makeFrontmatterStore({
+      '/repo/epics/EPIC-001/TICKET-001/STAGE-001.md': {
+        data: { status: 'PR Created', ticket: 'TICKET-001' }, // missing id
+        content: '# Stage 1\n',
+      },
+      '/repo/epics/EPIC-001/TICKET-001/STAGE-002.md': {
+        data: { id: 'STAGE-002', ticket: 'TICKET-001' }, // missing status
+        content: '# Stage 2\n',
+      },
+      '/repo/epics/EPIC-001/TICKET-001/STAGE-003.md': {
+        data: { id: 'STAGE-003', status: 'PR Created', ticket: 'TICKET-001', epic: 'EPIC-001' },
+        content: '# Stage 3\n',
+      },
+    });
+    const logger = makeLogger();
+
+    const runner = createResolverRunner(makePipelineConfig(), {
+      registry,
+      exitGateRunner,
+      readFrontmatter: fm.readFrontmatter,
+      writeFrontmatter: fm.writeFrontmatter,
+      discoverStageFiles: vi.fn(async () => [
+        '/repo/epics/EPIC-001/TICKET-001/STAGE-001.md',
+        '/repo/epics/EPIC-001/TICKET-001/STAGE-002.md',
+        '/repo/epics/EPIC-001/TICKET-001/STAGE-003.md',
+      ]),
+      logger,
+    });
+
+    const results = await runner.checkAll(REPO_PATH, CONTEXT);
+
+    // Only STAGE-003 should be processed
+    expect(results).toHaveLength(1);
+    expect(results[0].stageId).toBe('STAGE-003');
+    expect(results[0].newStatus).toBe('Complete');
+
+    // Warnings logged for both malformed stages
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Stage file missing id or status',
+      expect.objectContaining({ stageFilePath: '/repo/epics/EPIC-001/TICKET-001/STAGE-001.md' }),
+    );
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Stage file missing id or status',
+      expect.objectContaining({ stageFilePath: '/repo/epics/EPIC-001/TICKET-001/STAGE-002.md' }),
+    );
+
+    // Exit gate called only for the valid stage
+    expect(exitGateRunner.run).toHaveBeenCalledTimes(1);
+  });
+
   it('passes correct ResolverStageInput fields to resolver', async () => {
     let capturedInput: ResolverStageInput | null = null;
     const registry = new ResolverRegistry();

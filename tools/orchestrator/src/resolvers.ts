@@ -211,11 +211,11 @@ export function createResolverRunner(
           newStatus: resolverResult,
         });
 
-        // Propagate through exit gate
+        // Resolver-driven transitions have no worktree session
         const workerInfo: WorkerInfo = {
           stageId,
           stageFilePath,
-          worktreePath: '',
+          worktreePath: '', // no worktree for resolver transitions
           worktreeIndex: -1,
           statusBefore: status,
           startTime: Date.now(),
