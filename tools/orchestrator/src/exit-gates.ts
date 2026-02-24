@@ -27,7 +27,9 @@ export interface ExitGateResult {
   statusBefore: string;
   statusAfter: string;
   ticketUpdated: boolean;
+  ticketCompleted: boolean;
   epicUpdated: boolean;
+  epicCompleted: boolean;
   syncResult: { success: boolean; error?: string };
 }
 
@@ -77,6 +79,23 @@ export function deriveTicketStatus(stageStatuses: Record<string, string>): strin
   return 'In Progress';
 }
 
+/**
+ * Derive an overall epic status from its ticket_statuses map.
+ *
+ * Rules:
+ * - Empty map -> null (don't change epic status)
+ * - All values are "Complete" -> "Complete"
+ * - All values are "Not Started" -> "Not Started"
+ * - Otherwise -> "In Progress"
+ */
+export function deriveEpicStatus(ticketStatuses: Record<string, string>): string | null {
+  const values = Object.values(ticketStatuses);
+  if (values.length === 0) return null;
+  if (values.every((v) => v === 'Complete')) return 'Complete';
+  if (values.every((v) => v === 'Not Started')) return 'Not Started';
+  return 'In Progress';
+}
+
 const defaultDeps: ExitGateDeps = {
   readFrontmatter: defaultReadFrontmatter,
   writeFrontmatter: defaultWriteFrontmatter,
@@ -106,7 +125,9 @@ export function createExitGateRunner(deps: Partial<ExitGateDeps> = {}): ExitGate
         statusBefore: workerInfo.statusBefore,
         statusAfter,
         ticketUpdated: false,
+        ticketCompleted: false,
         epicUpdated: false,
+        epicCompleted: false,
         syncResult: { success: false },
       };
 

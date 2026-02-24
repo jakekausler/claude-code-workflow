@@ -873,6 +873,8 @@ describe('createOrchestrator', () => {
         statusAfter: 'In Build',
         ticketUpdated: true,
         epicUpdated: true,
+        ticketCompleted: false,
+        epicCompleted: false,
         syncResult: { success: true },
       }));
       return { runner: { run: runFn }, runFn };
@@ -1079,7 +1081,9 @@ describe('createOrchestrator', () => {
       deps.exitGateRunner = {
         run: vi.fn(async (): Promise<ExitGateResult> => ({
           statusChanged: true, statusBefore: 'In Design', statusAfter: 'In Build',
-          ticketUpdated: true, epicUpdated: true, syncResult: { success: true },
+          ticketUpdated: true, epicUpdated: true,
+          ticketCompleted: false, epicCompleted: false,
+          syncResult: { success: true },
         })),
       };
       deps.readFrontmatter = mockReadFrontmatter;

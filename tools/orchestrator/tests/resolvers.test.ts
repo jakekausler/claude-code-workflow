@@ -36,6 +36,8 @@ function makeExitGateRunner(result?: Partial<ExitGateResult>): ExitGateRunner & 
     statusAfter: '',
     ticketUpdated: true,
     epicUpdated: true,
+    ticketCompleted: false,
+    epicCompleted: false,
     syncResult: { success: true },
     ...result,
   };

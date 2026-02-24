@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { createExitGateRunner, deriveTicketStatus, type ExitGateDeps } from '../src/exit-gates.js';
+import { createExitGateRunner, deriveTicketStatus, deriveEpicStatus, type ExitGateDeps } from '../src/exit-gates.js';
 import type { FrontmatterData } from '../src/locking.js';
 import type { WorkerInfo } from '../src/types.js';
 
@@ -94,6 +94,40 @@ describe('deriveTicketStatus', () => {
     expect(deriveTicketStatus({
       'STAGE-001': 'Implementation',
       'STAGE-002': 'Not Started',
+    })).toBe('In Progress');
+  });
+});
+
+describe('deriveEpicStatus', () => {
+  it('returns null for empty map', () => {
+    expect(deriveEpicStatus({})).toBeNull();
+  });
+
+  it('returns Complete when all tickets are Complete', () => {
+    expect(deriveEpicStatus({
+      'TICKET-001-001': 'Complete',
+      'TICKET-001-002': 'Complete',
+    })).toBe('Complete');
+  });
+
+  it('returns Not Started when all tickets are Not Started', () => {
+    expect(deriveEpicStatus({
+      'TICKET-001-001': 'Not Started',
+      'TICKET-001-002': 'Not Started',
+    })).toBe('Not Started');
+  });
+
+  it('returns In Progress for mixed statuses', () => {
+    expect(deriveEpicStatus({
+      'TICKET-001-001': 'Complete',
+      'TICKET-001-002': 'In Progress',
+    })).toBe('In Progress');
+  });
+
+  it('returns In Progress when some Complete and some Not Started', () => {
+    expect(deriveEpicStatus({
+      'TICKET-001-001': 'Complete',
+      'TICKET-001-002': 'Not Started',
     })).toBe('In Progress');
   });
 });
