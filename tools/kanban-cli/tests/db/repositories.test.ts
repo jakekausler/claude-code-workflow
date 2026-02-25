@@ -132,14 +132,14 @@ describe('Repositories', () => {
       expect(repos.findAll()).toEqual([]);
     });
 
-    it('findAll returns all registered repos after multiple upserts', () => {
+    it('findAll returns all registered repos ordered by name', () => {
       const repos = new RepoRepository(db);
       repos.upsert('/repo/one', 'repo-one');
       repos.upsert('/repo/two', 'repo-two');
       repos.upsert('/repo/three', 'repo-three');
       const all = repos.findAll();
       expect(all).toHaveLength(3);
-      const names = all.map((r) => r.name).sort();
+      const names = all.map((r) => r.name);
       expect(names).toEqual(['repo-one', 'repo-three', 'repo-two']);
     });
 

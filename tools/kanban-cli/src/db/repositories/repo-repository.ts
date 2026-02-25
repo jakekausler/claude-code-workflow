@@ -59,18 +59,17 @@ export class RepoRepository {
   }
 
   /**
-   * Return all registered repos.
+   * Return all registered repos, ordered by name.
    */
   findAll(): RepoRecord[] {
     return this.db
       .raw()
-      .prepare('SELECT * FROM repos')
+      .prepare('SELECT * FROM repos ORDER BY name')
       .all() as RepoRecord[];
   }
 
-  /**
-   * Find a repo by its name (case-sensitive).
-   */
+  /** Find a repo by its name (case-sensitive).
+   *  NOTE: repos.name uniqueness is enforced at the schema level (see schema.ts). */
   findByName(name: string): RepoRecord | null {
     const row = this.db
       .raw()
