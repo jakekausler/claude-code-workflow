@@ -45,23 +45,28 @@ export async function createServer(
   if (!isDev) {
     // Production: serve built client assets
     const clientDir = join(__dirname, '../client');
+    let indexHtml: string | null = null;
+
     if (existsSync(clientDir)) {
-      const indexHtml = readFileSync(join(clientDir, 'index.html'), 'utf-8');
+      indexHtml = readFileSync(join(clientDir, 'index.html'), 'utf-8');
 
       await app.register(fastifyStatic, {
         root: clientDir,
         prefix: '/',
         wildcard: false,
       });
-
-      // SPA fallback — serve index.html for non-API routes
-      app.setNotFoundHandler(async (request, reply) => {
-        if (request.url.startsWith('/api/')) {
-          return reply.status(404).send({ error: 'Not found' });
-        }
-        return reply.type('text/html').send(indexHtml);
-      });
     }
+
+    // SPA fallback + API 404 — always registered in production
+    app.setNotFoundHandler(async (request, reply) => {
+      if (request.url.startsWith('/api/')) {
+        return reply.status(404).send({ error: 'Not found' });
+      }
+      if (indexHtml) {
+        return reply.type('text/html').send(indexHtml);
+      }
+      return reply.status(404).send({ error: 'Not found' });
+    });
   } else {
     // Development: proxy non-API requests to Vite dev server
     app.setNotFoundHandler(async (request, reply) => {
