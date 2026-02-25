@@ -70,9 +70,15 @@ export class TicketRepository {
   }
 
   /**
-   * List all tickets for an epic.
+   * List all tickets for an epic, optionally scoped to a specific repo.
    */
-  listByEpic(epicId: string): TicketRow[] {
+  listByEpic(epicId: string, repoId?: number): TicketRow[] {
+    if (repoId !== undefined) {
+      return this.db
+        .raw()
+        .prepare('SELECT * FROM tickets WHERE epic_id = ? AND repo_id = ?')
+        .all(epicId, repoId) as TicketRow[];
+    }
     return this.db
       .raw()
       .prepare('SELECT * FROM tickets WHERE epic_id = ?')

@@ -13,7 +13,7 @@ import {
   parseTicketFrontmatter,
   parseStageFrontmatter,
 } from '../parser/frontmatter.js';
-import { parseDependencyRef } from '../parser/cross-repo-deps.js';
+import { parseDependencyRef, type DependencyRef } from '../parser/cross-repo-deps.js';
 import { RepoRepository } from '../db/repositories/repo-repository.js';
 import { EpicRepository } from '../db/repositories/epic-repository.js';
 import { TicketRepository } from '../db/repositories/ticket-repository.js';
@@ -200,10 +200,9 @@ export function syncRepo(options: SyncOptions): SyncResult {
     }
 
     if (targetType === 'epic') {
-      const tickets = ticketRepo.listByEpic(targetId);
-      const repoTickets = tickets.filter((t) => t.repo_id === targetRepoId);
-      if (repoTickets.length === 0) return false;
-      return repoTickets.every((t) => {
+      const tickets = ticketRepo.listByEpic(targetId, targetRepoId);
+      if (tickets.length === 0) return false;
+      return tickets.every((t) => {
         const stages = stageRepo.listByTicket(t.id, targetRepoId);
         if (stages.length === 0) return false;
         return stages.every((s) => s.status === COMPLETE_STATUS);
@@ -215,10 +214,9 @@ export function syncRepo(options: SyncOptions): SyncResult {
 
   /**
    * Check whether a dependency target is resolved (hard-resolution).
-   * Dispatches to local or cross-repo resolution based on the raw dep ref.
+   * Dispatches to local or cross-repo resolution based on parsed ref.
    */
-  function isDependencyResolved(depRef: string): boolean {
-    const parsed = parseDependencyRef(depRef);
+  function isDependencyResolved(parsed: DependencyRef): boolean {
     if (parsed.type === 'local') {
       return isLocalDependencyResolved(parsed.itemId);
     }
@@ -230,8 +228,7 @@ export function syncRepo(options: SyncOptions): SyncResult {
    * Only applies to stage→stage dependencies.
    * Returns true if the target stage's status is 'PR Created' or 'Addressing Comments'.
    */
-  function isStageSoftResolved(depRef: string): boolean {
-    const parsed = parseDependencyRef(depRef);
+  function isStageSoftResolved(parsed: DependencyRef): boolean {
     if (parsed.type === 'local') {
       const status = stageStatusMap.get(parsed.itemId);
       if (!status) return false;
@@ -251,23 +248,21 @@ export function syncRepo(options: SyncOptions): SyncResult {
    * - For all other dep types (stage→ticket, stage→epic, ticket→ticket, epic→epic):
    *   returns true only if hard-resolved (Complete required)
    */
-  function isDependencySoftOrHardResolved(depRef: string): boolean {
-    if (isDependencyResolved(depRef)) return true;
+  function isDependencySoftOrHardResolved(parsed: DependencyRef): boolean {
+    if (isDependencyResolved(parsed)) return true;
     // Soft-resolution only applies to stage→stage deps
-    const parsed = parseDependencyRef(depRef);
     const targetType = getEntityType(parsed.itemId);
     if (targetType === 'stage') {
-      return isStageSoftResolved(depRef);
+      return isStageSoftResolved(parsed);
     }
     return false;
   }
 
   /**
    * Upsert a dependency and resolve it if the target is complete.
-   * Parses the depRef to handle both local and cross-repo dependencies.
+   * Accepts a pre-parsed DependencyRef to avoid redundant parsing.
    */
-  function upsertDependency(fromId: string, fromType: string, depRef: string): void {
-    const parsed = parseDependencyRef(depRef);
+  function upsertDependency(fromId: string, fromType: string, parsed: DependencyRef): void {
     const targetId = parsed.itemId;
     const toType = getEntityType(targetId);
     const targetRepoName = parsed.type === 'cross-repo' ? parsed.repoName : null;
@@ -282,7 +277,7 @@ export function syncRepo(options: SyncOptions): SyncResult {
     });
     result.dependencies++;
 
-    if (isDependencyResolved(depRef)) {
+    if (isDependencyResolved(parsed)) {
       depRepo.resolve(fromId, targetId);
     }
   }
@@ -335,7 +330,8 @@ export function syncRepo(options: SyncOptions): SyncResult {
       });
 
       for (const depId of epic.depends_on) {
-        upsertDependency(epic.id, 'epic', depId);
+        const parsed = parseDependencyRef(depId);
+        upsertDependency(epic.id, 'epic', parsed);
       }
     }
     result.epics = parsedEpics.length;
@@ -356,21 +352,25 @@ export function syncRepo(options: SyncOptions): SyncResult {
       });
 
       for (const depId of ticket.depends_on) {
-        upsertDependency(ticket.id, 'ticket', depId);
+        const parsed = parseDependencyRef(depId);
+        upsertDependency(ticket.id, 'ticket', parsed);
       }
     }
     result.tickets = parsedTickets.length;
 
     // Upsert stages and create dependencies
     for (const stage of parsedStages) {
+      // Parse all dep refs once for this stage
+      const parsedDeps = stage.depends_on.map((depId) => parseDependencyRef(depId));
+
       // Create dependency records (supports stage→stage, stage→ticket, stage→epic)
-      for (const depId of stage.depends_on) {
-        upsertDependency(stage.id, 'stage', depId);
+      for (const parsed of parsedDeps) {
+        upsertDependency(stage.id, 'stage', parsed);
       }
 
       // Determine if all deps are soft-or-hard-resolved for kanban column
-      const allSoftOrHardResolved = stage.depends_on.length === 0 ||
-        stage.depends_on.every((depId) => isDependencySoftOrHardResolved(depId));
+      const allSoftOrHardResolved = parsedDeps.length === 0 ||
+        parsedDeps.every((parsed) => isDependencySoftOrHardResolved(parsed));
       const hasUnresolvedDeps = !allSoftOrHardResolved;
 
       const kanbanColumn = computeKanbanColumn({
@@ -382,11 +382,10 @@ export function syncRepo(options: SyncOptions): SyncResult {
       // Build pending_merge_parents for soft-unblocked stages
       const pendingParents: PendingMergeParent[] = [];
       if (allSoftOrHardResolved) {
-        for (const depRef of stage.depends_on) {
-          const depParsed = parseDependencyRef(depRef);
+        for (const depParsed of parsedDeps) {
           const depType = getEntityType(depParsed.itemId);
           // Only stage→stage deps can be soft-resolved
-          if (depType === 'stage' && !isDependencyResolved(depRef) && isStageSoftResolved(depRef)) {
+          if (depType === 'stage' && !isDependencyResolved(depParsed) && isStageSoftResolved(depParsed)) {
             // For local deps, use the in-memory map; cross-repo soft parents
             // are in another repo so we skip them for pending_merge_parents
             if (depParsed.type === 'local') {

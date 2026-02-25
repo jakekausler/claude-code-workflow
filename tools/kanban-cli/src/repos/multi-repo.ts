@@ -4,7 +4,7 @@ import type { EpicRow, TicketRow, StageRow, DependencyRow } from '../db/reposito
 import type { LoadConfigOptions } from '../config/loader.js';
 import type { SyncOptions, SyncResult } from '../sync/sync.js';
 import type { PipelineConfig } from '../types/pipeline.js';
-import { createRegistry } from './registry.js';
+import { createRegistry, type RepoRegistry } from './registry.js';
 import { RepoRepository } from '../db/repositories/repo-repository.js';
 import { EpicRepository } from '../db/repositories/epic-repository.js';
 import { TicketRepository } from '../db/repositories/ticket-repository.js';
@@ -57,7 +57,7 @@ export interface DepRepoLike {
 }
 
 export interface MultiRepoDeps {
-  registry: ReturnType<typeof createRegistry>;
+  registry: RepoRegistry;
   db: KanbanDatabase;
   loadConfig: (options?: LoadConfigOptions) => PipelineConfig;
   syncRepo: (options: SyncOptions) => SyncResult;
@@ -110,6 +110,8 @@ export function createMultiRepoHelper(deps: Partial<MultiRepoDeps> = {}) {
           repoName: record.name,
           repoPath: record.path,
         });
+      } else {
+        process.stderr.write(`Warning: repo '${entry.name}' at '${entry.path}' not found in database after sync\n`);
       }
     }
 
@@ -132,12 +134,12 @@ export function createMultiRepoHelper(deps: Partial<MultiRepoDeps> = {}) {
     const allStages: StageRowWithRepo[] = [];
     const allDeps: DependencyRowWithRepo[] = [];
 
-    if (!epicRepo || !ticketRepo || !stageRepo || !depRepo) {
-      return { epics: allEpics, tickets: allTickets, stages: allStages, deps: allDeps };
+    if (!epicRepo || !ticketRepo || !stageRepo || !depRepo || !repoRepo) {
+      throw new Error('Repository dependencies are required for loadAllRepoData');
     }
 
     for (const repoId of repoIds) {
-      const record = repoRepo?.findById(repoId) ?? null;
+      const record = repoRepo.findById(repoId);
       const repoName = record?.name ?? 'unknown';
 
       const epics = epicRepo.listByRepo(repoId);

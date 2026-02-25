@@ -227,11 +227,13 @@ describe('createMultiRepoHelper', () => {
       expect(deps.syncRepo).not.toHaveBeenCalled();
     });
 
-    it('skips repos not found in database after sync', () => {
+    it('skips repos not found in database after sync and warns on stderr', () => {
       const repos: RepoEntry[] = [
         makeRepoEntry({ path: '/projects/backend', name: 'backend' }),
         makeRepoEntry({ path: '/projects/missing', name: 'missing' }),
       ];
+
+      const stderrSpy = vi.spyOn(process.stderr, 'write').mockReturnValue(true);
 
       const deps = makeDeps({
         registry: {
@@ -255,6 +257,13 @@ describe('createMultiRepoHelper', () => {
       expect(result).toEqual([
         { repoId: 1, repoName: 'backend', repoPath: '/projects/backend' },
       ]);
+
+      // Warning was emitted for the missing repo
+      expect(stderrSpy).toHaveBeenCalledWith(
+        "Warning: repo 'missing' at '/projects/missing' not found in database after sync\n",
+      );
+
+      stderrSpy.mockRestore();
     });
   });
 
@@ -377,6 +386,22 @@ describe('createMultiRepoHelper', () => {
       expect(result.tickets).toEqual([]);
       expect(result.stages).toEqual([]);
       expect(result.deps).toEqual([]);
+    });
+
+    it('throws when repository dependencies are missing', () => {
+      // Create helper without db or repo dependencies
+      const helper = createMultiRepoHelper({
+        registry: {
+          loadRepos: vi.fn().mockReturnValue([]),
+          registerRepo: vi.fn(),
+          unregisterRepo: vi.fn(),
+          findByName: vi.fn().mockReturnValue(null),
+        },
+      });
+
+      expect(() => helper.loadAllRepoData([1])).toThrow(
+        'Repository dependencies are required for loadAllRepoData',
+      );
     });
 
     it('uses "unknown" for repos not found by ID', () => {
