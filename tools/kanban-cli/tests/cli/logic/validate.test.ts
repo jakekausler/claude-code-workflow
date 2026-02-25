@@ -555,7 +555,7 @@ describe('validateWorkItems', () => {
       expect(result.errors[0].repo).toBe('repo1');
     });
 
-    it('global mode includes repos array in output', () => {
+    it('global mode accepts global flag without error', () => {
       const epic = makeEpic({ tickets: [], repo: 'repo1' });
 
       const result = validateWorkItems({

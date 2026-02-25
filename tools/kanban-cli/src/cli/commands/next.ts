@@ -13,6 +13,51 @@ import { writeOutput } from '../utils/output.js';
 import { createMultiRepoHelper } from '../../repos/multi-repo.js';
 import { createRegistry } from '../../repos/registry.js';
 
+interface MapNextRowsResult {
+  stages: NextStageRow[];
+  tickets: NextTicketRow[];
+  dependencies: NextDependencyRow[];
+}
+
+function mapNextRows(
+  stageRows: Array<any>,
+  ticketRows: Array<any>,
+  depRows: Array<any>,
+  options: { includeRepo: boolean }
+): MapNextRowsResult {
+  const stages: NextStageRow[] = stageRows.map((s) => ({
+    id: s.id,
+    ticket_id: s.ticket_id ?? '',
+    epic_id: s.epic_id ?? '',
+    title: s.title ?? '',
+    status: s.status ?? 'Not Started',
+    kanban_column: s.kanban_column ?? 'backlog',
+    refinement_type: s.refinement_type ?? '[]',
+    worktree_branch: s.worktree_branch ?? '',
+    priority: s.priority,
+    due_date: s.due_date,
+    session_active: s.session_active === 1,
+    ...(options.includeRepo && { repo: s.repo }),
+  }));
+
+  const tickets: NextTicketRow[] = ticketRows.map((t) => ({
+    id: t.id,
+    epic_id: t.epic_id ?? '',
+    has_stages: (t.has_stages ?? 0) === 1,
+  }));
+
+  const dependencies: NextDependencyRow[] = depRows.map((d) => ({
+    id: d.id,
+    from_id: d.from_id,
+    to_id: d.to_id,
+    from_type: d.from_type,
+    to_type: d.to_type,
+    resolved: d.resolved === 1,
+  }));
+
+  return { stages, tickets, dependencies };
+}
+
 export const nextCommand = new Command('next')
   .description('Output next workable stages, sorted by priority')
   .option('--repo <path>', 'Path to repository', process.cwd())
@@ -45,35 +90,7 @@ export const nextCommand = new Command('next')
         const config = loadConfig({ repoPath: repoInfos[0].repoPath });
 
         // Map aggregated data to logic input types (with repo field)
-        const stages: NextStageRow[] = aggregated.stages.map((s) => ({
-          id: s.id,
-          ticket_id: s.ticket_id ?? '',
-          epic_id: s.epic_id ?? '',
-          title: s.title ?? '',
-          status: s.status ?? 'Not Started',
-          kanban_column: s.kanban_column ?? 'backlog',
-          refinement_type: s.refinement_type ?? '[]',
-          worktree_branch: s.worktree_branch ?? '',
-          priority: s.priority,
-          due_date: s.due_date,
-          session_active: s.session_active === 1,
-          repo: s.repo,
-        }));
-
-        const tickets: NextTicketRow[] = aggregated.tickets.map((t) => ({
-          id: t.id,
-          epic_id: t.epic_id ?? '',
-          has_stages: (t.has_stages ?? 0) === 1,
-        }));
-
-        const dependencies: NextDependencyRow[] = aggregated.deps.map((d) => ({
-          id: d.id,
-          from_id: d.from_id,
-          to_id: d.to_id,
-          from_type: d.from_type,
-          to_type: d.to_type,
-          resolved: d.resolved === 1,
-        }));
+        const { stages, tickets, dependencies } = mapNextRows(aggregated.stages, aggregated.tickets, aggregated.deps, { includeRepo: true });
 
         const maxValue = parseInt(options.max, 10);
 
@@ -118,34 +135,7 @@ export const nextCommand = new Command('next')
         const depRows = new DependencyRepository(db).listByRepo(repoId);
 
         // Map DB rows to logic input types
-        const stages: NextStageRow[] = stageRows.map((s) => ({
-          id: s.id,
-          ticket_id: s.ticket_id ?? '',
-          epic_id: s.epic_id ?? '',
-          title: s.title ?? '',
-          status: s.status ?? 'Not Started',
-          kanban_column: s.kanban_column ?? 'backlog',
-          refinement_type: s.refinement_type ?? '[]',
-          worktree_branch: s.worktree_branch ?? '',
-          priority: s.priority,
-          due_date: s.due_date,
-          session_active: s.session_active === 1,
-        }));
-
-        const tickets: NextTicketRow[] = ticketRows.map((t) => ({
-          id: t.id,
-          epic_id: t.epic_id ?? '',
-          has_stages: (t.has_stages ?? 0) === 1,
-        }));
-
-        const dependencies: NextDependencyRow[] = depRows.map((d) => ({
-          id: d.id,
-          from_id: d.from_id,
-          to_id: d.to_id,
-          from_type: d.from_type,
-          to_type: d.to_type,
-          resolved: d.resolved === 1,
-        }));
+        const { stages, tickets, dependencies } = mapNextRows(stageRows, ticketRows, depRows, { includeRepo: false });
 
         const maxValue = parseInt(options.max, 10);
 

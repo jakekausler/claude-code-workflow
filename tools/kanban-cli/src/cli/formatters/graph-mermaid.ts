@@ -54,6 +54,65 @@ function inferTicketId(node: GraphNode): string | undefined {
   return undefined;
 }
 
+/**
+ * Render epic and ticket subgraphs with nested stages.
+ * Handles the grouping of nodes by epic and then by ticket within each epic.
+ * Returns an array of Mermaid diagram lines.
+ */
+function renderEpicTicketSubgraphs(
+  epicNodes: GraphNode[],
+  allChildren: GraphNode[],
+  indent: string,
+  epicChildMap: Map<string, GraphNode[]>
+): string[] {
+  const lines: string[] = [];
+
+  for (const epic of epicNodes) {
+    const children = epicChildMap.get(epic.id) || [];
+    const safeEpicId = sanitizeNodeId(epic.id);
+    lines.push(`${indent}subgraph sub_${safeEpicId} ["${epic.id}: ${epic.title}"]`);
+    lines.push(`${indent}    ${nodeDefinition(epic)}`);
+
+    const tickets = children.filter((n) => n.type === 'ticket');
+    const stages = children.filter((n) => n.type === 'stage');
+
+    const ticketStageMap = new Map<string, GraphNode[]>();
+    const ungroupedStages: GraphNode[] = [];
+
+    for (const ticket of tickets) {
+      ticketStageMap.set(ticket.id, []);
+    }
+
+    for (const stage of stages) {
+      const ticketId = inferTicketId(stage);
+      if (ticketId && ticketStageMap.has(ticketId)) {
+        ticketStageMap.get(ticketId)!.push(stage);
+      } else {
+        ungroupedStages.push(stage);
+      }
+    }
+
+    for (const ticket of tickets) {
+      const safeTicketId = sanitizeNodeId(ticket.id);
+      const ticketStages = ticketStageMap.get(ticket.id) || [];
+      lines.push(`${indent}    subgraph sub_${safeTicketId} ["${ticket.id}: ${ticket.title}"]`);
+      lines.push(`${indent}        ${nodeDefinition(ticket)}`);
+      for (const stage of ticketStages) {
+        lines.push(`${indent}        ${nodeDefinition(stage)}`);
+      }
+      lines.push(`${indent}    end`);
+    }
+
+    for (const stage of ungroupedStages) {
+      lines.push(`${indent}    ${nodeDefinition(stage)}`);
+    }
+
+    lines.push(`${indent}end`);
+  }
+
+  return lines;
+}
+
 /** Map a status string to a fill color for Mermaid style directives. */
 function statusColor(status: string): { fill: string; color: string } {
   const normalized = status.toLowerCase();
@@ -198,48 +257,7 @@ export function formatGraphAsMermaid(graph: GraphOutput): string {
       }
 
       // Render epic subgraphs within repo
-      for (const epic of epicNodes) {
-        const children = epicChildMap.get(epic.id) || [];
-        const safeEpicId = sanitizeNodeId(epic.id);
-        lines.push(`        subgraph sub_${safeEpicId} ["${epic.id}: ${epic.title}"]`);
-        lines.push(`            ${nodeDefinition(epic)}`);
-
-        const tickets = children.filter((n) => n.type === 'ticket');
-        const stages = children.filter((n) => n.type === 'stage');
-
-        const ticketStageMap = new Map<string, GraphNode[]>();
-        const ungroupedStages: GraphNode[] = [];
-
-        for (const ticket of tickets) {
-          ticketStageMap.set(ticket.id, []);
-        }
-
-        for (const stage of stages) {
-          const ticketId = inferTicketId(stage);
-          if (ticketId && ticketStageMap.has(ticketId)) {
-            ticketStageMap.get(ticketId)!.push(stage);
-          } else {
-            ungroupedStages.push(stage);
-          }
-        }
-
-        for (const ticket of tickets) {
-          const safeTicketId = sanitizeNodeId(ticket.id);
-          const ticketStages = ticketStageMap.get(ticket.id) || [];
-          lines.push(`            subgraph sub_${safeTicketId} ["${ticket.id}: ${ticket.title}"]`);
-          lines.push(`                ${nodeDefinition(ticket)}`);
-          for (const stage of ticketStages) {
-            lines.push(`                ${nodeDefinition(stage)}`);
-          }
-          lines.push('            end');
-        }
-
-        for (const stage of ungroupedStages) {
-          lines.push(`            ${nodeDefinition(stage)}`);
-        }
-
-        lines.push('        end');
-      }
+      lines.push(...renderEpicTicketSubgraphs(epicNodes, repoNodes, '        ', epicChildMap));
 
       // Render ungrouped nodes within repo
       for (const node of repoUngroupedNodes) {
@@ -278,55 +296,7 @@ export function formatGraphAsMermaid(graph: GraphOutput): string {
     }
 
     // Render subgraphs for each epic with nested ticket subgraphs
-    for (const epic of epicNodes) {
-      const children = epicChildMap.get(epic.id) || [];
-      const safeEpicId = sanitizeNodeId(epic.id);
-      lines.push(`    subgraph sub_${safeEpicId} ["${epic.id}: ${epic.title}"]`);
-      // Epic node itself inside the subgraph
-      lines.push(`        ${nodeDefinition(epic)}`);
-
-      // Separate children into tickets and stages, group stages by ticket
-      const tickets = children.filter((n) => n.type === 'ticket');
-      const stages = children.filter((n) => n.type === 'stage');
-
-      // Map ticketId -> stages belonging to that ticket
-      const ticketStageMap = new Map<string, GraphNode[]>();
-      const ungroupedStages: GraphNode[] = [];
-
-      // Initialize ticket stage groups
-      for (const ticket of tickets) {
-        ticketStageMap.set(ticket.id, []);
-      }
-
-      // Assign stages to their ticket groups
-      for (const stage of stages) {
-        const ticketId = inferTicketId(stage);
-        if (ticketId && ticketStageMap.has(ticketId)) {
-          ticketStageMap.get(ticketId)!.push(stage);
-        } else {
-          ungroupedStages.push(stage);
-        }
-      }
-
-      // Render ticket subgraphs
-      for (const ticket of tickets) {
-        const safeTicketId = sanitizeNodeId(ticket.id);
-        const ticketStages = ticketStageMap.get(ticket.id) || [];
-        lines.push(`        subgraph sub_${safeTicketId} ["${ticket.id}: ${ticket.title}"]`);
-        lines.push(`            ${nodeDefinition(ticket)}`);
-        for (const stage of ticketStages) {
-          lines.push(`            ${nodeDefinition(stage)}`);
-        }
-        lines.push('        end');
-      }
-
-      // Render any stages that couldn't be matched to a ticket
-      for (const stage of ungroupedStages) {
-        lines.push(`        ${nodeDefinition(stage)}`);
-      }
-
-      lines.push('    end');
-    }
+    lines.push(...renderEpicTicketSubgraphs(epicNodes, nodes, '    ', epicChildMap));
 
     // Render ungrouped nodes
     for (const node of ungroupedNodes) {

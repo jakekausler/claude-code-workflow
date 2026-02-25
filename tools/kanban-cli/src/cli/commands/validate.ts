@@ -19,6 +19,117 @@ import { writeOutput } from '../utils/output.js';
 import { createMultiRepoHelper } from '../../repos/multi-repo.js';
 import { createRegistry } from '../../repos/registry.js';
 
+interface ValidateLookups {
+  depsByFromId: Map<string, string[]>;
+  stagesByTicket: Map<string, string[]>;
+  ticketsByEpic: Map<string, string[]>;
+}
+
+function buildValidateLookups(
+  depRows: Array<any>,
+  stageRows: Array<any>,
+  ticketRows: Array<any>
+): ValidateLookups {
+  // Build dependency lookup for depends_on arrays
+  const depsByFromId = new Map<string, string[]>();
+  for (const d of depRows) {
+    const existing = depsByFromId.get(d.from_id) || [];
+    existing.push(d.to_id);
+    depsByFromId.set(d.from_id, existing);
+  }
+
+  // Build stage-to-ticket lookup for ticket.stages
+  const stagesByTicket = new Map<string, string[]>();
+  for (const s of stageRows) {
+    if (s.ticket_id) {
+      const existing = stagesByTicket.get(s.ticket_id) || [];
+      existing.push(s.id);
+      stagesByTicket.set(s.ticket_id, existing);
+    }
+  }
+
+  // Build ticket-to-epic lookup for epic.tickets
+  const ticketsByEpic = new Map<string, string[]>();
+  for (const t of ticketRows) {
+    if (t.epic_id) {
+      const existing = ticketsByEpic.get(t.epic_id) || [];
+      existing.push(t.id);
+      ticketsByEpic.set(t.epic_id, existing);
+    }
+  }
+
+  return { depsByFromId, stagesByTicket, ticketsByEpic };
+}
+
+interface MapValidateRowsResult {
+  epics: ValidateEpicRow[];
+  tickets: ValidateTicketRow[];
+  stages: ValidateStageRow[];
+  dependencies: ValidateDependencyRow[];
+}
+
+function mapValidateRows(
+  epicRows: Array<any>,
+  ticketRows: Array<any>,
+  stageRows: Array<any>,
+  depRows: Array<any>,
+  lookups: ValidateLookups,
+  options: { includeRepo: boolean }
+): MapValidateRowsResult {
+  const { depsByFromId, stagesByTicket, ticketsByEpic } = lookups;
+
+  const epics: ValidateEpicRow[] = epicRows.map((e) => ({
+    id: e.id,
+    title: e.title ?? '',
+    status: e.status ?? 'Not Started',
+    jira_key: e.jira_key,
+    tickets: ticketsByEpic.get(e.id) || [],
+    depends_on: depsByFromId.get(e.id) || [],
+    file_path: e.file_path,
+    ...(options.includeRepo && { repo: e.repo }),
+  }));
+
+  const tickets: ValidateTicketRow[] = ticketRows.map((t) => ({
+    id: t.id,
+    epic_id: t.epic_id ?? '',
+    title: t.title ?? '',
+    status: t.status ?? 'Not Started',
+    jira_key: t.jira_key,
+    source: t.source ?? 'local',
+    stages: stagesByTicket.get(t.id) || [],
+    depends_on: depsByFromId.get(t.id) || [],
+    jira_links: [],  // jira_links are not stored in DB; validation applies to frontmatter-parsed data
+    file_path: t.file_path,
+    ...(options.includeRepo && { repo: t.repo }),
+  }));
+
+  const stages: ValidateStageRow[] = stageRows.map((s) => ({
+    id: s.id,
+    ticket_id: s.ticket_id ?? '',
+    epic_id: s.epic_id ?? '',
+    title: s.title ?? '',
+    status: s.status ?? 'Not Started',
+    refinement_type: s.refinement_type ?? '[]',
+    worktree_branch: s.worktree_branch ?? '',
+    priority: s.priority,
+    due_date: s.due_date,
+    session_active: s.session_active === 1,
+    depends_on: depsByFromId.get(s.id) || [],
+    pending_merge_parents: s.pending_merge_parents ? JSON.parse(s.pending_merge_parents) : [],
+    is_draft: s.is_draft === 1,
+    file_path: s.file_path,
+    ...(options.includeRepo && { repo: s.repo }),
+  }));
+
+  const dependencies: ValidateDependencyRow[] = depRows.map((d) => ({
+    from_id: d.from_id,
+    to_id: d.to_id,
+    resolved: d.resolved === 1,
+  }));
+
+  return { epics, tickets, stages, dependencies };
+}
+
 export const validateCommand = new Command('validate')
   .description('Validate all frontmatter and dependency integrity')
   .option('--repo <path>', 'Path to repository', process.cwd())
@@ -28,6 +139,8 @@ export const validateCommand = new Command('validate')
   .action(async (options) => {
     const db = new KanbanDatabase();
     try {
+      let combined: ValidateOutput & { pipeline_valid: boolean };
+
       if (options.global) {
         // ── Global mode: validate across all registered repos ──
         const registry = createRegistry();
@@ -65,83 +178,18 @@ export const validateCommand = new Command('validate')
           ...sm.getAllStatuses(),
         ]);
 
-        // Build dependency lookup for depends_on arrays (across all repos)
-        const depsByFromId = new Map<string, string[]>();
-        for (const d of aggregated.deps) {
-          const existing = depsByFromId.get(d.from_id) || [];
-          existing.push(d.to_id);
-          depsByFromId.set(d.from_id, existing);
-        }
-
-        // Build stage-to-ticket lookup for ticket.stages
-        const stagesByTicket = new Map<string, string[]>();
-        for (const s of aggregated.stages) {
-          if (s.ticket_id) {
-            const existing = stagesByTicket.get(s.ticket_id) || [];
-            existing.push(s.id);
-            stagesByTicket.set(s.ticket_id, existing);
-          }
-        }
-
-        // Build ticket-to-epic lookup for epic.tickets
-        const ticketsByEpic = new Map<string, string[]>();
-        for (const t of aggregated.tickets) {
-          if (t.epic_id) {
-            const existing = ticketsByEpic.get(t.epic_id) || [];
-            existing.push(t.id);
-            ticketsByEpic.set(t.epic_id, existing);
-          }
-        }
+        // Build lookups
+        const lookups = buildValidateLookups(aggregated.deps, aggregated.stages, aggregated.tickets);
 
         // Map DB rows to validate logic input types (with repo field)
-        const epics: ValidateEpicRow[] = aggregated.epics.map((e) => ({
-          id: e.id,
-          title: e.title ?? '',
-          status: e.status ?? 'Not Started',
-          jira_key: e.jira_key,
-          tickets: ticketsByEpic.get(e.id) || [],
-          depends_on: depsByFromId.get(e.id) || [],
-          file_path: e.file_path,
-          repo: e.repo,
-        }));
-
-        const tickets: ValidateTicketRow[] = aggregated.tickets.map((t) => ({
-          id: t.id,
-          epic_id: t.epic_id ?? '',
-          title: t.title ?? '',
-          status: t.status ?? 'Not Started',
-          jira_key: t.jira_key,
-          source: t.source ?? 'local',
-          stages: stagesByTicket.get(t.id) || [],
-          depends_on: depsByFromId.get(t.id) || [],
-          jira_links: [],  // jira_links are not stored in DB; validation applies to frontmatter-parsed data
-          file_path: t.file_path,
-          repo: t.repo,
-        }));
-
-        const stages: ValidateStageRow[] = aggregated.stages.map((s) => ({
-          id: s.id,
-          ticket_id: s.ticket_id ?? '',
-          epic_id: s.epic_id ?? '',
-          title: s.title ?? '',
-          status: s.status ?? 'Not Started',
-          refinement_type: s.refinement_type ?? '[]',
-          worktree_branch: s.worktree_branch ?? '',
-          priority: s.priority,
-          due_date: s.due_date,
-          session_active: s.session_active === 1,
-          depends_on: depsByFromId.get(s.id) || [],
-          pending_merge_parents: s.pending_merge_parents ? JSON.parse(s.pending_merge_parents) : [],
-          is_draft: s.is_draft === 1,
-          file_path: s.file_path,
-          repo: s.repo,
-        }));
-
-        const dependencies: ValidateDependencyRow[] = aggregated.deps.map((d) => ({
-          from_id: d.from_id,
-          to_id: d.to_id,
-          resolved: d.resolved === 1,
-        }));
+        const { epics, tickets, stages, dependencies } = mapValidateRows(
+          aggregated.epics,
+          aggregated.tickets,
+          aggregated.stages,
+          aggregated.deps,
+          lookups,
+          { includeRepo: true }
+        );
 
         // Run work-item validation
         const workItemResult = validateWorkItems({
@@ -160,12 +208,12 @@ export const validateCommand = new Command('validate')
         const pipelineResult = await validatePipeline(config, { registry: resolverRegistry });
 
         // Combine results
-        const combined: ValidateOutput & { pipeline_valid: boolean } = {
+        combined = {
           valid: workItemResult.valid && pipelineResult.valid,
           errors: [
             ...workItemResult.errors,
             ...pipelineResult.errors.map((e) => ({
-              file: '.kanban-workflow.yaml',
+              file: `(${repoNames[0]}) .kanban-workflow.yaml`,
               field: 'pipeline',
               error: e,
             })),
@@ -173,7 +221,7 @@ export const validateCommand = new Command('validate')
           warnings: [
             ...workItemResult.warnings,
             ...pipelineResult.warnings.map((w) => ({
-              file: '.kanban-workflow.yaml',
+              file: `.kanban-workflow.yaml`,
               field: 'pipeline',
               warning: w,
             })),
@@ -225,80 +273,18 @@ export const validateCommand = new Command('validate')
           ...sm.getAllStatuses(),
         ]);
 
-        // Build dependency lookup for depends_on arrays
-        const depsByFromId = new Map<string, string[]>();
-        for (const d of depRows) {
-          const existing = depsByFromId.get(d.from_id) || [];
-          existing.push(d.to_id);
-          depsByFromId.set(d.from_id, existing);
-        }
-
-        // Build stage-to-ticket lookup for ticket.stages
-        const stagesByTicket = new Map<string, string[]>();
-        for (const s of stageRows) {
-          if (s.ticket_id) {
-            const existing = stagesByTicket.get(s.ticket_id) || [];
-            existing.push(s.id);
-            stagesByTicket.set(s.ticket_id, existing);
-          }
-        }
-
-        // Build ticket-to-epic lookup for epic.tickets
-        const ticketsByEpic = new Map<string, string[]>();
-        for (const t of ticketRows) {
-          if (t.epic_id) {
-            const existing = ticketsByEpic.get(t.epic_id) || [];
-            existing.push(t.id);
-            ticketsByEpic.set(t.epic_id, existing);
-          }
-        }
+        // Build lookups
+        const lookups = buildValidateLookups(depRows, stageRows, ticketRows);
 
         // Map DB rows to validate logic input types
-        const epics: ValidateEpicRow[] = epicRows.map((e) => ({
-          id: e.id,
-          title: e.title ?? '',
-          status: e.status ?? 'Not Started',
-          jira_key: e.jira_key,
-          tickets: ticketsByEpic.get(e.id) || [],
-          depends_on: depsByFromId.get(e.id) || [],
-          file_path: e.file_path,
-        }));
-
-        const tickets: ValidateTicketRow[] = ticketRows.map((t) => ({
-          id: t.id,
-          epic_id: t.epic_id ?? '',
-          title: t.title ?? '',
-          status: t.status ?? 'Not Started',
-          jira_key: t.jira_key,
-          source: t.source ?? 'local',
-          stages: stagesByTicket.get(t.id) || [],
-          depends_on: depsByFromId.get(t.id) || [],
-          jira_links: [],  // jira_links are not stored in DB; validation applies to frontmatter-parsed data
-          file_path: t.file_path,
-        }));
-
-        const stages: ValidateStageRow[] = stageRows.map((s) => ({
-          id: s.id,
-          ticket_id: s.ticket_id ?? '',
-          epic_id: s.epic_id ?? '',
-          title: s.title ?? '',
-          status: s.status ?? 'Not Started',
-          refinement_type: s.refinement_type ?? '[]',
-          worktree_branch: s.worktree_branch ?? '',
-          priority: s.priority,
-          due_date: s.due_date,
-          session_active: s.session_active === 1,
-          depends_on: depsByFromId.get(s.id) || [],
-          pending_merge_parents: s.pending_merge_parents ? JSON.parse(s.pending_merge_parents) : [],
-          is_draft: s.is_draft === 1,
-          file_path: s.file_path,
-        }));
-
-        const dependencies: ValidateDependencyRow[] = depRows.map((d) => ({
-          from_id: d.from_id,
-          to_id: d.to_id,
-          resolved: d.resolved === 1,
-        }));
+        const { epics, tickets, stages, dependencies } = mapValidateRows(
+          epicRows,
+          ticketRows,
+          stageRows,
+          depRows,
+          lookups,
+          { includeRepo: false }
+        );
 
         // Run work-item validation
         const workItemResult = validateWorkItems({
@@ -316,7 +302,7 @@ export const validateCommand = new Command('validate')
         const pipelineResult = await validatePipeline(config, { registry: resolverRegistry });
 
         // Combine results
-        const combined: ValidateOutput & { pipeline_valid: boolean } = {
+        combined = {
           valid: workItemResult.valid && pipelineResult.valid,
           errors: [
             ...workItemResult.errors,
@@ -340,9 +326,10 @@ export const validateCommand = new Command('validate')
         const indent = options.pretty ? 2 : undefined;
         const output = JSON.stringify(combined, null, indent) + '\n';
         writeOutput(output, options.output);
-        db.close();
-        process.exit(combined.valid ? 0 : 1);
       }
+
+      db.close();
+      process.exit(combined.valid ? 0 : 1);
     } catch (err) {
       db.close();
       const message = err instanceof Error ? err.message : String(err);

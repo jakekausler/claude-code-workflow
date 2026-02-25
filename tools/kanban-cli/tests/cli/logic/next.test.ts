@@ -298,7 +298,7 @@ describe('buildNext', () => {
       expect(result.ready_stages.some((s) => s.id === 'S2')).toBe(true);
     });
 
-    it('--global output includes repos array', () => {
+    it('stages with repo field preserve repo in output', () => {
       const result = buildNext({
         config: testConfig,
         stages: [

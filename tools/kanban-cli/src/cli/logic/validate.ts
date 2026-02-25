@@ -458,11 +458,15 @@ export function validateWorkItems(input: ValidateInput): ValidateOutput {
   // --- Check for circular dependencies ---
   const circles = findCircularDeps(dependencies);
   for (const cycle of circles) {
-    errors.push({
+    const err: ValidationError = {
       file: '',
       field: 'depends_on',
       error: `Circular dependency detected: ${cycle.join(' → ')} → ${cycle[0]}`,
-    });
+    };
+    if (global) {
+      err.repo = 'cross-repo';
+    }
+    errors.push(err);
   }
 
   return {

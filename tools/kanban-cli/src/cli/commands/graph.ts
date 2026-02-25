@@ -15,6 +15,57 @@ import { writeOutput } from '../utils/output.js';
 import { createMultiRepoHelper } from '../../repos/multi-repo.js';
 import { createRegistry } from '../../repos/registry.js';
 
+interface MapGraphRowsResult {
+  epics: GraphEpicRow[];
+  tickets: GraphTicketRow[];
+  stages: GraphStageRow[];
+  dependencies: GraphDependencyRow[];
+}
+
+function mapGraphRows(
+  epicRows: Array<any>,
+  ticketRows: Array<any>,
+  stageRows: Array<any>,
+  depRows: Array<any>,
+  options: { includeRepo: boolean }
+): MapGraphRowsResult {
+  const epics: GraphEpicRow[] = epicRows.map((e) => ({
+    id: e.id,
+    title: e.title ?? '',
+    status: e.status ?? 'Not Started',
+    ...(options.includeRepo && { repo: e.repo }),
+  }));
+
+  const tickets: GraphTicketRow[] = ticketRows.map((t) => ({
+    id: t.id,
+    epic_id: t.epic_id ?? '',
+    title: t.title ?? '',
+    status: t.status ?? 'Not Started',
+    ...(options.includeRepo && { repo: t.repo }),
+  }));
+
+  const stages: GraphStageRow[] = stageRows.map((s) => ({
+    id: s.id,
+    ticket_id: s.ticket_id ?? '',
+    epic_id: s.epic_id ?? '',
+    title: s.title ?? '',
+    status: s.status ?? 'Not Started',
+    ...(options.includeRepo && { repo: s.repo }),
+  }));
+
+  const dependencies: GraphDependencyRow[] = depRows.map((d) => ({
+    id: d.id,
+    from_id: d.from_id,
+    to_id: d.to_id,
+    from_type: d.from_type,
+    to_type: d.to_type,
+    resolved: d.resolved === 1,
+    ...(options.includeRepo && { repo: d.repo }),
+  }));
+
+  return { epics, tickets, stages, dependencies };
+}
+
 export const graphCommand = new Command('graph')
   .description('Output dependency graph as JSON')
   .option('--repo <path>', 'Path to repository', process.cwd())
@@ -46,42 +97,15 @@ export const graphCommand = new Command('graph')
         // TODO: Global mode currently uses the first repo's pipeline config for column layout.
         // Repos with different pipeline phases may have stages placed in unexpected columns.
         // Fix: merge workflow.phases from all repos into a superset.
-        const config = loadConfig({ repoPath: repoInfos[0].repoPath });
 
         // Map aggregated rows to GraphEpicRow types with repo field
-        const epics: GraphEpicRow[] = aggregated.epics.map((e) => ({
-          id: e.id,
-          title: e.title ?? '',
-          status: e.status ?? 'Not Started',
-          repo: e.repo,
-        }));
-
-        const tickets: GraphTicketRow[] = aggregated.tickets.map((t) => ({
-          id: t.id,
-          epic_id: t.epic_id ?? '',
-          title: t.title ?? '',
-          status: t.status ?? 'Not Started',
-          repo: t.repo,
-        }));
-
-        const stages: GraphStageRow[] = aggregated.stages.map((s) => ({
-          id: s.id,
-          ticket_id: s.ticket_id ?? '',
-          epic_id: s.epic_id ?? '',
-          title: s.title ?? '',
-          status: s.status ?? 'Not Started',
-          repo: s.repo,
-        }));
-
-        const dependencies: GraphDependencyRow[] = aggregated.deps.map((d) => ({
-          id: d.id,
-          from_id: d.from_id,
-          to_id: d.to_id,
-          from_type: d.from_type,
-          to_type: d.to_type,
-          resolved: d.resolved === 1,
-          repo: d.repo,
-        }));
+        const { epics, tickets, stages, dependencies } = mapGraphRows(
+          aggregated.epics,
+          aggregated.tickets,
+          aggregated.stages,
+          aggregated.deps,
+          { includeRepo: true }
+        );
 
         const result = buildGraph({
           epics,
@@ -129,35 +153,7 @@ export const graphCommand = new Command('graph')
         const depRows = new DependencyRepository(db).listByRepo(repoId);
 
         // Map DB rows to logic input types
-        const epics: GraphEpicRow[] = epicRows.map((e) => ({
-          id: e.id,
-          title: e.title ?? '',
-          status: e.status ?? 'Not Started',
-        }));
-
-        const tickets: GraphTicketRow[] = ticketRows.map((t) => ({
-          id: t.id,
-          epic_id: t.epic_id ?? '',
-          title: t.title ?? '',
-          status: t.status ?? 'Not Started',
-        }));
-
-        const stages: GraphStageRow[] = stageRows.map((s) => ({
-          id: s.id,
-          ticket_id: s.ticket_id ?? '',
-          epic_id: s.epic_id ?? '',
-          title: s.title ?? '',
-          status: s.status ?? 'Not Started',
-        }));
-
-        const dependencies: GraphDependencyRow[] = depRows.map((d) => ({
-          id: d.id,
-          from_id: d.from_id,
-          to_id: d.to_id,
-          from_type: d.from_type,
-          to_type: d.to_type,
-          resolved: d.resolved === 1,
-        }));
+        const { epics, tickets, stages, dependencies } = mapGraphRows(epicRows, ticketRows, stageRows, depRows, { includeRepo: false });
 
         const result = buildGraph({
           epics,
