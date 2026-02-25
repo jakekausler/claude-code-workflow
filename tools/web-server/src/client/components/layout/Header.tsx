@@ -7,6 +7,7 @@ import { ChevronRight } from 'lucide-react';
  * contextual titles via page headers.
  */
 const SEGMENT_LABELS: Record<string, string> = {
+  board: 'Board',
   epics: 'Epics',
   tickets: 'Tickets',
   stages: 'Stages',

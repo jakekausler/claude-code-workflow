@@ -3,7 +3,7 @@ import { LayoutDashboard, Layers, GitBranch } from 'lucide-react';
 
 const navItems = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard },
-  { to: '/epics', label: 'Epics', icon: Layers },
+  { to: '/board', label: 'Board', icon: Layers },
   { to: '/graph', label: 'Dependency Graph', icon: GitBranch },
 ];
 

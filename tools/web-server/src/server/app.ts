@@ -12,6 +12,7 @@ import { ticketRoutes } from './routes/tickets.js';
 import { stageRoutes } from './routes/stages.js';
 import { graphRoutes } from './routes/graph.js';
 import { sessionRoutes } from './routes/sessions.js';
+import { repoRoutes } from './routes/repos.js';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -77,6 +78,7 @@ export async function createServer(
   await app.register(stageRoutes);
   await app.register(graphRoutes);
   await app.register(sessionRoutes);
+  await app.register(repoRoutes);
 
   // --- Static serving / dev proxy ---
   if (!isDev) {

@@ -12,7 +12,7 @@ import { defaultPipelineConfig } from '../../../../kanban-cli/dist/config/defaul
 import type { DataService } from '../services/data-service.js';
 
 /** Allowed query-string keys for /api/board. */
-const ALLOWED_BOARD_PARAMS = new Set(['epic', 'ticket', 'column', 'excludeDone']);
+const ALLOWED_BOARD_PARAMS = new Set(['epic', 'ticket', 'column', 'excludeDone', 'repo']);
 
 /** Zod schema for /api/board query parameters. */
 const boardQuerySchema = z.object({
@@ -23,6 +23,7 @@ const boardQuerySchema = z.object({
     .enum(['true', 'false', '1', '0'])
     .optional()
     .transform((v) => v === 'true' || v === '1'),
+  repo: z.string().optional(),
 });
 
 /**
@@ -130,10 +131,18 @@ interface BoardData {
  * Fetch and map the common board data from the first repo.
  * Returns `null` when no repos exist.
  */
-function fetchBoardData(dataService: DataService): BoardData | null {
+function fetchBoardData(dataService: DataService, repoFilter?: string): BoardData | null {
   const repos = dataService.repos.findAll();
   if (repos.length === 0) return null;
-  const repo = repos[0];
+
+  let repo;
+  if (repoFilter) {
+    // Find by name first, then try by ID
+    repo = repos.find((r) => r.name === repoFilter) ?? repos.find((r) => String(r.id) === repoFilter);
+    if (!repo) return null;
+  } else {
+    repo = repos[0];
+  }
 
   return {
     repoPath: repo.path,
@@ -163,9 +172,9 @@ const boardPlugin: FastifyPluginCallback = (app, _opts, done) => {
       return reply.status(400).send({ error: 'Invalid parameters', details: result.error.issues });
     }
 
-    const { epic, ticket, column, excludeDone } = result.data;
+    const { epic, ticket, column, excludeDone, repo } = result.data;
 
-    const data = fetchBoardData(app.dataService);
+    const data = fetchBoardData(app.dataService, repo);
     if (!data) {
       return reply.send({
         generated_at: new Date().toISOString(),

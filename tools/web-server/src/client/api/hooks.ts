@@ -195,6 +195,13 @@ export interface SessionListItem {
   fileSize: number;
 }
 
+// Repos
+export interface RepoListItem {
+  id: number;
+  name: string;
+  path: string;
+}
+
 // ---------------------------------------------------------------------------
 // Utility
 // ---------------------------------------------------------------------------
@@ -229,6 +236,7 @@ export function useBoard(filters?: {
   ticket?: string;
   column?: string;
   excludeDone?: boolean;
+  repo?: string;
 }) {
   return useQuery({
     queryKey: ['board', filters],
@@ -328,5 +336,14 @@ export function useSessions(projectId: string) {
         `/sessions/${encodeURIComponent(projectId)}`,
       ),
     enabled: !!projectId,
+  });
+}
+
+// Repos -------------------------------------------------------------------
+
+export function useRepos() {
+  return useQuery({
+    queryKey: ['repos'],
+    queryFn: () => apiFetch<RepoListItem[]>('/repos'),
   });
 }

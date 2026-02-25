@@ -92,7 +92,7 @@ export function Dashboard() {
 
       {/* Quick Links */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <QuickLink to="/epics" icon={Layers} label="Epic Board" description="View all epics and their progress" />
+        <QuickLink to="/board" icon={Layers} label="Board" description="View all stages in kanban columns" />
         <QuickLink to="/graph" icon={GitBranch} label="Dependency Graph" description="Visualize dependencies across stages" />
       </div>
     </div>
