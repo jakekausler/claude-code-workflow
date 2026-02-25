@@ -14,6 +14,12 @@ export const CONFIG_PATHS = {
     'config.yaml'
   ),
   repoConfigName: '.kanban-workflow.yaml',
+  reposConfig: path.join(
+    os.homedir(),
+    '.config',
+    'kanban-workflow',
+    'repos.yaml'
+  ),
 } as const;
 
 export interface LoadConfigOptions {
