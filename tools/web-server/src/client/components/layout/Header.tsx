@@ -1,19 +1,32 @@
 import { useLocation, Link } from 'react-router-dom';
 import { ChevronRight } from 'lucide-react';
 
-/** Build breadcrumb segments from the current path. */
+/**
+ * Known route segment labels. Dynamic segments (IDs) are left as-is since
+ * we don't have API data in the header. The board pages provide their own
+ * contextual titles via page headers.
+ */
+const SEGMENT_LABELS: Record<string, string> = {
+  epics: 'Epics',
+  tickets: 'Tickets',
+  stages: 'Stages',
+  sessions: 'Sessions',
+  graph: 'Dependency Graph',
+};
+
 function buildBreadcrumbs(pathname: string): { label: string; to: string }[] {
   if (pathname === '/') return [{ label: 'Dashboard', to: '/' }];
 
   const segments = pathname.split('/').filter(Boolean);
   const crumbs: { label: string; to: string }[] = [
-    { label: 'Home', to: '/' },
+    { label: 'Dashboard', to: '/' },
   ];
 
   let path = '';
   for (const segment of segments) {
     path += `/${segment}`;
-    crumbs.push({ label: segment, to: path });
+    const label = SEGMENT_LABELS[segment] ?? segment;
+    crumbs.push({ label, to: path });
   }
   return crumbs;
 }
