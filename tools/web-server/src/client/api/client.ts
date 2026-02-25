@@ -4,9 +4,10 @@ export async function apiFetch<T>(
   path: string,
   init?: RequestInit,
 ): Promise<T> {
+  const { headers: customHeaders, ...restInit } = init ?? {};
   const response = await fetch(`${API_BASE}${path}`, {
-    headers: { 'Content-Type': 'application/json', ...init?.headers },
-    ...init,
+    ...restInit,
+    headers: { 'Content-Type': 'application/json', ...customHeaders },
   });
 
   if (!response.ok) {
