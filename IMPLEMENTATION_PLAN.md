@@ -50,7 +50,7 @@ Task 8-14 (Documentation + handoff) ──depends-on──▶ 8-13
 
 **Success Criteria**: `npm run verify` passes
 
-**Status**: Not Started
+**Status**: Complete
 
 ---
 
@@ -87,7 +87,7 @@ Task 8-14 (Documentation + handoff) ──depends-on──▶ 8-13
 
 **Success Criteria**: `npm run verify` passes
 
-**Status**: Not Started
+**Status**: Complete
 
 ---
 
@@ -113,7 +113,7 @@ Task 8-14 (Documentation + handoff) ──depends-on──▶ 8-13
 
 **Success Criteria**: `npm run verify` passes
 
-**Status**: Not Started
+**Status**: Complete
 
 ---
 
@@ -137,7 +137,7 @@ Task 8-14 (Documentation + handoff) ──depends-on──▶ 8-13
 
 **Success Criteria**: `npm run verify` passes, existing tests still pass
 
-**Status**: Not Started
+**Status**: Complete
 
 ---
 
@@ -163,7 +163,7 @@ Task 8-14 (Documentation + handoff) ──depends-on──▶ 8-13
 
 **Success Criteria**: `npm run verify` passes
 
-**Status**: Not Started
+**Status**: Complete
 
 ---
 
@@ -204,7 +204,7 @@ Task 8-14 (Documentation + handoff) ──depends-on──▶ 8-13
 
 **Success Criteria**: `npm run verify` passes
 
-**Status**: Not Started
+**Status**: Complete
 
 ---
 
@@ -235,7 +235,7 @@ Task 8-14 (Documentation + handoff) ──depends-on──▶ 8-13
 
 **Success Criteria**: `npm run verify` passes, all existing sync tests still pass
 
-**Status**: Not Started
+**Status**: Complete
 
 ---
 
@@ -264,7 +264,7 @@ Task 8-14 (Documentation + handoff) ──depends-on──▶ 8-13
 
 **Success Criteria**: `npm run verify` passes
 
-**Status**: Not Started
+**Status**: Complete
 
 ---
 
@@ -293,7 +293,7 @@ Task 8-14 (Documentation + handoff) ──depends-on──▶ 8-13
 
 **Success Criteria**: `npm run verify` passes
 
-**Status**: Not Started
+**Status**: Complete
 
 ---
 
@@ -322,7 +322,7 @@ Task 8-14 (Documentation + handoff) ──depends-on──▶ 8-13
 
 **Success Criteria**: `npm run verify` passes
 
-**Status**: Not Started
+**Status**: Complete
 
 ---
 
@@ -356,7 +356,7 @@ Task 8-14 (Documentation + handoff) ──depends-on──▶ 8-13
 
 **Success Criteria**: `npm run verify` passes
 
-**Status**: Not Started
+**Status**: Complete
 
 ---
 
@@ -384,7 +384,7 @@ Task 8-14 (Documentation + handoff) ──depends-on──▶ 8-13
 
 **Success Criteria**: `npm run verify` passes (in both mcp-server and kanban-cli)
 
-**Status**: Not Started
+**Status**: Complete
 
 ---
 
@@ -414,7 +414,7 @@ Task 8-14 (Documentation + handoff) ──depends-on──▶ 8-13
 
 **Success Criteria**: `npm run verify` passes
 
-**Status**: Not Started
+**Status**: Complete
 
 ---
 
@@ -433,4 +433,4 @@ Task 8-14 (Documentation + handoff) ──depends-on──▶ 8-13
 
 **Success Criteria**: Docs accurately reflect what shipped
 
-**Status**: Not Started
+**Status**: Complete
