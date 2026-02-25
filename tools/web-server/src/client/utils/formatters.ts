@@ -32,6 +32,9 @@ const COLUMN_COLORS: Record<string, string> = {
   pr_created: '#6366f1',
   addressing_comments: '#ec4899',
   done: '#22c55e',
+  refinement: '#f97316',
+  review: '#0ea5e9',
+  archived: '#6b7280',
 };
 
 export function columnColor(slug: string): string {

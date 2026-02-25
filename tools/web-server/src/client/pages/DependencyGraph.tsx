@@ -79,6 +79,8 @@ export function DependencyGraph() {
           ))}
         </select>
 
+        {/* TODO: Add ticket filter dropdown when API supports ?ticket= param */}
+
         <label className="flex items-center gap-1.5 text-sm text-slate-400">
           <input
             type="checkbox"

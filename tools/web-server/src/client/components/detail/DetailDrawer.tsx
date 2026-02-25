@@ -1,4 +1,4 @@
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useRef } from 'react';
 import { X, ArrowLeft } from 'lucide-react';
 import { useDrawerStore } from '../../store/drawer-store.js';
 
@@ -11,6 +11,7 @@ interface DetailDrawerProps {
 export function DetailDrawer({ title, subtitle, children }: DetailDrawerProps) {
   const { stack, back, closeAll } = useDrawerStore();
   const canGoBack = stack.length > 1;
+  const closeRef = useRef<HTMLButtonElement>(null);
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
@@ -24,6 +25,10 @@ export function DetailDrawer({ title, subtitle, children }: DetailDrawerProps) {
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [handleKeyDown]);
 
+  useEffect(() => {
+    closeRef.current?.focus();
+  }, []);
+
   return (
     <>
       {/* Backdrop */}
@@ -33,7 +38,12 @@ export function DetailDrawer({ title, subtitle, children }: DetailDrawerProps) {
         aria-hidden="true"
       />
       {/* Panel */}
-      <div className="fixed inset-y-0 right-0 z-50 flex w-full max-w-2xl flex-col border-l border-slate-200 bg-white shadow-xl">
+      <div
+        className="fixed inset-y-0 right-0 z-50 flex w-full max-w-2xl flex-col border-l border-slate-200 bg-white shadow-xl"
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+      >
         {/* Header */}
         <div className="flex items-center gap-3 border-b border-slate-200 px-4 py-3">
           {canGoBack && (
@@ -54,6 +64,7 @@ export function DetailDrawer({ title, subtitle, children }: DetailDrawerProps) {
             )}
           </div>
           <button
+            ref={closeRef}
             onClick={closeAll}
             className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
             aria-label="Close drawer"

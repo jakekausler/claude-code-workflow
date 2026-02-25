@@ -102,6 +102,8 @@ export function EpicDetailContent({ epicId }: EpicDetailContentProps) {
         )}
       </div>
 
+      {/* TODO: Add dependencies section when /api/epics/:id returns depends_on data */}
+
       {/* Markdown content placeholder */}
       <div>
         <h3 className="mb-2 text-sm font-semibold text-slate-700">Content</h3>
