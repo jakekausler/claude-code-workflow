@@ -1,6 +1,7 @@
 import { useLocation, Link } from 'react-router-dom';
 import { ChevronRight } from 'lucide-react';
 
+/** Build breadcrumb segments from the current path. */
 function buildBreadcrumbs(pathname: string): { label: string; to: string }[] {
   if (pathname === '/') return [{ label: 'Dashboard', to: '/' }];
 
@@ -23,7 +24,7 @@ export function Header() {
 
   return (
     <header className="border-b border-slate-200 bg-white px-6 py-3">
-      <nav className="flex items-center gap-1 text-sm text-slate-600">
+      <nav aria-label="Breadcrumb" className="flex items-center gap-1 text-sm text-slate-600">
         {crumbs.map((crumb, i) => (
           <span key={crumb.to} className="flex items-center gap-1">
             {i > 0 && <ChevronRight size={14} className="text-slate-400" />}
