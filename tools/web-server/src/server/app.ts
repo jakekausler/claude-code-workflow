@@ -4,16 +4,19 @@ import fastifyStatic from '@fastify/static';
 import { existsSync, readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import os from 'os';
 import type { DataService } from './services/data-service.js';
 import { boardRoutes } from './routes/board.js';
 import { epicRoutes } from './routes/epics.js';
 import { ticketRoutes } from './routes/tickets.js';
 import { stageRoutes } from './routes/stages.js';
 import { graphRoutes } from './routes/graph.js';
+import { sessionRoutes } from './routes/sessions.js';
 
 declare module 'fastify' {
   interface FastifyInstance {
     dataService: DataService | null;
+    claudeProjectsDir: string;
   }
 }
 
@@ -25,6 +28,7 @@ export interface ServerOptions {
   vitePort?: number;
   isDev?: boolean;
   dataService?: DataService;
+  claudeProjectsDir?: string;
 }
 
 export async function createServer(
@@ -56,6 +60,11 @@ export async function createServer(
   const dataService = options.dataService ?? null;
   app.decorate('dataService', dataService);
 
+  // Claude projects directory — used by session routes to find .jsonl files
+  const claudeProjectsDir =
+    options.claudeProjectsDir ?? join(os.homedir(), '.claude', 'projects');
+  app.decorate('claudeProjectsDir', claudeProjectsDir);
+
   // --- API routes ---
   app.get('/api/health', async () => ({
     status: 'ok',
@@ -67,6 +76,7 @@ export async function createServer(
   await app.register(ticketRoutes);
   await app.register(stageRoutes);
   await app.register(graphRoutes);
+  await app.register(sessionRoutes);
 
   // --- Static serving / dev proxy ---
   if (!isDev) {
