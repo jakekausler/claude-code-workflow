@@ -11,13 +11,17 @@ const __dirname = dirname(__filename);
 export interface ServerOptions {
   logger?: boolean;
   vitePort?: number;
+  isDev?: boolean;
 }
 
 export async function createServer(
   options: ServerOptions = {},
 ): Promise<FastifyInstance> {
-  const { logger = true, vitePort = 3101 } = options;
-  const isDev = process.env.NODE_ENV !== 'production';
+  const {
+    logger = true,
+    vitePort = 3101,
+    isDev = process.env.NODE_ENV !== 'production',
+  } = options;
 
   const app = Fastify({ logger });
 
@@ -47,8 +51,9 @@ export async function createServer(
     const clientDir = join(__dirname, '../client');
     let indexHtml: string | null = null;
 
-    if (existsSync(clientDir)) {
-      indexHtml = readFileSync(join(clientDir, 'index.html'), 'utf-8');
+    const indexPath = join(clientDir, 'index.html');
+    if (existsSync(clientDir) && existsSync(indexPath)) {
+      indexHtml = readFileSync(indexPath, 'utf-8');
 
       await app.register(fastifyStatic, {
         root: clientDir,
@@ -76,6 +81,7 @@ export async function createServer(
       try {
         const viteUrl = `http://localhost:${vitePort}${request.url}`;
         const response = await fetch(viteUrl, {
+          method: request.method,
           headers: { host: `localhost:${vitePort}` },
         });
 

@@ -7,13 +7,12 @@ const app = await createServer();
 
 await app.listen({ port, host });
 
-console.log(`Server running at http://${host}:${port}`);
-
 // Graceful shutdown
 function shutdown(): void {
-  app.close().then(() => {
-    process.exit(0);
-  });
+  app.close().then(
+    () => process.exit(0),
+    () => process.exit(1),
+  );
 }
 
 process.on('SIGTERM', shutdown);
