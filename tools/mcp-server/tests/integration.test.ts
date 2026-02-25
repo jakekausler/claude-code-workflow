@@ -25,6 +25,7 @@ import {
 } from '../src/tools/mock-admin.js';
 import { handleConfluenceGetPage, type ConfluenceToolDeps } from '../src/tools/confluence.js';
 import { handleEnrichTicket, type EnrichToolDeps } from '../src/tools/enrich.js';
+import { handleSlackNotify, type SlackToolDeps } from '../src/tools/slack.js';
 import seedData from '../fixtures/mock-data.json';
 import { parseResult } from './helpers.js';
 
@@ -40,6 +41,7 @@ describe('Integration: cross-tool stateful workflows', () => {
   let mockAdminDeps: MockAdminDeps;
   let confluenceDeps: ConfluenceToolDeps;
   let enrichDeps: EnrichToolDeps;
+  let slackDeps: SlackToolDeps;
   let savedEnv: string | undefined;
 
   beforeEach(() => {
@@ -51,6 +53,7 @@ describe('Integration: cross-tool stateful workflows', () => {
     mockAdminDeps = { mockState: state };
     confluenceDeps = { mockState: state };
     enrichDeps = { mockState: state };
+    slackDeps = { mockState: state };
   });
 
   afterEach(() => {
@@ -269,6 +272,30 @@ describe('Integration: cross-tool stateful workflows', () => {
       expect(data.ticketId).toBe('/path/to/ticket.md');
       expect(data.freshJiraData).toBe(false);
       expect(data.linkResults).toEqual([]);
+    });
+  });
+
+  describe('Slack notification flow', () => {
+    it('stores a notification in mock state and can be retrieved', async () => {
+      const result = await handleSlackNotify(
+        {
+          title: 'Integration Test',
+          message: 'This is a test notification',
+          stage: 'STAGE-001',
+        },
+        slackDeps,
+      );
+      expect(result.isError).toBeUndefined();
+      const data = parseResult(result);
+      expect(data).toContain('mock mode');
+
+      const notifications = state.getNotifications();
+      expect(notifications).toHaveLength(1);
+      const n = notifications[0];
+      expect(n.title).toBe('Integration Test');
+      expect(n.message).toBe('This is a test notification');
+      expect(n.stage).toBe('STAGE-001');
+      expect(n.timestamp).toBeDefined();
     });
   });
 

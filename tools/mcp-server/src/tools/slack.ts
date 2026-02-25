@@ -1,26 +1,32 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { isMockMode, successResult } from '../types.js';
+import { isMockMode, successResult, errorResult } from '../types.js';
 import type { ToolResult } from '../types.js';
 import type { MockState } from '../state.js';
+
+const slackNotifyArgsSchema = z.object({
+  message: z.string(),
+  webhook_url: z
+    .string()
+    .optional()
+    .describe('Override the global webhook URL. Use for per-repo Slack channel routing.'),
+  stage: z.string().optional(),
+  title: z.string().optional(),
+  ticket: z.string().optional(),
+  ticket_title: z.string().optional(),
+  epic: z.string().optional(),
+  epic_title: z.string().optional(),
+  url: z.string().url().optional(),
+});
+
+export type SlackNotifyArgs = z.infer<typeof slackNotifyArgsSchema>;
 
 export interface SlackToolDeps {
   mockState: MockState | null;
   webhookUrl?: string;
   fetch?: typeof globalThis.fetch;
+  now?: () => Date;
 }
-
-export type SlackNotifyArgs = {
-  message: string;
-  webhook_url?: string;
-  stage?: string;
-  title?: string;
-  ticket?: string;
-  ticket_title?: string;
-  epic?: string;
-  epic_title?: string;
-  url?: string;
-};
 
 // --- Exported handler functions (testable without MCP server) ---
 
@@ -28,6 +34,12 @@ export async function handleSlackNotify(
   args: SlackNotifyArgs,
   deps: SlackToolDeps,
 ): Promise<ToolResult> {
+  // Validate args
+  const parsed = slackNotifyArgsSchema.safeParse(args);
+  if (!parsed.success) {
+    return errorResult(parsed.error.issues.map((i) => i.message).join('; '));
+  }
+
   // Mock mode: store in MockState.
   // When KANBAN_MOCK=true, the server always provides mockState. If mockState is null here,
   // it means mock mode is active but no state object was wired up — return early with a
@@ -37,7 +49,7 @@ export async function handleSlackNotify(
     if (deps.mockState) {
       deps.mockState.addNotification({
         ...args,
-        timestamp: new Date().toISOString(),
+        timestamp: (deps.now ?? (() => new Date()))().toISOString(),
       });
       return successResult('Notification stored (mock mode)');
     }
@@ -48,6 +60,10 @@ export async function handleSlackNotify(
   const resolvedWebhookUrl = args.webhook_url || deps.webhookUrl;
   if (!resolvedWebhookUrl) {
     return successResult('Slack notification skipped: no webhook URL configured');
+  }
+
+  if (!resolvedWebhookUrl.startsWith('https://')) {
+    return errorResult('Webhook URL must use https://');
   }
 
   // Build mrkdwn body — only include fields that are provided
@@ -87,6 +103,7 @@ export async function handleSlackNotify(
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(10_000),
     });
 
     if (response.ok) {
@@ -106,21 +123,8 @@ export async function handleSlackNotify(
 export function registerSlackTools(server: McpServer, deps: SlackToolDeps): void {
   server.tool(
     'slack_notify',
-    'Send a notification to a Slack channel',
-    {
-      message: z.string(),
-      webhook_url: z
-        .string()
-        .optional()
-        .describe('Override the global webhook URL. Use for per-repo Slack channel routing.'),
-      stage: z.string().optional(),
-      title: z.string().optional(),
-      ticket: z.string().optional(),
-      ticket_title: z.string().optional(),
-      epic: z.string().optional(),
-      epic_title: z.string().optional(),
-      url: z.string().optional(),
-    },
+    'Send a notification via Slack webhook',
+    slackNotifyArgsSchema.shape,
     (args) => handleSlackNotify(args, deps),
   );
 }
