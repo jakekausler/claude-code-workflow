@@ -12,6 +12,7 @@ export interface TicketBoardItem {
   title: string;
   jira_key: string | null;
   source: string;
+  repo?: string;
 }
 
 export interface StageBoardItem {
@@ -25,6 +26,7 @@ export interface StageBoardItem {
   session_active?: boolean;
   worktree_branch?: string;
   pending_merge_parents?: PendingMergeParent[];
+  repo?: string;
 }
 
 export type BoardItem = TicketBoardItem | StageBoardItem;
@@ -32,6 +34,7 @@ export type BoardItem = TicketBoardItem | StageBoardItem;
 export interface BoardOutput {
   generated_at: string;
   repo: string;
+  repos?: string[];
   columns: Record<string, BoardItem[]>;
   stats: {
     total_stages: number;
@@ -51,6 +54,7 @@ export interface BoardTicketRow {
   source: string;
   has_stages: boolean;
   file_path: string;
+  repo?: string;
 }
 
 export interface BoardStageRow {
@@ -67,6 +71,7 @@ export interface BoardStageRow {
   session_active: boolean;
   pending_merge_parents?: string;
   file_path: string;
+  repo?: string;
 }
 
 export interface BoardEpicRow {
@@ -100,6 +105,8 @@ export interface BuildBoardInput {
   stages: BoardStageRow[];
   dependencies: BoardDependencyRow[];
   filters?: BoardFilters;
+  global?: boolean;
+  repos?: string[];
 }
 
 // ---------- Helpers ----------
@@ -112,7 +119,7 @@ export { toColumnKey };
 const SYSTEM_COLUMNS = ['to_convert', 'backlog', 'ready_for_work', 'done'] as const;
 
 export function buildBoard(input: BuildBoardInput): BoardOutput {
-  const { config, repoPath, tickets, stages, dependencies, filters } = input;
+  const { config, repoPath, tickets, stages, dependencies, filters, global: isGlobal, repos } = input;
 
   // Build column list from pipeline config
   const sm = StateMachine.fromConfig(config);
@@ -149,14 +156,18 @@ export function buildBoard(input: BuildBoardInput): BoardOutput {
   const shouldIncludeToConvert = !filters?.column || filters.column === 'to_convert';
   if (shouldIncludeToConvert) {
     for (const ticket of filteredTickets) {
-      columns.to_convert.push({
+      const ticketItem: TicketBoardItem = {
         type: 'ticket',
         id: ticket.id,
         epic: ticket.epic_id,
         title: ticket.title,
         jira_key: ticket.jira_key,
         source: ticket.source,
-      });
+      };
+      if (isGlobal && ticket.repo) {
+        ticketItem.repo = ticket.repo;
+      }
+      columns.to_convert.push(ticketItem);
     }
   }
 
@@ -187,6 +198,10 @@ export function buildBoard(input: BuildBoardInput): BoardOutput {
       epic: stage.epic_id,
       title: stage.title,
     };
+
+    if (isGlobal && stage.repo) {
+      item.repo = stage.repo;
+    }
 
     if (colKey === 'backlog' && blockedBy && blockedBy.length > 0) {
       item.blocked_by = blockedBy;
@@ -226,7 +241,7 @@ export function buildBoard(input: BuildBoardInput): BoardOutput {
     }
   }
 
-  return {
+  const output: BoardOutput = {
     generated_at: new Date().toISOString(),
     repo: repoPath,
     columns,
@@ -236,4 +251,10 @@ export function buildBoard(input: BuildBoardInput): BoardOutput {
       by_column: byColumn,
     },
   };
+
+  if (isGlobal && repos) {
+    output.repos = repos;
+  }
+
+  return output;
 }
