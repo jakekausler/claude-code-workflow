@@ -41,6 +41,7 @@ export interface MockPage {
 
 export interface SlackNotification {
   message: string;
+  webhook_url?: string;
   stage?: string;
   title?: string;
   ticket?: string;

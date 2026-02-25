@@ -12,6 +12,7 @@ export interface SlackToolDeps {
 
 export type SlackNotifyArgs = {
   message: string;
+  webhook_url?: string;
   stage?: string;
   title?: string;
   ticket?: string;
@@ -43,8 +44,9 @@ export async function handleSlackNotify(
     return successResult('Slack notification skipped: mock mode but no state available');
   }
 
-  // Real mode: check for webhook URL
-  if (!deps.webhookUrl) {
+  // Real mode: resolve webhook URL (per-repo override > global default)
+  const resolvedWebhookUrl = args.webhook_url || deps.webhookUrl;
+  if (!resolvedWebhookUrl) {
     return successResult('Slack notification skipped: no webhook URL configured');
   }
 
@@ -81,7 +83,7 @@ export async function handleSlackNotify(
   // POST to webhook
   const fetchFn = deps.fetch ?? globalThis.fetch;
   try {
-    const response = await fetchFn(deps.webhookUrl, {
+    const response = await fetchFn(resolvedWebhookUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -107,6 +109,10 @@ export function registerSlackTools(server: McpServer, deps: SlackToolDeps): void
     'Send a notification to a Slack channel',
     {
       message: z.string(),
+      webhook_url: z
+        .string()
+        .optional()
+        .describe('Override the global webhook URL. Use for per-repo Slack channel routing.'),
       stage: z.string().optional(),
       title: z.string().optional(),
       ticket: z.string().optional(),
