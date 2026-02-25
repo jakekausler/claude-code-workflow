@@ -4,13 +4,11 @@ import { AlertTriangle, Activity, Layers, GitBranch } from 'lucide-react';
 import { slugToTitle } from '../utils/formatters.js';
 
 export function Dashboard() {
-  const { data: stats, isLoading: statsLoading } = useStats();
-  const { data: board } = useBoard({ column: 'backlog' });
-  const { data: stages } = useStages();
+  const { data: stats, isLoading: statsLoading, error: statsError } = useStats();
+  const { data: board, error: boardError } = useBoard({ column: 'backlog' });
+  const { data: stages, error: stagesError } = useStages();
 
-  const blockedCount = board
-    ? Object.values(board.columns).reduce((sum, items) => sum + items.length, 0)
-    : 0;
+  const blockedCount = board?.columns['backlog']?.length ?? 0;
 
   const recentStages = (stages ?? []).slice(0, 20);
 
@@ -22,6 +20,12 @@ export function Dashboard() {
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold text-slate-900">Dashboard</h1>
+
+      {(statsError || boardError || stagesError) && (
+        <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-2">
+          <span className="text-sm text-red-700">Some data failed to load. Showing available information.</span>
+        </div>
+      )}
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -76,6 +80,7 @@ export function Dashboard() {
               <div key={stage.id} className="flex items-center gap-3 text-xs">
                 <span className="w-32 shrink-0 text-slate-400 truncate">{stage.id}</span>
                 <span className="truncate text-slate-700">{stage.title}</span>
+                <span className="shrink-0 text-slate-400">{stage.ticket_id}</span>
                 <span className="ml-auto shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-slate-500">
                   {slugToTitle(stage.kanban_column)}
                 </span>
