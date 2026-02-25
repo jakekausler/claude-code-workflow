@@ -55,7 +55,7 @@ function renderCard(item: BoardItem, navigate: (path: string) => void) {
 function renderStageCard(stage: BoardStageItem, navigate: (path: string) => void) {
   const badges: { label: string; color: string }[] = [];
   if (stage.blocked_by && stage.blocked_by.length > 0) {
-    badges.push({ label: `${stage.blocked_by.length} blocked`, color: '#ef4444' });
+    badges.push({ label: `Blocked by ${stage.blocked_by.length}`, color: '#ef4444' });
   }
 
   return (
