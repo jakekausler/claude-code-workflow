@@ -126,6 +126,45 @@ describe('Repositories', () => {
       const found = repos.findById(id1);
       expect(found!.name).toBe('new-name');
     });
+
+    it('findAll returns empty array when no repos exist', () => {
+      const repos = new RepoRepository(db);
+      expect(repos.findAll()).toEqual([]);
+    });
+
+    it('findAll returns all registered repos after multiple upserts', () => {
+      const repos = new RepoRepository(db);
+      repos.upsert('/repo/one', 'repo-one');
+      repos.upsert('/repo/two', 'repo-two');
+      repos.upsert('/repo/three', 'repo-three');
+      const all = repos.findAll();
+      expect(all).toHaveLength(3);
+      const names = all.map((r) => r.name).sort();
+      expect(names).toEqual(['repo-one', 'repo-three', 'repo-two']);
+    });
+
+    it('findByName returns null when name not found', () => {
+      const repos = new RepoRepository(db);
+      expect(repos.findByName('nonexistent')).toBeNull();
+    });
+
+    it('findByName returns correct repo when name matches', () => {
+      const repos = new RepoRepository(db);
+      repos.upsert('/my/repo', 'my-repo');
+      repos.upsert('/other/repo', 'other-repo');
+      const found = repos.findByName('my-repo');
+      expect(found).not.toBeNull();
+      expect(found!.name).toBe('my-repo');
+      expect(found!.path).toBe('/my/repo');
+    });
+
+    it('findByName is case-sensitive', () => {
+      const repos = new RepoRepository(db);
+      repos.upsert('/my/repo', 'My-Repo');
+      expect(repos.findByName('My-Repo')).not.toBeNull();
+      expect(repos.findByName('my-repo')).toBeNull();
+      expect(repos.findByName('MY-REPO')).toBeNull();
+    });
   });
 
   // ─── EpicRepository ──────────────────────────────────────────────

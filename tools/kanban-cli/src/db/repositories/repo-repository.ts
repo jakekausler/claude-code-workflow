@@ -57,4 +57,25 @@ export class RepoRepository {
       .get(id) as RepoRecord | undefined;
     return row ?? null;
   }
+
+  /**
+   * Return all registered repos.
+   */
+  findAll(): RepoRecord[] {
+    return this.db
+      .raw()
+      .prepare('SELECT * FROM repos')
+      .all() as RepoRecord[];
+  }
+
+  /**
+   * Find a repo by its name (case-sensitive).
+   */
+  findByName(name: string): RepoRecord | null {
+    const row = this.db
+      .raw()
+      .prepare('SELECT * FROM repos WHERE name = ?')
+      .get(name) as RepoRecord | undefined;
+    return row ?? null;
+  }
 }
