@@ -244,4 +244,89 @@ describe('buildNext', () => {
     expect(result.ready_stages[0].worktree_branch).toBe('my/branch');
     expect(result.ready_stages[0].refinement_type).toEqual(['frontend', 'backend']);
   });
+
+  describe('global mode with repo field', () => {
+    it('--global shows ready stages with repo field', () => {
+      const result = buildNext({
+        config: testConfig,
+        stages: [
+          makeStage({ id: 'S1', status: 'Not Started', kanban_column: 'ready_for_work', repo: 'repo-a' }),
+          makeStage({ id: 'S2', status: 'Design', kanban_column: 'design', repo: 'repo-b' }),
+        ],
+        dependencies: [],
+        tickets: [],
+      });
+      expect(result.ready_stages).toHaveLength(2);
+      // ready_for_work (S1) has higher priority score (300) than design (S2, 200)
+      expect(result.ready_stages[0].id).toBe('S1');
+      expect(result.ready_stages[0].repo).toBe('repo-a');
+      expect(result.ready_stages[1].id).toBe('S2');
+      expect(result.ready_stages[1].repo).toBe('repo-b');
+    });
+
+    it('--global cross-repo blocked stage excluded', () => {
+      const result = buildNext({
+        config: testConfig,
+        stages: [
+          makeStage({ id: 'S1', status: 'Not Started', kanban_column: 'backlog', repo: 'repo-a' }),
+          makeStage({ id: 'S2', status: 'Design', kanban_column: 'design', repo: 'repo-b' }),
+        ],
+        dependencies: [
+          { id: 1, from_id: 'S1', to_id: 'S2', from_type: 'stage', to_type: 'stage', resolved: false },
+        ],
+        tickets: [],
+      });
+      expect(result.ready_stages).toHaveLength(1);
+      expect(result.ready_stages[0].id).toBe('S2');
+      expect(result.blocked_count).toBe(1);
+    });
+
+    it('--global cross-repo resolved dep allows stage to be ready', () => {
+      const result = buildNext({
+        config: testConfig,
+        stages: [
+          makeStage({ id: 'S1', status: 'Design', kanban_column: 'design', repo: 'repo-a' }),
+          makeStage({ id: 'S2', status: 'Build', kanban_column: 'build', repo: 'repo-b' }),
+        ],
+        dependencies: [
+          { id: 1, from_id: 'S1', to_id: 'S2', from_type: 'stage', to_type: 'stage', resolved: true },
+        ],
+        tickets: [],
+      });
+      expect(result.ready_stages).toHaveLength(2);
+      expect(result.ready_stages.some((s) => s.id === 'S1')).toBe(true);
+      expect(result.ready_stages.some((s) => s.id === 'S2')).toBe(true);
+    });
+
+    it('--global output includes repos array', () => {
+      const result = buildNext({
+        config: testConfig,
+        stages: [
+          makeStage({ id: 'S1', status: 'Not Started', kanban_column: 'ready_for_work', repo: 'repo-a' }),
+          makeStage({ id: 'S2', status: 'Design', kanban_column: 'design', repo: 'repo-b' }),
+        ],
+        dependencies: [],
+        tickets: [],
+      });
+      // Note: repos array is added by the command layer, not the logic function
+      // The logic function just passes the repo field through to each stage
+      // ready_for_work (S1) has higher priority score (300) than design (S2, 200)
+      expect(result.ready_stages[0].id).toBe('S1');
+      expect(result.ready_stages[0].repo).toBe('repo-a');
+      expect(result.ready_stages[1].id).toBe('S2');
+      expect(result.ready_stages[1].repo).toBe('repo-b');
+    });
+
+    it('without --global, no repo field in output', () => {
+      const result = buildNext({
+        config: testConfig,
+        stages: [
+          makeStage({ id: 'S1', status: 'Not Started', kanban_column: 'ready_for_work' }),
+        ],
+        dependencies: [],
+        tickets: [],
+      });
+      expect(result.ready_stages[0].repo).toBeUndefined();
+    });
+  });
 });

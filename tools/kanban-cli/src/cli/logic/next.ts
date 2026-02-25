@@ -16,6 +16,7 @@ export interface NextStageRow {
   priority: number;
   due_date: string | null;
   session_active: boolean;
+  repo?: string;
 }
 
 export interface NextDependencyRow {
@@ -45,6 +46,7 @@ export interface ReadyStage {
   priority_score: number;
   priority_reason: string;
   needs_human: boolean;
+  repo?: string;
 }
 
 export interface NextOutput {
@@ -52,6 +54,7 @@ export interface NextOutput {
   blocked_count: number;
   in_progress_count: number;
   to_convert_count: number;
+  repos?: string[];
 }
 
 export interface BuildNextInput {
@@ -207,6 +210,7 @@ export function buildNext(input: BuildNextInput): NextOutput {
       priority_score: priorityScore,
       priority_reason: priorityReason,
       needs_human: needsHuman,
+      ...(stage.repo ? { repo: stage.repo } : {}),
     } satisfies ReadyStage;
   });
 
