@@ -7,6 +7,7 @@ import { fileURLToPath } from 'url';
 import type { DataService } from './services/data-service.js';
 import { boardRoutes } from './routes/board.js';
 import { epicRoutes } from './routes/epics.js';
+import { ticketRoutes } from './routes/tickets.js';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -61,6 +62,7 @@ export async function createServer(
 
   await app.register(boardRoutes);
   await app.register(epicRoutes);
+  await app.register(ticketRoutes);
 
   // --- Static serving / dev proxy ---
   if (!isDev) {
