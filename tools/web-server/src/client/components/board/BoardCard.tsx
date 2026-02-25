@@ -28,6 +28,7 @@ export function BoardCard({
     <div
       role="button"
       tabIndex={0}
+      aria-label={`View ${title}`}
       onClick={onClick}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
@@ -42,6 +43,7 @@ export function BoardCard({
           <div className="flex items-center gap-1.5">
             {statusDot && (
               <span
+                aria-hidden="true"
                 className="inline-block h-2 w-2 shrink-0 rounded-full"
                 style={{ backgroundColor: statusDot }}
               />
@@ -56,9 +58,9 @@ export function BoardCard({
       </div>
       {badges && badges.length > 0 && (
         <div className="mt-2 flex flex-wrap gap-1">
-          {badges.map((badge) => (
+          {badges.map((badge, i) => (
             <span
-              key={badge.label}
+              key={`${badge.label}-${i}`}
               className="inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium"
               style={{ backgroundColor: badge.color + '20', color: badge.color }}
             >
@@ -68,7 +70,13 @@ export function BoardCard({
         </div>
       )}
       {progress !== undefined && (
-        <div className="mt-2 h-1 w-full overflow-hidden rounded-full bg-slate-200">
+        <div
+          role="progressbar"
+          aria-valuenow={Math.round(progress)}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          className="mt-2 h-1 w-full overflow-hidden rounded-full bg-slate-200"
+        >
           <div
             className="h-full rounded-full bg-blue-500 transition-all"
             style={{ width: `${Math.min(100, Math.max(0, progress))}%` }}

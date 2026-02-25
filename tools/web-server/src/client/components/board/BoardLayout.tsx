@@ -12,7 +12,7 @@ interface BoardLayoutProps {
 export function BoardLayout({ children, isLoading, error, emptyMessage, isEmpty }: BoardLayoutProps) {
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-12">
+      <div role="status" className="flex items-center justify-center py-12">
         <Loader2 size={24} className="animate-spin text-slate-400" />
         <span className="ml-2 text-sm text-slate-500">Loading...</span>
       </div>
