@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Layout } from './components/layout/Layout.js';
@@ -11,9 +12,9 @@ import { StageDetail } from './pages/StageDetail.js';
 import { SessionDetail } from './pages/SessionDetail.js';
 import { DependencyGraph } from './pages/DependencyGraph.js';
 
-const queryClient = new QueryClient();
-
 export function App() {
+  const [queryClient] = useState(() => new QueryClient());
+
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>

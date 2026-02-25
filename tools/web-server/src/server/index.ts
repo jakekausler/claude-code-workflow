@@ -11,7 +11,10 @@ await app.listen({ port, host });
 function shutdown(): void {
   app.close().then(
     () => process.exit(0),
-    () => process.exit(1),
+    (err) => {
+      console.error('Error during shutdown:', err);
+      process.exit(1);
+    },
   );
 }
 
