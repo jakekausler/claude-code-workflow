@@ -13,6 +13,7 @@ import {
   parseTicketFrontmatter,
   parseStageFrontmatter,
 } from '../parser/frontmatter.js';
+import { parseDependencyRef } from '../parser/cross-repo-deps.js';
 import { RepoRepository } from '../db/repositories/repo-repository.js';
 import { EpicRepository } from '../db/repositories/epic-repository.js';
 import { TicketRepository } from '../db/repositories/ticket-repository.js';
@@ -144,12 +145,12 @@ export function syncRepo(options: SyncOptions): SyncResult {
   }
 
   /**
-   * Check whether a dependency target is resolved (hard-resolution):
+   * Check whether a local dependency target is resolved (hard-resolution):
    * - Stage: resolved when its status is Complete
    * - Ticket: resolved when ALL stages in that ticket are Complete
    * - Epic: resolved when ALL stages across ALL tickets in that epic are Complete
    */
-  function isDependencyResolved(targetId: string): boolean {
+  function isLocalDependencyResolved(targetId: string): boolean {
     const targetType = getEntityType(targetId);
 
     if (targetType === 'stage') {
@@ -176,14 +177,72 @@ export function syncRepo(options: SyncOptions): SyncResult {
   }
 
   /**
+   * Check whether a cross-repo dependency target is resolved (hard-resolution).
+   * Queries the database since the target is in a different repo.
+   * Returns false if the target repo or item doesn't exist in the DB.
+   */
+  function isCrossRepoDependencyResolved(targetRepoName: string, targetId: string): boolean {
+    const targetRepo = repoRepo.findByName(targetRepoName);
+    if (!targetRepo) return false;
+
+    const targetType = getEntityType(targetId);
+    const targetRepoId = targetRepo.id;
+
+    if (targetType === 'stage') {
+      const stage = stageRepo.findById(targetId);
+      return stage !== null && stage.repo_id === targetRepoId && stage.status === COMPLETE_STATUS;
+    }
+
+    if (targetType === 'ticket') {
+      const stages = stageRepo.listByTicket(targetId, targetRepoId);
+      if (stages.length === 0) return false;
+      return stages.every((s) => s.status === COMPLETE_STATUS);
+    }
+
+    if (targetType === 'epic') {
+      const tickets = ticketRepo.listByEpic(targetId);
+      const repoTickets = tickets.filter((t) => t.repo_id === targetRepoId);
+      if (repoTickets.length === 0) return false;
+      return repoTickets.every((t) => {
+        const stages = stageRepo.listByTicket(t.id, targetRepoId);
+        if (stages.length === 0) return false;
+        return stages.every((s) => s.status === COMPLETE_STATUS);
+      });
+    }
+
+    return false;
+  }
+
+  /**
+   * Check whether a dependency target is resolved (hard-resolution).
+   * Dispatches to local or cross-repo resolution based on the raw dep ref.
+   */
+  function isDependencyResolved(depRef: string): boolean {
+    const parsed = parseDependencyRef(depRef);
+    if (parsed.type === 'local') {
+      return isLocalDependencyResolved(parsed.itemId);
+    }
+    return isCrossRepoDependencyResolved(parsed.repoName, parsed.itemId);
+  }
+
+  /**
    * Check whether a stage dependency target is soft-resolved.
    * Only applies to stage→stage dependencies.
    * Returns true if the target stage's status is 'PR Created' or 'Addressing Comments'.
    */
-  function isStageSoftResolved(stageId: string): boolean {
-    const status = stageStatusMap.get(stageId);
-    if (!status) return false;
-    return (SOFT_RESOLVE_STATUSES as readonly string[]).includes(status);
+  function isStageSoftResolved(depRef: string): boolean {
+    const parsed = parseDependencyRef(depRef);
+    if (parsed.type === 'local') {
+      const status = stageStatusMap.get(parsed.itemId);
+      if (!status) return false;
+      return (SOFT_RESOLVE_STATUSES as readonly string[]).includes(status);
+    }
+    // Cross-repo soft resolution: query the DB
+    const targetRepo = repoRepo.findByName(parsed.repoName);
+    if (!targetRepo) return false;
+    const stage = stageRepo.findById(parsed.itemId);
+    if (!stage || stage.repo_id !== targetRepo.id) return false;
+    return (SOFT_RESOLVE_STATUSES as readonly string[]).includes(stage.status ?? '');
   }
 
   /**
@@ -192,32 +251,39 @@ export function syncRepo(options: SyncOptions): SyncResult {
    * - For all other dep types (stage→ticket, stage→epic, ticket→ticket, epic→epic):
    *   returns true only if hard-resolved (Complete required)
    */
-  function isDependencySoftOrHardResolved(targetId: string): boolean {
-    if (isDependencyResolved(targetId)) return true;
+  function isDependencySoftOrHardResolved(depRef: string): boolean {
+    if (isDependencyResolved(depRef)) return true;
     // Soft-resolution only applies to stage→stage deps
-    const targetType = getEntityType(targetId);
+    const parsed = parseDependencyRef(depRef);
+    const targetType = getEntityType(parsed.itemId);
     if (targetType === 'stage') {
-      return isStageSoftResolved(targetId);
+      return isStageSoftResolved(depRef);
     }
     return false;
   }
 
   /**
    * Upsert a dependency and resolve it if the target is complete.
+   * Parses the depRef to handle both local and cross-repo dependencies.
    */
-  function upsertDependency(fromId: string, fromType: string, depId: string): void {
-    const toType = getEntityType(depId);
+  function upsertDependency(fromId: string, fromType: string, depRef: string): void {
+    const parsed = parseDependencyRef(depRef);
+    const targetId = parsed.itemId;
+    const toType = getEntityType(targetId);
+    const targetRepoName = parsed.type === 'cross-repo' ? parsed.repoName : null;
+
     depRepo.upsert({
       from_id: fromId,
-      to_id: depId,
+      to_id: targetId,
       from_type: fromType,
       to_type: toType,
       repo_id: repoId,
+      target_repo_name: targetRepoName,
     });
     result.dependencies++;
 
-    if (isDependencyResolved(depId)) {
-      depRepo.resolve(fromId, depId);
+    if (isDependencyResolved(depRef)) {
+      depRepo.resolve(fromId, targetId);
     }
   }
 
@@ -316,18 +382,23 @@ export function syncRepo(options: SyncOptions): SyncResult {
       // Build pending_merge_parents for soft-unblocked stages
       const pendingParents: PendingMergeParent[] = [];
       if (allSoftOrHardResolved) {
-        for (const depId of stage.depends_on) {
-          const depType = getEntityType(depId);
+        for (const depRef of stage.depends_on) {
+          const depParsed = parseDependencyRef(depRef);
+          const depType = getEntityType(depParsed.itemId);
           // Only stage→stage deps can be soft-resolved
-          if (depType === 'stage' && !isDependencyResolved(depId) && isStageSoftResolved(depId)) {
-            const parentStage = stageById.get(depId);
-            if (parentStage && parentStage.worktree_branch && parentStage.pr_url && parentStage.pr_number != null) {
-              pendingParents.push({
-                stage_id: depId,
-                branch: parentStage.worktree_branch,
-                pr_url: parentStage.pr_url,
-                pr_number: parentStage.pr_number,
-              });
+          if (depType === 'stage' && !isDependencyResolved(depRef) && isStageSoftResolved(depRef)) {
+            // For local deps, use the in-memory map; cross-repo soft parents
+            // are in another repo so we skip them for pending_merge_parents
+            if (depParsed.type === 'local') {
+              const parentStage = stageById.get(depParsed.itemId);
+              if (parentStage && parentStage.worktree_branch && parentStage.pr_url && parentStage.pr_number != null) {
+                pendingParents.push({
+                  stage_id: depParsed.itemId,
+                  branch: parentStage.worktree_branch,
+                  pr_url: parentStage.pr_url,
+                  pr_number: parentStage.pr_number,
+                });
+              }
             }
           }
         }
