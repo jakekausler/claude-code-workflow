@@ -47,7 +47,7 @@ export async function createServer(
     origin: (origin, cb) => {
       if (
         !origin ||
-        /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)
+        /^https?:\/\/(localhost|127\.0\.0\.1|\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})(:\d+)?$/.test(origin)
       ) {
         cb(null, true);
         return;
