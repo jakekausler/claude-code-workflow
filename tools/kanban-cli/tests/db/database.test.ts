@@ -229,4 +229,132 @@ describe('KanbanDatabase', () => {
       db2.close();
     }
   });
+
+  it('creates dependencies table with target_repo_name column', () => {
+    const db = new KanbanDatabase(dbPath);
+    try {
+      const columns = db.raw()
+        .prepare("PRAGMA table_info(dependencies)")
+        .all() as Array<{ name: string }>;
+      const colNames = columns.map((c) => c.name);
+      expect(colNames).toContain('target_repo_name');
+    } finally {
+      db.close();
+    }
+  });
+
+  it('creates repos table with unique name constraint', () => {
+    const db = new KanbanDatabase(dbPath);
+    try {
+      // Insert first repo
+      db.raw().prepare("INSERT INTO repos (path, name, registered_at) VALUES (?, ?, ?)").run(
+        '/repo/one', 'my-repo', new Date().toISOString()
+      );
+
+      // Inserting duplicate name should throw
+      expect(() => {
+        db.raw().prepare("INSERT INTO repos (path, name, registered_at) VALUES (?, ?, ?)").run(
+          '/repo/two', 'my-repo', new Date().toISOString()
+        );
+      }).toThrow();
+    } finally {
+      db.close();
+    }
+  });
+
+  it('creates unique index idx_repos_name on repos table', () => {
+    const db = new KanbanDatabase(dbPath);
+    try {
+      const indexes = db.raw()
+        .prepare("SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='repos'")
+        .all() as Array<{ name: string }>;
+      const indexNames = indexes.map((i) => i.name);
+      expect(indexNames).toContain('idx_repos_name');
+    } finally {
+      db.close();
+    }
+  });
+
+  it('migrates existing DB without target_repo_name column', () => {
+    // Create a database with the old schema (no target_repo_name)
+    const Database = require('better-sqlite3');
+    const oldDb = new Database(dbPath);
+    oldDb.exec(`
+      CREATE TABLE IF NOT EXISTS repos (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        path TEXT UNIQUE NOT NULL,
+        name TEXT NOT NULL,
+        registered_at TEXT NOT NULL
+      )
+    `);
+    oldDb.exec(`
+      CREATE TABLE IF NOT EXISTS dependencies (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        from_id TEXT NOT NULL,
+        to_id TEXT NOT NULL,
+        from_type TEXT NOT NULL,
+        to_type TEXT NOT NULL,
+        resolved BOOLEAN DEFAULT 0,
+        repo_id INTEGER REFERENCES repos(id)
+      )
+    `);
+    // Insert a dependency in the old schema
+    oldDb.prepare("INSERT INTO repos (path, name, registered_at) VALUES (?, ?, ?)").run(
+      '/old/repo', 'old-repo', new Date().toISOString()
+    );
+    oldDb.prepare(
+      "INSERT INTO dependencies (from_id, to_id, from_type, to_type, repo_id) VALUES (?, ?, ?, ?, ?)"
+    ).run('stage-2', 'stage-1', 'stage', 'stage', 1);
+    oldDb.close();
+
+    // Re-open with KanbanDatabase — migration should add the column
+    const db = new KanbanDatabase(dbPath);
+    try {
+      const columns = db.raw()
+        .prepare("PRAGMA table_info(dependencies)")
+        .all() as Array<{ name: string }>;
+      const colNames = columns.map((c) => c.name);
+      expect(colNames).toContain('target_repo_name');
+
+      // Existing row should have NULL for target_repo_name
+      const row = db.raw()
+        .prepare("SELECT target_repo_name FROM dependencies WHERE from_id = 'stage-2'")
+        .get() as { target_repo_name: string | null };
+      expect(row.target_repo_name).toBeNull();
+    } finally {
+      db.close();
+    }
+  });
+
+  it('target_repo_name accepts NULL (local deps) and text values (cross-repo deps)', () => {
+    const db = new KanbanDatabase(dbPath);
+    try {
+      // Insert a repo for FK
+      db.raw().prepare("INSERT INTO repos (path, name, registered_at) VALUES (?, ?, ?)").run(
+        '/test/repo', 'test-repo', new Date().toISOString()
+      );
+
+      // Local dependency: target_repo_name is NULL
+      db.raw().prepare(
+        "INSERT INTO dependencies (from_id, to_id, from_type, to_type, repo_id, target_repo_name) VALUES (?, ?, ?, ?, ?, ?)"
+      ).run('stage-2', 'stage-1', 'stage', 'stage', 1, null);
+
+      // Cross-repo dependency: target_repo_name is a string
+      db.raw().prepare(
+        "INSERT INTO dependencies (from_id, to_id, from_type, to_type, repo_id, target_repo_name) VALUES (?, ?, ?, ?, ?, ?)"
+      ).run('stage-3', 'stage-4', 'stage', 'stage', 1, 'other-repo');
+
+      const localDep = db.raw()
+        .prepare("SELECT target_repo_name FROM dependencies WHERE from_id = 'stage-2'")
+        .get() as { target_repo_name: string | null };
+      expect(localDep.target_repo_name).toBeNull();
+
+      const crossRepoDep = db.raw()
+        .prepare("SELECT target_repo_name FROM dependencies WHERE from_id = 'stage-3'")
+        .get() as { target_repo_name: string | null };
+      expect(crossRepoDep.target_repo_name).toBe('other-repo');
+    } finally {
+      db.close();
+    }
+  });
 });

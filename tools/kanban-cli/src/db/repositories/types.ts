@@ -58,6 +58,7 @@ export interface DependencyRow {
   to_type: string;
   resolved: number;
   repo_id: number;
+  target_repo_name: string | null;
 }
 
 export interface SummaryRow {

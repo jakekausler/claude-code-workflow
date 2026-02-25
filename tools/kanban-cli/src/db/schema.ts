@@ -7,7 +7,7 @@ export const CREATE_REPOS_TABLE = `
 CREATE TABLE IF NOT EXISTS repos (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   path TEXT UNIQUE NOT NULL,
-  name TEXT NOT NULL,
+  name TEXT UNIQUE NOT NULL,
   registered_at TEXT NOT NULL
 )`;
 
@@ -69,7 +69,8 @@ CREATE TABLE IF NOT EXISTS dependencies (
   from_type TEXT NOT NULL,
   to_type TEXT NOT NULL,
   resolved BOOLEAN DEFAULT 0,
-  repo_id INTEGER REFERENCES repos(id)
+  repo_id INTEGER REFERENCES repos(id),
+  target_repo_name TEXT
 )`;
 
 export const CREATE_SUMMARIES_TABLE = `
@@ -112,6 +113,8 @@ export const CREATE_TICKETS_JIRA_KEY_INDEX = `CREATE INDEX IF NOT EXISTS idx_tic
 export const CREATE_PARENT_TRACKING_CHILD_INDEX = `CREATE INDEX IF NOT EXISTS idx_parent_tracking_child ON parent_branch_tracking(child_stage_id)`;
 export const CREATE_PARENT_TRACKING_PARENT_INDEX = `CREATE INDEX IF NOT EXISTS idx_parent_tracking_parent ON parent_branch_tracking(parent_stage_id)`;
 
+export const CREATE_REPOS_NAME_UNIQUE_INDEX = `CREATE UNIQUE INDEX IF NOT EXISTS idx_repos_name ON repos(name)`;
+
 /**
  * ALTER TABLE migrations for adding columns to existing tables.
  * Each is wrapped in try/catch at execution time because SQLite throws
@@ -121,6 +124,7 @@ export const ALTER_TABLE_MIGRATIONS = [
   'ALTER TABLE stages ADD COLUMN is_draft BOOLEAN DEFAULT 0',
   'ALTER TABLE stages ADD COLUMN pending_merge_parents TEXT',
   'ALTER TABLE stages ADD COLUMN mr_target_branch TEXT',
+  'ALTER TABLE dependencies ADD COLUMN target_repo_name TEXT',
 ] as const;
 
 export const ALL_CREATE_STATEMENTS = [
@@ -136,4 +140,5 @@ export const ALL_CREATE_STATEMENTS = [
   CREATE_TICKETS_JIRA_KEY_INDEX,
   CREATE_PARENT_TRACKING_CHILD_INDEX,
   CREATE_PARENT_TRACKING_PARENT_INDEX,
+  CREATE_REPOS_NAME_UNIQUE_INDEX,
 ] as const;
