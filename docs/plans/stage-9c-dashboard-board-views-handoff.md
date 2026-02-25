@@ -68,6 +68,7 @@ Stage 0 (Pipeline Config) ✅
 
 Read these files to understand the full design before implementing:
 
+- @docs/plans/2026-02-16-kanban-workflow-redesign-design.md — Overall design for the kanban workflow
 - @docs/plans/2026-02-25-stage-9-10-web-ui-design.md — Full approved design for Stages 9 and 10 (Section 8 covers 9C specifically)
 - @docs/plans/stage-9-10-substages/stage-9c-dashboard-board-views.md — Detailed specification for this substage
 

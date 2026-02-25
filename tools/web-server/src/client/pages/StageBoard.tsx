@@ -34,7 +34,7 @@ export function StageBoard() {
           {epic.id} — {epic.title}
         </p>
       )}
-      <BoardLayout isLoading={isLoading} error={error ?? null}>
+      <BoardLayout isLoading={isLoading} error={error ?? null} isEmpty={columns.length === 0}>
         {columns.map((col) => (
           <BoardColumn key={col.slug} title={col.title} color={col.color} count={col.items.length}>
             {col.items.map((stage) => {
