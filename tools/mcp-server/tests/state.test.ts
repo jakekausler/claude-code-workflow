@@ -374,6 +374,53 @@ describe('MockState', () => {
     });
   });
 
+  describe('notifications', () => {
+    it('starts with empty notifications array', () => {
+      const fresh = new MockState();
+      expect(fresh.getNotifications()).toEqual([]);
+    });
+
+    it('stores and retrieves notifications via addNotification/getNotifications', () => {
+      const notification = {
+        message: 'PR created',
+        stage: 'STAGE-001',
+        title: 'New MR Ready',
+        ticket: 'TICKET-001',
+        ticket_title: 'Auth flow',
+        epic: 'EPIC-001',
+        epic_title: 'User Auth',
+        url: 'https://github.com/org/repo/pull/42',
+        timestamp: '2026-02-24T00:00:00.000Z',
+      };
+      state.addNotification(notification);
+      const notifications = state.getNotifications();
+      expect(notifications).toHaveLength(1);
+      expect(notifications[0]).toEqual(notification);
+    });
+
+    it('accumulates multiple notifications in order', () => {
+      state.addNotification({ message: 'first', timestamp: '2026-02-24T00:00:00.000Z' });
+      state.addNotification({ message: 'second', timestamp: '2026-02-24T00:01:00.000Z' });
+      state.addNotification({ message: 'third', timestamp: '2026-02-24T00:02:00.000Z' });
+      const notifications = state.getNotifications();
+      expect(notifications).toHaveLength(3);
+      expect(notifications[0].message).toBe('first');
+      expect(notifications[1].message).toBe('second');
+      expect(notifications[2].message).toBe('third');
+    });
+
+    it('returns a deep copy - mutation does not affect store', () => {
+      state.addNotification({ message: 'original', timestamp: '2026-02-24T00:00:00.000Z' });
+      const copy = state.getNotifications();
+      copy[0].message = 'mutated';
+      copy.push({ message: 'extra', timestamp: 'fake' });
+
+      const fresh = state.getNotifications();
+      expect(fresh).toHaveLength(1);
+      expect(fresh[0].message).toBe('original');
+    });
+  });
+
   describe('getPage', () => {
     it('returns seeded page', () => {
       const page = state.getPage('12345');

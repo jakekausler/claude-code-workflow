@@ -39,6 +39,18 @@ export interface MockPage {
   url: string;
 }
 
+export interface SlackNotification {
+  message: string;
+  stage?: string;
+  title?: string;
+  ticket?: string;
+  ticket_title?: string;
+  epic?: string;
+  epic_title?: string;
+  url?: string;
+  timestamp: string;
+}
+
 export interface MockSeedData {
   tickets: Record<string, Omit<MockTicket, 'comments'>>;
   pages: Record<string, MockPage>;
@@ -53,6 +65,7 @@ export class MockState {
   private prs: Map<number, MockPR>;
   private tickets: Map<string, MockTicket>;
   private pages: Map<string, MockPage>;
+  private notifications: SlackNotification[];
   private nextPrNumber: number;
   private nextCommentId: number;
 
@@ -60,6 +73,7 @@ export class MockState {
     this.prs = new Map();
     this.tickets = new Map();
     this.pages = new Map();
+    this.notifications = [];
     this.nextCommentId = 1;
 
     if (seedData) {
@@ -236,6 +250,16 @@ export class MockState {
     };
     ticket.comments.push(newComment);
     return deepCopy(newComment);
+  }
+
+  // Slack notifications
+
+  addNotification(notification: SlackNotification): void {
+    this.notifications.push(deepCopy(notification));
+  }
+
+  getNotifications(): SlackNotification[] {
+    return deepCopy(this.notifications);
   }
 
   // Confluence
