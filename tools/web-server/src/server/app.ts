@@ -9,6 +9,7 @@ import { boardRoutes } from './routes/board.js';
 import { epicRoutes } from './routes/epics.js';
 import { ticketRoutes } from './routes/tickets.js';
 import { stageRoutes } from './routes/stages.js';
+import { graphRoutes } from './routes/graph.js';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -65,6 +66,7 @@ export async function createServer(
   await app.register(epicRoutes);
   await app.register(ticketRoutes);
   await app.register(stageRoutes);
+  await app.register(graphRoutes);
 
   // --- Static serving / dev proxy ---
   if (!isDev) {
