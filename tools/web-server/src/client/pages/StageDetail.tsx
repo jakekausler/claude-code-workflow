@@ -1,15 +1,18 @@
-import { useParams } from 'react-router-dom';
+import { useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { useDrawerStore } from '../store/drawer-store.js';
 
 export function StageDetail() {
   const { stageId } = useParams<{ stageId: string }>();
+  const navigate = useNavigate();
+  const { setStack } = useDrawerStore();
 
-  return (
-    <div>
-      <h1 className="text-2xl font-bold text-slate-900">Stage Detail</h1>
-      <p className="mt-2 text-slate-600">
-        Details for{' '}
-        <code className="rounded bg-slate-200 px-1">{stageId}</code>
-      </p>
-    </div>
-  );
+  useEffect(() => {
+    if (stageId) {
+      setStack([{ type: 'stage', id: stageId }]);
+    }
+    navigate('/board', { replace: true });
+  }, [stageId, setStack, navigate]);
+
+  return null;
 }

@@ -263,11 +263,11 @@ export function useEpics() {
   });
 }
 
-export function useEpic(id: string) {
+export function useEpic(id: string, options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ['epics', id],
     queryFn: () => apiFetch<EpicDetail>(`/epics/${id}`),
-    enabled: !!id,
+    enabled: options?.enabled ?? !!id,
   });
 }
 
@@ -280,11 +280,11 @@ export function useTickets(filters?: { epic?: string }) {
   });
 }
 
-export function useTicket(id: string) {
+export function useTicket(id: string, options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ['tickets', id],
     queryFn: () => apiFetch<TicketDetail>(`/tickets/${id}`),
-    enabled: !!id,
+    enabled: options?.enabled ?? !!id,
   });
 }
 
@@ -297,11 +297,11 @@ export function useStages(filters?: { ticket?: string }) {
   });
 }
 
-export function useStage(id: string) {
+export function useStage(id: string, options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ['stages', id],
     queryFn: () => apiFetch<StageDetail>(`/stages/${id}`),
-    enabled: !!id,
+    enabled: options?.enabled ?? !!id,
   });
 }
 

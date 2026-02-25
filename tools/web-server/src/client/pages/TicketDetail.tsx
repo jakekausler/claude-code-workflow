@@ -1,15 +1,18 @@
-import { useParams } from 'react-router-dom';
+import { useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { useDrawerStore } from '../store/drawer-store.js';
 
 export function TicketDetail() {
   const { ticketId } = useParams<{ ticketId: string }>();
+  const navigate = useNavigate();
+  const { setStack } = useDrawerStore();
 
-  return (
-    <div>
-      <h1 className="text-2xl font-bold text-slate-900">Ticket Detail</h1>
-      <p className="mt-2 text-slate-600">
-        Details for{' '}
-        <code className="rounded bg-slate-200 px-1">{ticketId}</code>
-      </p>
-    </div>
-  );
+  useEffect(() => {
+    if (ticketId) {
+      setStack([{ type: 'ticket', id: ticketId }]);
+    }
+    navigate('/board', { replace: true });
+  }, [ticketId, setStack, navigate]);
+
+  return null;
 }

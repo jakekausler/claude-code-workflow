@@ -1,6 +1,6 @@
-import { useNavigate } from 'react-router-dom';
 import { useBoard } from '../api/hooks.js';
 import { useBoardStore } from '../store/board-store.js';
+import { useDrawerStore, type DrawerEntry } from '../store/drawer-store.js';
 import { FilterBar } from '../components/board/FilterBar.js';
 import { BoardLayout } from '../components/board/BoardLayout.js';
 import { BoardColumn } from '../components/board/BoardColumn.js';
@@ -9,8 +9,8 @@ import { slugToTitle, columnColor } from '../utils/formatters.js';
 import type { BoardStageItem, BoardTicketItem, BoardItem } from '../api/hooks.js';
 
 export function Board() {
-  const navigate = useNavigate();
   const { selectedRepo, selectedEpic, selectedTicket } = useBoardStore();
+  const { open } = useDrawerStore();
 
   const filters: Record<string, string | boolean | undefined> = {};
   if (selectedRepo) filters.repo = selectedRepo;
@@ -37,7 +37,7 @@ export function Board() {
       <BoardLayout isLoading={isLoading} error={error ?? null} isEmpty={columns.length === 0}>
         {columns.map((col) => (
           <BoardColumn key={col.slug} title={col.title} color={col.color} count={col.items.length}>
-            {col.items.map((item) => renderCard(item, navigate))}
+            {col.items.map((item) => renderCard(item, open))}
           </BoardColumn>
         ))}
       </BoardLayout>
@@ -45,14 +45,20 @@ export function Board() {
   );
 }
 
-function renderCard(item: BoardItem, navigate: (path: string) => void) {
+function renderCard(
+  item: BoardItem,
+  open: (entry: DrawerEntry) => void,
+) {
   if (item.type === 'stage') {
-    return renderStageCard(item, navigate);
+    return renderStageCard(item, open);
   }
-  return renderTicketCard(item, navigate);
+  return renderTicketCard(item, open);
 }
 
-function renderStageCard(stage: BoardStageItem, navigate: (path: string) => void) {
+function renderStageCard(
+  stage: BoardStageItem,
+  open: (entry: DrawerEntry) => void,
+) {
   const badges: { label: string; color: string }[] = [];
   if (stage.blocked_by && stage.blocked_by.length > 0) {
     badges.push({ label: `Blocked by ${stage.blocked_by.length}`, color: '#ef4444' });
@@ -66,12 +72,15 @@ function renderStageCard(stage: BoardStageItem, navigate: (path: string) => void
       subtitle={`${stage.epic} / ${stage.ticket}`}
       badges={badges.length > 0 ? badges : undefined}
       statusDot={stage.session_active ? '#22c55e' : undefined}
-      onClick={() => navigate(`/stages/${stage.id}`)}
+      onClick={() => open({ type: 'stage', id: stage.id })}
     />
   );
 }
 
-function renderTicketCard(ticket: BoardTicketItem, navigate: (path: string) => void) {
+function renderTicketCard(
+  ticket: BoardTicketItem,
+  open: (entry: DrawerEntry) => void,
+) {
   const badges: { label: string; color: string }[] = [];
   if (ticket.jira_key) {
     badges.push({ label: ticket.jira_key, color: '#3b82f6' });
@@ -84,7 +93,7 @@ function renderTicketCard(ticket: BoardTicketItem, navigate: (path: string) => v
       title={ticket.title}
       subtitle={ticket.epic}
       badges={badges.length > 0 ? badges : undefined}
-      onClick={() => navigate(`/tickets/${ticket.id}`)}
+      onClick={() => open({ type: 'ticket', id: ticket.id })}
     />
   );
 }

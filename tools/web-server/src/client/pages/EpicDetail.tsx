@@ -1,14 +1,18 @@
-import { useParams } from 'react-router-dom';
+import { useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { useDrawerStore } from '../store/drawer-store.js';
 
 export function EpicDetail() {
   const { epicId } = useParams<{ epicId: string }>();
+  const navigate = useNavigate();
+  const { setStack } = useDrawerStore();
 
-  return (
-    <div>
-      <h1 className="text-2xl font-bold text-slate-900">Epic Detail</h1>
-      <p className="mt-2 text-slate-600">
-        Details for <code className="rounded bg-slate-200 px-1">{epicId}</code>
-      </p>
-    </div>
-  );
+  useEffect(() => {
+    if (epicId) {
+      setStack([{ type: 'epic', id: epicId }]);
+    }
+    navigate('/board', { replace: true });
+  }, [epicId, setStack, navigate]);
+
+  return null;
 }
