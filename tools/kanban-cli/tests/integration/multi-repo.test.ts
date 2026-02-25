@@ -2,9 +2,9 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
+import matter from 'gray-matter';
 import { KanbanDatabase } from '../../src/db/database.js';
 import { createRegistry } from '../../src/repos/registry.js';
-import { createMultiRepoHelper } from '../../src/repos/multi-repo.js';
 import { syncRepo } from '../../src/sync/sync.js';
 import { loadConfig } from '../../src/config/loader.js';
 import { buildBoard } from '../../src/cli/logic/board.js';
@@ -25,19 +25,6 @@ let repoBPath: string;
 let registryPath: string;
 let dbPath: string;
 let db: KanbanDatabase;
-
-const pipelineConfig = {
-  workflow: {
-    entry_phase: 'Design',
-    phases: [
-      { name: 'Design', skill: 'phase-design', status: 'Design', transitions_to: ['Build'] },
-      { name: 'Build', skill: 'phase-build', status: 'Build', transitions_to: ['Finalize'] },
-      { name: 'Finalize', skill: 'phase-finalize', status: 'Finalize', transitions_to: ['PR Created', 'Done'] },
-      { name: 'PR Created', resolver: 'pr-status', status: 'PR Created', transitions_to: ['Done', 'Addressing Comments'] },
-      { name: 'Addressing Comments', skill: 'review-cycle', status: 'Addressing Comments', transitions_to: ['PR Created'] },
-    ],
-  },
-};
 
 /**
  * Create a temporary directory structure for a repo
@@ -80,13 +67,6 @@ function createRepoStructure(repoPath: string, repoName: string): void {
 `;
 
   fs.writeFileSync(path.join(repoPath, '.kanban-workflow.yaml'), configContent);
-
-  // Initialize git repo (required by sync)
-  try {
-    require('child_process').execSync('git init -q && git commit -q --allow-empty -m "init"', { cwd: repoPath });
-  } catch {
-    // Ignore if git is not available
-  }
 }
 
 /**
@@ -179,6 +159,91 @@ ${title} stage description.
 }
 
 describe('multi-repo integration', () => {
+  const pipelineConfig = {
+    workflow: {
+      entry_phase: 'Design',
+      phases: [
+        { name: 'Design', skill: 'phase-design', status: 'Design', transitions_to: ['Build'] },
+        { name: 'Build', skill: 'phase-build', status: 'Build', transitions_to: ['Finalize'] },
+        { name: 'Finalize', skill: 'phase-finalize', status: 'Finalize', transitions_to: ['PR Created', 'Done'] },
+        { name: 'PR Created', resolver: 'pr-status', status: 'PR Created', transitions_to: ['Done', 'Addressing Comments'] },
+        { name: 'Addressing Comments', skill: 'review-cycle', status: 'Addressing Comments', transitions_to: ['PR Created'] },
+      ],
+    },
+  } as const;
+
+  /**
+   * Sync both repos and aggregate their data ready for logic functions.
+   * Returns epics, tickets, stages, and dependencies with proper type mapping.
+   */
+  function syncAndLoadAll(repoAPath: string, repoBPath: string) {
+    const configA = loadConfig({ repoPath: repoAPath });
+    syncRepo({ repoPath: repoAPath, db, config: configA });
+
+    const configB = loadConfig({ repoPath: repoBPath });
+    syncRepo({ repoPath: repoBPath, db, config: configB });
+
+    const repoRepo = new RepoRepository(db);
+    const epicRepo = new EpicRepository(db);
+    const ticketRepo = new TicketRepository(db);
+    const stageRepo = new StageRepository(db);
+    const depRepo = new DependencyRepository(db);
+
+    const repoA = repoRepo.findByPath(repoAPath)!;
+    const repoB = repoRepo.findByPath(repoBPath)!;
+
+    // Aggregate data from both repos with proper type mapping
+    const epics = [
+      ...epicRepo.listByRepo(repoA.id).map((e) => ({ ...e, repo: 'repo-a' })),
+      ...epicRepo.listByRepo(repoB.id).map((e) => ({ ...e, repo: 'repo-b' })),
+    ];
+
+    const tickets = [
+      ...ticketRepo.listByRepo(repoA.id).map((t) => ({
+        ...t,
+        repo: 'repo-a',
+        has_stages: (t.has_stages ?? 0) === 1,
+      })),
+      ...ticketRepo.listByRepo(repoB.id).map((t) => ({
+        ...t,
+        repo: 'repo-b',
+        has_stages: (t.has_stages ?? 0) === 1,
+      })),
+    ];
+
+    const stages = [
+      ...stageRepo.listByRepo(repoA.id).map((s) => ({
+        ...s,
+        repo: 'repo-a',
+        session_active: (s.session_active ?? 0) === 1,
+        kanban_column: s.kanban_column ?? 'backlog',
+        status: s.status ?? 'Not Started',
+      })),
+      ...stageRepo.listByRepo(repoB.id).map((s) => ({
+        ...s,
+        repo: 'repo-b',
+        session_active: (s.session_active ?? 0) === 1,
+        kanban_column: s.kanban_column ?? 'backlog',
+        status: s.status ?? 'Not Started',
+      })),
+    ];
+
+    const deps = [
+      ...depRepo.listByRepo(repoA.id).map((d) => ({
+        ...d,
+        repo: 'repo-a',
+        resolved: d.resolved === 1,
+      })),
+      ...depRepo.listByRepo(repoB.id).map((d) => ({
+        ...d,
+        repo: 'repo-b',
+        resolved: d.resolved === 1,
+      })),
+    ];
+
+    return { epics, tickets, stages, deps, repoA, repoB };
+  }
+
   beforeEach(() => {
     // Create temp directories
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'kanban-multi-repo-test-'));
@@ -256,46 +321,13 @@ describe('multi-repo integration', () => {
   });
 
   it('global board shows stages from both repos', () => {
-    // Sync both repos
-    const configA = loadConfig({ repoPath: repoAPath });
-    syncRepo({ repoPath: repoAPath, db, config: configA });
-
-    const configB = loadConfig({ repoPath: repoBPath });
-    syncRepo({ repoPath: repoBPath, db, config: configB });
-
-    // Query data
-    const repoRepo = new RepoRepository(db);
-    const epicRepo = new EpicRepository(db);
-    const ticketRepo = new TicketRepository(db);
-    const stageRepo = new StageRepository(db);
-    const depRepo = new DependencyRepository(db);
-
-    const repoA = repoRepo.findByPath(repoAPath)!;
-    const repoB = repoRepo.findByPath(repoBPath)!;
-
-    // Aggregate data from both repos
-    const epics = [
-      ...epicRepo.listByRepo(repoA.id).map((e) => ({ ...e, repo: 'repo-a' })),
-      ...epicRepo.listByRepo(repoB.id).map((e) => ({ ...e, repo: 'repo-b' })),
-    ];
-    const tickets = [
-      ...ticketRepo.listByRepo(repoA.id).map((t) => ({ ...t, repo: 'repo-a' })),
-      ...ticketRepo.listByRepo(repoB.id).map((t) => ({ ...t, repo: 'repo-b' })),
-    ];
-    const stages = [
-      ...stageRepo.listByRepo(repoA.id).map((s) => ({ ...s, repo: 'repo-a' })),
-      ...stageRepo.listByRepo(repoB.id).map((s) => ({ ...s, repo: 'repo-b' })),
-    ];
-    const deps = [
-      ...depRepo.listByRepo(repoA.id).map((d) => ({ ...d, repo: 'repo-a' })),
-      ...depRepo.listByRepo(repoB.id).map((d) => ({ ...d, repo: 'repo-b' })),
-    ];
+    const { epics, tickets, stages, deps } = syncAndLoadAll(repoAPath, repoBPath);
 
     // Build global board
     const board = buildBoard({
       config: pipelineConfig,
       repoPath: 'global',
-      epics: [],
+      epics,
       tickets,
       stages,
       dependencies: deps,
@@ -322,37 +354,7 @@ describe('multi-repo integration', () => {
   });
 
   it('global next excludes cross-repo blocked stages', () => {
-    // Sync both repos
-    const configA = loadConfig({ repoPath: repoAPath });
-    syncRepo({ repoPath: repoAPath, db, config: configA });
-
-    const configB = loadConfig({ repoPath: repoBPath });
-    syncRepo({ repoPath: repoBPath, db, config: configB });
-
-    // Query data
-    const repoRepo = new RepoRepository(db);
-    const stageRepo = new StageRepository(db);
-    const ticketRepo = new TicketRepository(db);
-    const depRepo = new DependencyRepository(db);
-
-    const repoA = repoRepo.findByPath(repoAPath)!;
-    const repoB = repoRepo.findByPath(repoBPath)!;
-
-    // Get stages and dependencies
-    const stages = [
-      ...stageRepo.listByRepo(repoA.id).map((s) => ({ ...s, repo: 'repo-a' })),
-      ...stageRepo.listByRepo(repoB.id).map((s) => ({ ...s, repo: 'repo-b' })),
-    ];
-
-    const tickets = [
-      ...ticketRepo.listByRepo(repoA.id),
-      ...ticketRepo.listByRepo(repoB.id),
-    ];
-
-    const deps = [
-      ...depRepo.listByRepo(repoA.id).map((d) => ({ ...d, repo: 'repo-a' })),
-      ...depRepo.listByRepo(repoB.id).map((d) => ({ ...d, repo: 'repo-b' })),
-    ];
+    const { tickets, stages, deps } = syncAndLoadAll(repoAPath, repoBPath);
 
     // Build next (repo B's stage should be blocked by unresolved dep on repo A's stage)
     const next = buildNext({
@@ -370,93 +372,60 @@ describe('multi-repo integration', () => {
     expect(next.blocked_count).toBeGreaterThan(0);
   });
 
-  it('global reflects cross-repo dependency resolution', () => {
-    // Sync both repos
-    const configA = loadConfig({ repoPath: repoAPath });
-    syncRepo({ repoPath: repoAPath, db, config: configA });
-
-    const configB = loadConfig({ repoPath: repoBPath });
-    syncRepo({ repoPath: repoBPath, db, config: configB });
-
-    // Query data
-    const repoRepo = new RepoRepository(db);
-    const depRepo = new DependencyRepository(db);
-
-    const repoA = repoRepo.findByPath(repoAPath)!;
-    const repoB = repoRepo.findByPath(repoBPath)!;
-
-    // Get initial state
-    const depsBefore = [
-      ...depRepo.listByRepo(repoA.id),
-      ...depRepo.listByRepo(repoB.id),
-    ];
+  it('cross-repo dependency resolves when target stage completes', () => {
+    // Initial sync
+    const { deps: depsBefore, repoA, repoB } = syncAndLoadAll(repoAPath, repoBPath);
 
     // Verify cross-repo dependency exists and is unresolved initially
     const crossRepoDepBefore = depsBefore.find(
       (d) => d.from_id === 'STAGE-002-001-001' && d.to_id === 'STAGE-001-001-001',
     );
     expect(crossRepoDepBefore).toBeDefined();
-    expect(!crossRepoDepBefore?.resolved).toBe(true); // resolved is 0 (falsy)
+    expect(crossRepoDepBefore?.resolved).toBe(false);
 
-    // Now mark it as resolved by updating the dependency
-    db.raw().prepare(`
-      UPDATE dependencies
-      SET resolved = 1
-      WHERE from_id = ? AND to_id = ?
-    `).run('STAGE-002-001-001', 'STAGE-001-001-001');
+    // Update repo A's stage file to mark it as Complete
+    const stageAPath = path.join(repoAPath, 'epics', 'EPIC-001-auth-system', 'TICKET-001-001-login-feature', 'STAGE-001-001-001.md');
+    const stageAContent = fs.readFileSync(stageAPath, 'utf-8');
+    const parsed = matter(stageAContent);
+    parsed.data.status = 'Complete';
+    const updated = matter.stringify(parsed.content, parsed.data);
+    fs.writeFileSync(stageAPath, updated, 'utf-8');
 
-    // Query updated data
-    const depsAfter = [
-      ...depRepo.listByRepo(repoA.id),
-      ...depRepo.listByRepo(repoB.id),
-    ];
-
-    // Verify dependency is now resolved in database
-    const crossRepoDepAfter = depsAfter.find(
-      (d) => d.from_id === 'STAGE-002-001-001' && d.to_id === 'STAGE-001-001-001',
-    );
-    expect(crossRepoDepAfter?.resolved).toBeTruthy();
-
-    // Verify both repos have accessible data
-    expect(depsAfter.length).toBeGreaterThan(0);
-    expect(depsAfter.some((d) => d.from_id === 'STAGE-002-001-001')).toBe(true);
-  });
-
-  it('global graph includes cross-repo edges', () => {
-    // Sync both repos
+    // Re-sync both repos to apply the change and resolve dependencies
     const configA = loadConfig({ repoPath: repoAPath });
     syncRepo({ repoPath: repoAPath, db, config: configA });
 
     const configB = loadConfig({ repoPath: repoBPath });
     syncRepo({ repoPath: repoBPath, db, config: configB });
 
-    // Query data
-    const repoRepo = new RepoRepository(db);
-    const epicRepo = new EpicRepository(db);
-    const ticketRepo = new TicketRepository(db);
-    const stageRepo = new StageRepository(db);
+    // Query updated dependencies
     const depRepo = new DependencyRepository(db);
+    const stageRepo = new StageRepository(db);
 
-    const repoA = repoRepo.findByPath(repoAPath)!;
-    const repoB = repoRepo.findByPath(repoBPath)!;
+    const depsAfter = [
+      ...depRepo.listByRepo(repoA.id).map((d) => ({
+        ...d,
+        resolved: d.resolved === 1,
+      })),
+      ...depRepo.listByRepo(repoB.id).map((d) => ({
+        ...d,
+        resolved: d.resolved === 1,
+      })),
+    ];
 
-    // Aggregate data with repo field
-    const epics = [
-      ...epicRepo.listByRepo(repoA.id).map((e) => ({ ...e, repo: 'repo-a' })),
-      ...epicRepo.listByRepo(repoB.id).map((e) => ({ ...e, repo: 'repo-b' })),
-    ];
-    const tickets = [
-      ...ticketRepo.listByRepo(repoA.id).map((t) => ({ ...t, repo: 'repo-a' })),
-      ...ticketRepo.listByRepo(repoB.id).map((t) => ({ ...t, repo: 'repo-b' })),
-    ];
-    const stages = [
-      ...stageRepo.listByRepo(repoA.id).map((s) => ({ ...s, repo: 'repo-a' })),
-      ...stageRepo.listByRepo(repoB.id).map((s) => ({ ...s, repo: 'repo-b' })),
-    ];
-    const deps = [
-      ...depRepo.listByRepo(repoA.id).map((d) => ({ ...d, repo: 'repo-a' })),
-      ...depRepo.listByRepo(repoB.id).map((d) => ({ ...d, repo: 'repo-b' })),
-    ];
+    // Verify dependency is now resolved
+    const crossRepoDepAfter = depsAfter.find(
+      (d) => d.from_id === 'STAGE-002-001-001' && d.to_id === 'STAGE-001-001-001',
+    );
+    expect(crossRepoDepAfter?.resolved).toBe(true);
+
+    // Verify repo A's stage is now Complete
+    const stageA = stageRepo.findById('STAGE-001-001-001');
+    expect(stageA?.status).toBe('Complete');
+  });
+
+  it('global graph includes cross-repo edges', () => {
+    const { epics, tickets, stages, deps } = syncAndLoadAll(repoAPath, repoBPath);
 
     // Build graph
     const graph = buildGraph({
