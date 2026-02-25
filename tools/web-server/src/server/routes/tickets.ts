@@ -1,30 +1,13 @@
 import type { FastifyPluginCallback } from 'fastify';
 import fp from 'fastify-plugin';
 import { z } from 'zod';
+import { parseRefinementType } from './utils.js';
 
 /** Zod schema for the :id route parameter. */
 const ticketIdSchema = z.string().regex(/^TICKET-\d{3}-\d{3}$/);
 
 /** Zod schema for the optional query parameters. */
 const ticketQuerySchema = z.object({ epic: z.string().optional() });
-
-/**
- * Parse a refinement_type value that may be stored as a JSON string
- * (e.g. '["frontend"]') or a plain string (e.g. 'frontend') into an array.
- */
-function parseRefinementType(raw: string | null): string[] {
-  if (!raw) return [];
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    if (Array.isArray(parsed)) {
-      return parsed.filter((v): v is string => typeof v === 'string');
-    }
-    return typeof parsed === 'string' ? [parsed] : [];
-  } catch {
-    // Not JSON — treat as a plain string value
-    return [raw];
-  }
-}
 
 const ticketPlugin: FastifyPluginCallback = (app, _opts, done) => {
   /**
