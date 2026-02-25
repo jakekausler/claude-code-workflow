@@ -4,6 +4,13 @@ import fastifyStatic from '@fastify/static';
 import { existsSync, readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import type { DataService } from './services/data-service.js';
+
+declare module 'fastify' {
+  interface FastifyInstance {
+    dataService: DataService | null;
+  }
+}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -12,6 +19,7 @@ export interface ServerOptions {
   logger?: boolean;
   vitePort?: number;
   isDev?: boolean;
+  dataService?: DataService;
 }
 
 export async function createServer(
@@ -38,6 +46,10 @@ export async function createServer(
       cb(new Error('Not allowed by CORS'), false);
     },
   });
+
+  // DataService decoration — available to all route plugins via app.dataService
+  const dataService = options.dataService ?? null;
+  app.decorate('dataService', dataService);
 
   // --- API routes ---
   app.get('/api/health', async () => ({
