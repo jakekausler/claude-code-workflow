@@ -15,6 +15,7 @@
     "sourceMap": true,
     "jsx": "react-jsx",
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "baseUrl": ".",
     "paths": {
       "@client/*": ["./src/client/*"],
       "@server/*": ["./src/server/*"]
