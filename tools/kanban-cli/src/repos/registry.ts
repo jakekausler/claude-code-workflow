@@ -1,8 +1,8 @@
 import * as fs from 'node:fs';
-import * as os from 'node:os';
 import * as path from 'node:path';
 import { z } from 'zod';
 import { parse as parseYaml, stringify as yamlStringify } from 'yaml';
+import { CONFIG_PATHS } from '../config/loader.js';
 
 // ── Schemas ──────────────────────────────────────────────────────────
 
@@ -10,7 +10,7 @@ export const repoEntrySchema = z.object({
   path: z.string().min(1),
   name: z.string().min(1),
   slack_webhook: z.string().url().optional(),
-});
+}).passthrough();
 
 export const reposConfigSchema = z.object({
   repos: z.array(repoEntrySchema).default([]),
@@ -37,13 +37,6 @@ export interface RepoRegistry {
 
 // ── Default deps ─────────────────────────────────────────────────────
 
-const DEFAULT_REGISTRY_PATH = path.join(
-  os.homedir(),
-  '.config',
-  'kanban-workflow',
-  'repos.yaml',
-);
-
 function defaultDeps(): RegistryDeps {
   return {
     readFile: (p: string) => fs.readFileSync(p, 'utf-8'),
@@ -51,7 +44,7 @@ function defaultDeps(): RegistryDeps {
     existsSync: (p: string) => fs.existsSync(p),
     mkdirSync: (p: string, opts?: { recursive: boolean }) =>
       fs.mkdirSync(p, opts),
-    registryPath: DEFAULT_REGISTRY_PATH,
+    registryPath: CONFIG_PATHS.reposConfig,
   };
 }
 
@@ -69,6 +62,11 @@ export function createRegistry(
 
     const raw = deps.readFile(deps.registryPath);
     const parsed = parseYaml(raw);
+
+    if (parsed == null) {
+      return [];
+    }
+
     const result = reposConfigSchema.safeParse(parsed);
 
     if (!result.success) {

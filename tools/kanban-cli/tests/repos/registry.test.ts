@@ -1,10 +1,15 @@
 import { describe, it, expect } from 'vitest';
 import { stringify as yamlStringify } from 'yaml';
 import { createRegistry } from '../../src/repos/registry.js';
-import type { RepoEntry, RegistryDeps } from '../../src/repos/registry.js';
+import type { RegistryDeps } from '../../src/repos/registry.js';
+
+interface MockDeps extends RegistryDeps {
+  _files: Map<string, string>;
+  _dirCreated: () => boolean;
+}
 
 /** Helper: build a mock deps object backed by an in-memory "filesystem". */
-function makeDeps(overrides: Partial<RegistryDeps> = {}): RegistryDeps {
+function makeDeps(overrides: Partial<RegistryDeps> = {}): MockDeps {
   const files = new Map<string, string>();
   let dirCreated = false;
 
@@ -26,7 +31,7 @@ function makeDeps(overrides: Partial<RegistryDeps> = {}): RegistryDeps {
     _files: files,
     _dirCreated: () => dirCreated,
     ...overrides,
-  } as RegistryDeps & { _files: Map<string, string>; _dirCreated: () => boolean };
+  };
 }
 
 function yamlWith(repos: Array<Record<string, unknown>>): string {
@@ -47,7 +52,7 @@ describe('createRegistry', () => {
 
     it('parses valid YAML with multiple repos', () => {
       const deps = makeDeps();
-      (deps as any)._files.set(
+      deps._files.set(
         deps.registryPath,
         yamlWith([
           { path: '/projects/backend', name: 'backend' },
@@ -65,7 +70,7 @@ describe('createRegistry', () => {
 
     it('throws on invalid YAML (missing name)', () => {
       const deps = makeDeps();
-      (deps as any)._files.set(
+      deps._files.set(
         deps.registryPath,
         yamlWith([{ path: '/projects/backend' }]),
       );
@@ -76,7 +81,7 @@ describe('createRegistry', () => {
 
     it('throws on invalid YAML (missing path)', () => {
       const deps = makeDeps();
-      (deps as any)._files.set(
+      deps._files.set(
         deps.registryPath,
         yamlWith([{ name: 'backend' }]),
       );
@@ -87,7 +92,7 @@ describe('createRegistry', () => {
 
     it('parses repos with optional slack_webhook', () => {
       const deps = makeDeps();
-      (deps as any)._files.set(
+      deps._files.set(
         deps.registryPath,
         yamlWith([
           {
@@ -106,9 +111,18 @@ describe('createRegistry', () => {
       expect(result[1].slack_webhook).toBeUndefined();
     });
 
+    it('returns empty array when file exists but is empty', () => {
+      const deps = makeDeps();
+      deps._files.set(deps.registryPath, '');
+
+      const registry = createRegistry(deps);
+      const result = registry.loadRepos();
+      expect(result).toEqual([]);
+    });
+
     it('rejects invalid slack_webhook URL', () => {
       const deps = makeDeps();
-      (deps as any)._files.set(
+      deps._files.set(
         deps.registryPath,
         yamlWith([
           {
@@ -136,7 +150,7 @@ describe('createRegistry', () => {
       // File should exist now
       expect(deps.existsSync(deps.registryPath)).toBe(true);
       // Dir should have been created
-      expect((deps as any)._dirCreated()).toBe(true);
+      expect(deps._dirCreated()).toBe(true);
 
       const result = registry.loadRepos();
       expect(result).toHaveLength(1);
@@ -145,7 +159,7 @@ describe('createRegistry', () => {
 
     it('appends to existing repos', () => {
       const deps = makeDeps();
-      (deps as any)._files.set(
+      deps._files.set(
         deps.registryPath,
         yamlWith([{ path: '/projects/backend', name: 'backend' }]),
       );
@@ -160,7 +174,7 @@ describe('createRegistry', () => {
 
     it('rejects duplicate name', () => {
       const deps = makeDeps();
-      (deps as any)._files.set(
+      deps._files.set(
         deps.registryPath,
         yamlWith([{ path: '/projects/backend', name: 'backend' }]),
       );
@@ -171,9 +185,29 @@ describe('createRegistry', () => {
       ).toThrow(/duplicate.*name/i);
     });
 
+    it('preserves unknown fields in existing entries during write', () => {
+      const deps = makeDeps();
+      deps._files.set(
+        deps.registryPath,
+        yamlWith([
+          {
+            path: '/projects/backend',
+            name: 'backend',
+            description: 'The backend service',
+          },
+        ]),
+      );
+
+      const registry = createRegistry(deps);
+      registry.registerRepo({ path: '/projects/frontend', name: 'frontend' });
+
+      const written = deps._files.get(deps.registryPath)!;
+      expect(written).toContain('description: The backend service');
+    });
+
     it('rejects duplicate path', () => {
       const deps = makeDeps();
-      (deps as any)._files.set(
+      deps._files.set(
         deps.registryPath,
         yamlWith([{ path: '/projects/backend', name: 'backend' }]),
       );
@@ -190,7 +224,7 @@ describe('createRegistry', () => {
   describe('unregisterRepo()', () => {
     it('removes entry by name', () => {
       const deps = makeDeps();
-      (deps as any)._files.set(
+      deps._files.set(
         deps.registryPath,
         yamlWith([
           { path: '/projects/backend', name: 'backend' },
@@ -208,7 +242,7 @@ describe('createRegistry', () => {
 
     it('throws when name not found', () => {
       const deps = makeDeps();
-      (deps as any)._files.set(
+      deps._files.set(
         deps.registryPath,
         yamlWith([{ path: '/projects/backend', name: 'backend' }]),
       );
@@ -225,7 +259,7 @@ describe('createRegistry', () => {
   describe('findByName()', () => {
     it('returns matching entry', () => {
       const deps = makeDeps();
-      (deps as any)._files.set(
+      deps._files.set(
         deps.registryPath,
         yamlWith([
           { path: '/projects/backend', name: 'backend' },
@@ -241,7 +275,7 @@ describe('createRegistry', () => {
 
     it('returns null when no match', () => {
       const deps = makeDeps();
-      (deps as any)._files.set(
+      deps._files.set(
         deps.registryPath,
         yamlWith([{ path: '/projects/backend', name: 'backend' }]),
       );

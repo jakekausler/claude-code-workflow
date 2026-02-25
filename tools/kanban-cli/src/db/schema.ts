@@ -113,18 +113,23 @@ export const CREATE_TICKETS_JIRA_KEY_INDEX = `CREATE INDEX IF NOT EXISTS idx_tic
 export const CREATE_PARENT_TRACKING_CHILD_INDEX = `CREATE INDEX IF NOT EXISTS idx_parent_tracking_child ON parent_branch_tracking(child_stage_id)`;
 export const CREATE_PARENT_TRACKING_PARENT_INDEX = `CREATE INDEX IF NOT EXISTS idx_parent_tracking_parent ON parent_branch_tracking(parent_stage_id)`;
 
+// Migration: adds UNIQUE constraint on repos.name for existing databases
+// that were created before the column-level UNIQUE was added to CREATE_REPOS_TABLE.
+// For fresh databases this is a no-op (SQLite already creates an implicit unique index).
 export const CREATE_REPOS_NAME_UNIQUE_INDEX = `CREATE UNIQUE INDEX IF NOT EXISTS idx_repos_name ON repos(name)`;
 
 /**
- * ALTER TABLE migrations for adding columns to existing tables.
- * Each is wrapped in try/catch at execution time because SQLite throws
- * if the column already exists (no IF NOT EXISTS for ALTER TABLE ADD COLUMN).
+ * Migrations that may fail on existing databases and must be wrapped in
+ * try/catch at execution time.  Includes ALTER TABLE ADD COLUMN (SQLite
+ * throws if the column already exists) and CREATE UNIQUE INDEX (fails if
+ * existing data violates the constraint).
  */
 export const ALTER_TABLE_MIGRATIONS = [
   'ALTER TABLE stages ADD COLUMN is_draft BOOLEAN DEFAULT 0',
   'ALTER TABLE stages ADD COLUMN pending_merge_parents TEXT',
   'ALTER TABLE stages ADD COLUMN mr_target_branch TEXT',
   'ALTER TABLE dependencies ADD COLUMN target_repo_name TEXT',
+  CREATE_REPOS_NAME_UNIQUE_INDEX,
 ] as const;
 
 export const ALL_CREATE_STATEMENTS = [
@@ -140,5 +145,4 @@ export const ALL_CREATE_STATEMENTS = [
   CREATE_TICKETS_JIRA_KEY_INDEX,
   CREATE_PARENT_TRACKING_CHILD_INDEX,
   CREATE_PARENT_TRACKING_PARENT_INDEX,
-  CREATE_REPOS_NAME_UNIQUE_INDEX,
 ] as const;

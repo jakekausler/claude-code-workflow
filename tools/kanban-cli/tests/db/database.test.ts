@@ -275,6 +275,70 @@ describe('KanbanDatabase', () => {
     }
   });
 
+  it('migrates old DB with duplicate repo names without crashing', () => {
+    // Create a database with the old schema (no UNIQUE on repos.name)
+    const Database = require('better-sqlite3');
+    const oldDb = new Database(dbPath);
+    oldDb.exec(`
+      CREATE TABLE IF NOT EXISTS repos (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        path TEXT UNIQUE NOT NULL,
+        name TEXT NOT NULL,
+        registered_at TEXT NOT NULL
+      )
+    `);
+    // Insert two repos with the same name (allowed in old schema)
+    oldDb.prepare("INSERT INTO repos (path, name, registered_at) VALUES (?, ?, ?)").run(
+      '/repo/one', 'dup-name', new Date().toISOString()
+    );
+    oldDb.prepare("INSERT INTO repos (path, name, registered_at) VALUES (?, ?, ?)").run(
+      '/repo/two', 'dup-name', new Date().toISOString()
+    );
+    oldDb.close();
+
+    // Re-open with KanbanDatabase — the UNIQUE index migration should fail
+    // gracefully (caught by try/catch) and not crash the startup
+    const db = new KanbanDatabase(dbPath);
+    try {
+      const rows = db.raw().prepare("SELECT * FROM repos").all();
+      expect(rows).toHaveLength(2);
+    } finally {
+      db.close();
+    }
+  });
+
+  it('enforces UNIQUE on repos.name after migration on a clean old DB', () => {
+    // Create a database with the old schema (no UNIQUE on repos.name)
+    const Database = require('better-sqlite3');
+    const oldDb = new Database(dbPath);
+    oldDb.exec(`
+      CREATE TABLE IF NOT EXISTS repos (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        path TEXT UNIQUE NOT NULL,
+        name TEXT NOT NULL,
+        registered_at TEXT NOT NULL
+      )
+    `);
+    // Insert one repo (no duplicates)
+    oldDb.prepare("INSERT INTO repos (path, name, registered_at) VALUES (?, ?, ?)").run(
+      '/repo/one', 'unique-name', new Date().toISOString()
+    );
+    oldDb.close();
+
+    // Re-open with KanbanDatabase — UNIQUE index should succeed since no duplicates
+    const db = new KanbanDatabase(dbPath);
+    try {
+      // The unique index should now be enforced
+      expect(() => {
+        db.raw().prepare("INSERT INTO repos (path, name, registered_at) VALUES (?, ?, ?)").run(
+          '/repo/two', 'unique-name', new Date().toISOString()
+        );
+      }).toThrow();
+    } finally {
+      db.close();
+    }
+  });
+
   it('migrates existing DB without target_repo_name column', () => {
     // Create a database with the old schema (no target_repo_name)
     const Database = require('better-sqlite3');
