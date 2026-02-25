@@ -5,6 +5,7 @@ import { existsSync, readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import type { DataService } from './services/data-service.js';
+import { boardRoutes } from './routes/board.js';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -56,6 +57,8 @@ export async function createServer(
     status: 'ok',
     timestamp: new Date().toISOString(),
   }));
+
+  await app.register(boardRoutes);
 
   // --- Static serving / dev proxy ---
   if (!isDev) {
