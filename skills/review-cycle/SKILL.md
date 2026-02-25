@@ -249,11 +249,9 @@ glab mr view --output json | jq '.iid'
     IF `WORKFLOW_SLACK_WEBHOOK` is set:
 
       **Preferred:** Use the `mcp__kanban__slack_notify` tool:
-      - message: `"Review Comments Addressed"`
+      - message: `"Review Comments Addressed — Round N, M comments addressed"`
       - stage: `STAGE-XXX-YYY-ZZZ`
       - title: `<stage title>`
-      - round: `N`
-      - comments_addressed: `M`
       - url: `<MR/PR URL>`
 
       **Fallback (if MCP unavailable):**
