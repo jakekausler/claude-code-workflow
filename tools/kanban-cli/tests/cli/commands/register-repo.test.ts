@@ -2,9 +2,8 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { stringify as yamlStringify } from 'yaml';
 import { createRegistry } from '../../../src/repos/registry.js';
-import type { RegistryDeps } from '../../../src/repos/registry.js';
+import { makeDeps } from './__helpers/mock-registry.js';
 
 /**
  * Tests for the register-repo command logic.
@@ -20,28 +19,6 @@ import type { RegistryDeps } from '../../../src/repos/registry.js';
  * The registry itself is thoroughly tested in tests/repos/registry.test.ts.
  * These tests verify the integration flow the CLI command would perform.
  */
-
-interface MockDeps extends RegistryDeps {
-  _files: Map<string, string>;
-}
-
-function makeDeps(): MockDeps {
-  const files = new Map<string, string>();
-  return {
-    registryPath: '/fake/.config/kanban-workflow/repos.yaml',
-    readFile: (p: string) => {
-      const content = files.get(p);
-      if (content === undefined) throw new Error(`ENOENT: ${p}`);
-      return content;
-    },
-    writeFile: (p: string, data: string) => {
-      files.set(p, data);
-    },
-    existsSync: (p: string) => files.has(p),
-    mkdirSync: () => {},
-    _files: files,
-  };
-}
 
 describe('register-repo command logic', () => {
   let tmpDir: string;

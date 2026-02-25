@@ -22,6 +22,13 @@ export const registerRepoCommand = new Command('register-repo')
         throw new Error(`Path does not exist: ${resolved}`);
       }
 
+      const epicsDir = path.join(resolved, 'epics');
+      if (!fs.existsSync(epicsDir)) {
+        process.stderr.write(`Error: '${resolved}' does not contain an epics/ directory\n`);
+        process.exit(2);
+        return;
+      }
+
       const name = options.name ?? path.basename(resolved);
 
       const registry = createRegistry();
@@ -34,28 +41,33 @@ export const registerRepoCommand = new Command('register-repo')
       // Sync the newly registered repo into the database
       const config = loadConfig({ repoPath: resolved });
       const db = new KanbanDatabase();
-      const syncResult = syncRepo({ repoPath: resolved, db, config });
-      db.close();
+      try {
+        const syncResult = syncRepo({ repoPath: resolved, db, config });
 
-      const result = {
-        success: true,
-        repo: {
-          name,
-          path: resolved,
-          ...(options.slackWebhook ? { slack_webhook: options.slackWebhook } : {}),
-        },
-        sync: {
-          epics: syncResult.epics,
-          tickets: syncResult.tickets,
-          stages: syncResult.stages,
-          dependencies: syncResult.dependencies,
-          errors: syncResult.errors,
-        },
-      };
+        const result = {
+          success: true,
+          repo: {
+            name,
+            path: resolved,
+            ...(options.slackWebhook ? { slack_webhook: options.slackWebhook } : {}),
+          },
+          sync: {
+            epics: syncResult.epics,
+            tickets: syncResult.tickets,
+            stages: syncResult.stages,
+            dependencies: syncResult.dependencies,
+            errors: syncResult.errors,
+          },
+        };
 
-      const indent = options.pretty ? 2 : undefined;
-      const output = JSON.stringify(result, null, indent) + '\n';
-      writeOutput(output, options.output);
+        const indent = options.pretty ? 2 : undefined;
+        const output = JSON.stringify(result, null, indent) + '\n';
+        writeOutput(output, options.output);
+        db.close();
+      } catch (err) {
+        db.close();
+        throw err;
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       process.stderr.write(`Error: ${message}\n`);
