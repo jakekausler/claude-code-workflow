@@ -4,6 +4,7 @@ export interface GraphEpicRow {
   id: string;
   title: string;
   status: string;
+  repo?: string;
 }
 
 export interface GraphTicketRow {
@@ -11,6 +12,7 @@ export interface GraphTicketRow {
   epic_id: string;
   title: string;
   status: string;
+  repo?: string;
 }
 
 export interface GraphStageRow {
@@ -19,6 +21,7 @@ export interface GraphStageRow {
   epic_id: string;
   title: string;
   status: string;
+  repo?: string;
 }
 
 export interface GraphDependencyRow {
@@ -28,6 +31,7 @@ export interface GraphDependencyRow {
   from_type: string;
   to_type: string;
   resolved: boolean;
+  repo?: string;
 }
 
 // ---------- Output types ----------
@@ -37,6 +41,7 @@ export interface GraphNode {
   type: 'epic' | 'ticket' | 'stage';
   status: string;
   title: string;
+  repo?: string;
 }
 
 export interface GraphEdge {
@@ -44,6 +49,7 @@ export interface GraphEdge {
   to: string;
   type: 'depends_on';
   resolved: boolean;
+  cross_repo?: boolean;
 }
 
 export interface GraphOutput {
@@ -51,6 +57,7 @@ export interface GraphOutput {
   edges: GraphEdge[];
   cycles: string[][];
   critical_path: string[];
+  repos?: string[];
 }
 
 export interface GraphFilters {
@@ -64,6 +71,8 @@ export interface BuildGraphInput {
   stages: GraphStageRow[];
   dependencies: GraphDependencyRow[];
   filters?: GraphFilters;
+  global?: boolean;
+  repos?: string[];
 }
 
 // ---------- Cycle detection (Tarjan's algorithm for SCCs) ----------
@@ -169,7 +178,7 @@ function computeCriticalPath(
 // ---------- Core logic ----------
 
 export function buildGraph(input: BuildGraphInput): GraphOutput {
-  const { epics, tickets, stages, dependencies, filters } = input;
+  const { epics, tickets, stages, dependencies, filters, global: isGlobal, repos } = input;
 
   // Apply filters
   let filteredEpics = epics;
@@ -189,18 +198,35 @@ export function buildGraph(input: BuildGraphInput): GraphOutput {
   // Build nodes
   const nodes: GraphNode[] = [];
   const nodeIdSet = new Set<string>();
+  // Map node ID -> repo for cross-repo edge detection
+  const nodeToRepo = new Map<string, string | undefined>();
 
   for (const epic of filteredEpics) {
-    nodes.push({ id: epic.id, type: 'epic', status: epic.status, title: epic.title });
+    const node: GraphNode = { id: epic.id, type: 'epic', status: epic.status, title: epic.title };
+    if (isGlobal && epic.repo) {
+      node.repo = epic.repo;
+    }
+    nodes.push(node);
     nodeIdSet.add(epic.id);
+    nodeToRepo.set(epic.id, epic.repo);
   }
   for (const ticket of filteredTickets) {
-    nodes.push({ id: ticket.id, type: 'ticket', status: ticket.status, title: ticket.title });
+    const node: GraphNode = { id: ticket.id, type: 'ticket', status: ticket.status, title: ticket.title };
+    if (isGlobal && ticket.repo) {
+      node.repo = ticket.repo;
+    }
+    nodes.push(node);
     nodeIdSet.add(ticket.id);
+    nodeToRepo.set(ticket.id, ticket.repo);
   }
   for (const stage of filteredStages) {
-    nodes.push({ id: stage.id, type: 'stage', status: stage.status, title: stage.title });
+    const node: GraphNode = { id: stage.id, type: 'stage', status: stage.status, title: stage.title };
+    if (isGlobal && stage.repo) {
+      node.repo = stage.repo;
+    }
+    nodes.push(node);
     nodeIdSet.add(stage.id);
+    nodeToRepo.set(stage.id, stage.repo);
   }
 
   // Build edges (only for deps where both from and to are in our node set)
@@ -211,12 +237,23 @@ export function buildGraph(input: BuildGraphInput): GraphOutput {
   for (const dep of dependencies) {
     if (!nodeIdSet.has(dep.from_id) && !nodeIdSet.has(dep.to_id)) continue;
 
-    edges.push({
+    const edge: GraphEdge = {
       from: dep.from_id,
       to: dep.to_id,
       type: 'depends_on',
       resolved: dep.resolved,
-    });
+    };
+
+    // Mark cross-repo edges in global mode
+    if (isGlobal) {
+      const fromRepo = nodeToRepo.get(dep.from_id);
+      const toRepo = nodeToRepo.get(dep.to_id);
+      if (fromRepo && toRepo && fromRepo !== toRepo) {
+        edge.cross_repo = true;
+      }
+    }
+
+    edges.push(edge);
 
     // Build adjacency for all deps (for cycle detection)
     const allNeighbors = allAdjacency.get(dep.from_id) || [];
@@ -243,5 +280,12 @@ export function buildGraph(input: BuildGraphInput): GraphOutput {
   // Compute critical path using unresolved deps only
   const criticalPath = computeCriticalPath(unresolvedAdjacency, nodeIdSet);
 
-  return { nodes, edges, cycles, critical_path: criticalPath };
+  const output: GraphOutput = { nodes, edges, cycles, critical_path: criticalPath };
+
+  // Add repos array in global mode
+  if (isGlobal && repos) {
+    output.repos = repos;
+  }
+
+  return output;
 }

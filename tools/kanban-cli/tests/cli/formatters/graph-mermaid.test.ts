@@ -329,4 +329,61 @@ describe('formatGraphAsMermaid', () => {
     expect(output).toContain('T001_001');
     expect(output).toContain('S001_001_001');
   });
+
+  it('global mode groups nodes by repo in subgraphs', () => {
+    const graph: GraphOutput = {
+      nodes: [
+        { id: 'EPIC-001', type: 'epic', status: 'In Progress', title: 'Backend Auth', repo: 'backend' },
+        { id: 'TICKET-001-001', type: 'ticket', status: 'In Progress', title: 'Login API', repo: 'backend' },
+        { id: 'EPIC-002', type: 'epic', status: 'In Progress', title: 'Frontend UI', repo: 'frontend' },
+        { id: 'TICKET-002-001', type: 'ticket', status: 'In Progress', title: 'Login Form', repo: 'frontend' },
+      ],
+      edges: [],
+      cycles: [],
+      critical_path: [],
+      repos: ['backend', 'frontend'],
+    };
+    const output = formatGraphAsMermaid(graph);
+    // Should have repo subgraphs
+    expect(output).toContain('subgraph repo_backend');
+    expect(output).toContain('subgraph repo_frontend');
+    // Inside repo subgraphs, there should be epic subgraphs
+    expect(output).toContain('subgraph sub_E001');
+    expect(output).toContain('subgraph sub_E002');
+  });
+
+  it('cross-repo edges use thick dashed style with label', () => {
+    const graph: GraphOutput = {
+      nodes: [
+        { id: 'STAGE-001-001-001', type: 'stage', status: 'Complete', title: 'S1', repo: 'backend' },
+        { id: 'STAGE-002-001-001', type: 'stage', status: 'Not Started', title: 'S2', repo: 'frontend' },
+      ],
+      edges: [
+        { from: 'STAGE-001-001-001', to: 'STAGE-002-001-001', type: 'depends_on', resolved: true, cross_repo: true },
+      ],
+      cycles: [],
+      critical_path: [],
+      repos: ['backend', 'frontend'],
+    };
+    const output = formatGraphAsMermaid(graph);
+    expect(output).toContain('S001_001_001 -.->|cross-repo| S002_001_001');
+  });
+
+  it('same-repo edges do not use cross-repo label', () => {
+    const graph: GraphOutput = {
+      nodes: [
+        { id: 'STAGE-001-001-001', type: 'stage', status: 'Complete', title: 'S1', repo: 'backend' },
+        { id: 'STAGE-001-001-002', type: 'stage', status: 'Not Started', title: 'S2', repo: 'backend' },
+      ],
+      edges: [
+        { from: 'STAGE-001-001-001', to: 'STAGE-001-001-002', type: 'depends_on', resolved: true },
+      ],
+      cycles: [],
+      critical_path: [],
+      repos: ['backend'],
+    };
+    const output = formatGraphAsMermaid(graph);
+    expect(output).toContain('S001_001_001 --> S001_001_002');
+    expect(output).not.toContain('cross-repo');
+  });
 });
