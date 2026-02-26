@@ -7,6 +7,8 @@ import { fileURLToPath } from 'url';
 import os from 'os';
 import type { DataService } from './services/data-service.js';
 import type { OrchestratorClient } from './services/orchestrator-client.js';
+import type { SessionPipeline } from './services/session-pipeline.js';
+import { type FileWatcher, type FileChangeEvent } from './services/file-watcher.js';
 import { boardRoutes } from './routes/board.js';
 import { epicRoutes } from './routes/epics.js';
 import { ticketRoutes } from './routes/tickets.js';
@@ -20,6 +22,7 @@ declare module 'fastify' {
     dataService: DataService | null;
     claudeProjectsDir: string;
     orchestratorClient: OrchestratorClient | null;
+    sessionPipeline: SessionPipeline | null;
   }
 }
 
@@ -33,6 +36,8 @@ export interface ServerOptions {
   dataService?: DataService;
   claudeProjectsDir?: string;
   orchestratorClient?: OrchestratorClient;
+  sessionPipeline?: SessionPipeline;
+  fileWatcher?: FileWatcher;
 }
 
 export async function createServer(
@@ -75,6 +80,25 @@ export async function createServer(
   if (orchestratorClient) {
     app.addHook('onReady', async () => orchestratorClient.connect());
     app.addHook('onClose', async () => orchestratorClient.disconnect());
+  }
+
+  // SessionPipeline decoration — JSONL session parsing + caching
+  const sessionPipeline = options.sessionPipeline ?? null;
+  app.decorate('sessionPipeline', sessionPipeline);
+
+  // FileWatcher — watches Claude project directories for JSONL changes
+  if (options.fileWatcher) {
+    const fw = options.fileWatcher;
+    app.addHook('onReady', async () => fw.start());
+    app.addHook('onClose', async () => fw.stop());
+
+    // Invalidate cache on file changes
+    fw.on('file-change', (event: FileChangeEvent) => {
+      sessionPipeline?.invalidateSession(
+        join(claudeProjectsDir, event.projectId),
+        event.sessionId,
+      );
+    });
   }
 
   // --- API routes ---
