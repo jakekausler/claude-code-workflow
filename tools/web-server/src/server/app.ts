@@ -147,6 +147,26 @@ export async function createServer(
         stageId: entry.stageId,
       });
     });
+
+    oc.on('approval-requested', (data) => {
+      broadcastEvent('approval-requested', data);
+    });
+
+    oc.on('question-requested', (data) => {
+      broadcastEvent('question-requested', data);
+    });
+
+    oc.on('approval-cancelled', (data) => {
+      broadcastEvent('approval-cancelled', data);
+    });
+
+    oc.on('message-queued', (data) => {
+      broadcastEvent('message-queued', data);
+    });
+
+    oc.on('message-sent', (data) => {
+      broadcastEvent('message-sent', data);
+    });
   }
 
   // --- API routes ---

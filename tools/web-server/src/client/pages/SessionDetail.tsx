@@ -3,6 +3,7 @@ import { useEffect, useMemo, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Loader2, AlertCircle, ArrowLeft } from 'lucide-react';
 import { ChatHistory } from '../components/chat/ChatHistory.js';
+import { MessageInput } from '../components/chat/MessageInput.js';
 import { ContextAccordion } from '../components/chat/context/ContextAccordion.js';
 import { SessionContextPanel } from '../components/chat/context/SessionContextPanel.js';
 import { PendingBadge } from '../components/interaction/PendingBadge.js';
@@ -25,6 +26,11 @@ export function SessionDetail() {
     const approvalCount = s.pendingApprovals.length;
     const questionCount = s.pendingQuestions.length;
     return approvalCount + questionCount;
+  });
+
+  const queuedMessage = useInteractionStore((s) => {
+    // Get the queued message for this session using sessionId as the identifier
+    return s.queuedMessages.get(sessionId || '');
   });
 
   // Reset view state when session changes
@@ -142,6 +148,11 @@ export function SessionDetail() {
             items={conversation?.items ?? []}
             contextStats={contextResult?.statsMap}
             totalPhases={conversation?.totalPhases}
+          />
+          <MessageInput
+            stageId={sessionId || ''}
+            disabled={!session.isOngoing}
+            queuedMessage={queuedMessage}
           />
         </div>
         <div className="w-80 flex-shrink-0 hidden lg:block">
