@@ -3,11 +3,13 @@ import { formatTimestamp, formatTokenCount } from '../../utils/session-formatter
 import { TextItem } from './items/TextItem.js';
 import { ThinkingItem } from './items/ThinkingItem.js';
 import { LinkedToolItem } from './items/LinkedToolItem.js';
+import { SubagentItem } from './items/SubagentItem.js';
 import type {
   EnhancedAIChunk as EnhancedAIChunkType,
   AIChunk as AIChunkType,
   SemanticStep,
   ToolExecution,
+  Process,
   TextContent,
 } from '../../types/session.js';
 
@@ -98,7 +100,7 @@ export function AIChunk({ chunk }: Props) {
       </div>
       <div className="flex-1 min-w-0">
         {chunk.semanticSteps.map((step, i) => (
-          <AIStepRenderer key={i} step={step} toolExecMap={toolExecutions} />
+          <AIStepRenderer key={i} step={step} toolExecMap={toolExecutions} subagents={chunk.subagents} />
         ))}
         <div className="flex items-center gap-3 mt-2 text-xs text-slate-400">
           {model && <span>{model}</span>}
@@ -113,13 +115,15 @@ export function AIChunk({ chunk }: Props) {
 function AIStepRenderer({
   step,
   toolExecMap,
+  subagents,
 }: {
   step: SemanticStep;
   toolExecMap: Map<string, ToolExecution>;
+  subagents: Process[];
 }) {
   switch (step.type) {
     case 'thinking':
-      return <ThinkingItem content={step.content} />;
+      return <ThinkingItem content={step.content} tokenCount={Math.ceil(step.content.length / 4)} />;
 
     case 'output':
       return <TextItem content={step.content} />;
@@ -141,13 +145,19 @@ function AIStepRenderer({
       // Displayed as part of LinkedToolItem
       return null;
 
-    case 'subagent':
-      // Placeholder — SubagentItem will be built in Task 10
+    case 'subagent': {
+      const matchedProcess = step.subagentId
+        ? subagents.find((p) => p.id === step.subagentId)
+        : undefined;
+      if (matchedProcess) {
+        return <SubagentItem process={matchedProcess} />;
+      }
       return (
         <div className="text-xs text-slate-400 italic my-1 border border-slate-200 rounded px-2 py-1">
           Subagent: {step.subagentId || 'unknown'}
         </div>
       );
+    }
 
     case 'interruption':
       return (
