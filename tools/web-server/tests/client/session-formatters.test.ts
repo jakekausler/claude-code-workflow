@@ -98,10 +98,33 @@ describe('session-formatters', () => {
   });
 
   describe('formatTimestamp', () => {
-    it('formats a date as time string', () => {
+    it('formats a Date object as time string', () => {
       const date = new Date('2026-02-26T14:30:00Z');
       const result = formatTimestamp(date);
       expect(result).toMatch(/\d{1,2}:\d{2}/);
+    });
+
+    it('formats an ISO string as time string', () => {
+      const result = formatTimestamp('2026-02-26T14:30:00Z');
+      expect(result).toMatch(/\d{1,2}:\d{2}/);
+    });
+
+    it('formats a numeric timestamp (ms) as time string', () => {
+      const ms = new Date('2026-02-26T14:30:00Z').getTime();
+      const result = formatTimestamp(ms);
+      expect(result).toMatch(/\d{1,2}:\d{2}/);
+    });
+
+    it('returns empty string for invalid date', () => {
+      expect(formatTimestamp('not-a-date')).toBe('');
+    });
+
+    it('returns empty string for NaN', () => {
+      expect(formatTimestamp(NaN)).toBe('');
+    });
+
+    it('returns empty string for invalid Date object', () => {
+      expect(formatTimestamp(new Date('invalid'))).toBe('');
     });
   });
 });

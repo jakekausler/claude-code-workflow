@@ -127,8 +127,12 @@ export function extractResultContent(result: { content: string | unknown[]; isEr
 }
 
 /**
- * Format a Date as a local time string (HH:MM).
+ * Format a Date (or ISO string / epoch ms) as a local time string (HH:MM).
+ * Accepts Date objects, ISO 8601 strings, or numeric timestamps (ms since epoch).
+ * Returns an empty string for invalid / unparseable values.
  */
-export function formatTimestamp(date: Date): string {
-  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+export function formatTimestamp(date: Date | string | number): string {
+  const d = date instanceof Date ? date : new Date(date);
+  if (isNaN(d.getTime())) return '';
+  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }

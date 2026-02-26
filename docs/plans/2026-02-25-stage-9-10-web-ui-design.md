@@ -17,13 +17,15 @@
 9. [Stage 9D: Detail Views](#9-stage-9d-detail-views)
 10. [Stage 9E: Session JSONL Engine](#10-stage-9e-session-jsonl-engine)
 11. [Stage 9F: Session Detail Display](#11-stage-9f-session-detail-display)
+11.5. [Stage 9F.5: Rendering Parity with claude-devtools](#115-stage-9f5-rendering-parity-with-claude-devtools)
 12. [Stage 9G: Real-Time Updates](#12-stage-9g-real-time-updates)
 13. [Stage 10A: Orchestrator Communication](#13-stage-10a-orchestrator-communication)
 14. [Stage 10B: Bidirectional Interaction](#14-stage-10b-bidirectional-interaction)
 15. [Stage 10C: Live Session Status](#15-stage-10c-live-session-status)
 16. [Stage 10D: Deployment Abstraction](#16-stage-10d-deployment-abstraction)
-17. [Key Design Decisions](#17-key-design-decisions)
-18. [Research References](#18-research-references)
+17. [Stage 10E: Drawer Session Integration](#17-stage-10e-drawer-session-integration)
+18. [Key Design Decisions](#18-key-design-decisions)
+19. [Research References](#19-research-references)
 
 ---
 
@@ -453,6 +455,25 @@ Ref: claude-devtools `src/renderer/components/chat/ContextBadge.tsx`, `SessionCo
 
 ---
 
+## 11.5 Stage 9F.5: Rendering Parity with claude-devtools
+
+Upgrade all session rendering components to match claude-devtools quality. 16 tasks covering:
+- Critical bug fixes (tool duration, orphan detection, subagent wiring, thinking tokens)
+- Syntax highlighting (custom character-scanning highlighter, 9 languages)
+- LastOutputDisplay + AI chunk collapse/expand
+- User message markdown rendering
+- LCS line-level diff for EditRenderer
+- CodeBlockViewer pattern for ReadRenderer (line numbers + highlighting)
+- Enhanced CompactChunk with token deltas
+- ANSI stripping, expanded tool summaries, ContextBadge wiring
+
+**Dependencies:** 9F (base components)
+**Approach:** Recreate from claude-devtools reference (MIT), don't fork/import.
+
+See `docs/plans/stage-9-10-substages/stage-9f5-rendering-parity.md` for full spec.
+
+---
+
 ## 12. Stage 9G: Real-Time Updates
 
 **Goal:** SSE for live updates across all views.
@@ -600,7 +621,26 @@ Ref: vibe-kanban `crates/deployment/src/lib.rs`, `crates/remote/src/auth/`, `doc
 
 ---
 
-## 17. Key Design Decisions
+## 17. Stage 10E: Drawer Session Integration
+
+Embed session viewing directly in stage and ticket detail drawers, replacing the standalone navigation link with an integrated tabbed experience.
+
+**Key features:**
+- Tab navigation in stage/ticket drawers: "Details" | "Session"
+- Session history dropdown for stages (one session per phase/column transition)
+- Embedded ChatHistory + SessionContextPanel adapted for drawer width
+- Read-only mode for past/completed sessions
+- Ticket convert session viewing
+
+**Dependencies:** 9F (session components), 9D (drawer system), 10C (live session status)
+
+**New data:** Session history per stage (junction table or JSON), ticket convert session lookup.
+
+See `docs/plans/stage-9-10-substages/stage-10e-drawer-session-integration.md` for full spec.
+
+---
+
+## 18. Key Design Decisions
 
 | Decision | Choice | Rationale |
 |----------|--------|-----------|
@@ -617,7 +657,7 @@ Ref: vibe-kanban `crates/deployment/src/lib.rs`, `crates/remote/src/auth/`, `doc
 
 ---
 
-## 18. Research References
+## 19. Research References
 
 All research files are in `docs/research/stage-9-10-web-ui/`:
 
