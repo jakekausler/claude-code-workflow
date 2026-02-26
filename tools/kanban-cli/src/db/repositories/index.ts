@@ -1,4 +1,4 @@
-export type { EpicRow, TicketRow, StageRow, DependencyRow, SummaryRow, MrCommentTrackingRow } from './types.js';
+export type { EpicRow, TicketRow, StageRow, DependencyRow, SummaryRow, MrCommentTrackingRow, StageSessionRow } from './types.js';
 export { RepoRepository } from './repo-repository.js';
 export { EpicRepository } from './epic-repository.js';
 export type { EpicUpsertData } from './epic-repository.js';
@@ -12,3 +12,4 @@ export { SummaryRepository } from './summary-repository.js';
 export type { SummaryUpsertData } from './summary-repository.js';
 export { CommentTrackingRepository } from './comment-tracking-repository.js';
 export type { CommentTrackingUpsertData } from './comment-tracking-repository.js';
+export { StageSessionRepository } from './stage-session-repository.js';
