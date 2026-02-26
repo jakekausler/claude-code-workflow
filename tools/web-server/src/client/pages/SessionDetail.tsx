@@ -27,12 +27,9 @@ export function SessionDetail() {
     (_channel: string, data: unknown) => {
       const event = data as { sessionId?: string; projectId?: string };
       // Only re-fetch if this event is for the session we're viewing
-      if (event.sessionId === sessionId || event.projectId === projectId) {
+      if (event.sessionId === sessionId && event.projectId === projectId) {
         void queryClient.invalidateQueries({
           queryKey: ['session', projectId, sessionId],
-        });
-        void queryClient.invalidateQueries({
-          queryKey: ['session', projectId, sessionId, 'metrics'],
         });
       }
     },

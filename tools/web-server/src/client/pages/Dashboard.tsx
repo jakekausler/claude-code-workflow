@@ -14,12 +14,10 @@ export function Dashboard() {
   const queryClient = useQueryClient();
 
   const handleSSE = useCallback(
-    (channel: string, _data: unknown) => {
-      if (channel === 'board-update' || channel === 'stage-transition') {
-        void queryClient.invalidateQueries({ queryKey: ['stats'] });
-        void queryClient.invalidateQueries({ queryKey: ['stages'] });
-        void queryClient.invalidateQueries({ queryKey: ['board'] });
-      }
+    (_channel: string, _data: unknown) => {
+      void queryClient.invalidateQueries({ queryKey: ['stats'] });
+      void queryClient.invalidateQueries({ queryKey: ['stages'] });
+      void queryClient.invalidateQueries({ queryKey: ['board'] });
     },
     [queryClient],
   );
