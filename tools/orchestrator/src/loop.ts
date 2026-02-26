@@ -460,13 +460,15 @@ export function createOrchestrator(config: OrchestratorConfig, deps: Orchestrato
           const worktreeInfo = await worktreeManager.create(stage.worktreeBranch, config.repoPath);
           const sessionLogger = logger.createSessionLogger(stage.id, config.logDir);
 
+          const now = (deps.now ?? Date.now)();
+
           const workerInfo: WorkerInfo = {
             stageId: stage.id,
             stageFilePath,
             worktreePath: worktreeInfo.path,
             worktreeIndex: worktreeInfo.index,
             statusBefore,
-            startTime: (deps.now ?? Date.now)(),
+            startTime: now,
           };
 
           activeWorkers.set(worktreeInfo.index, workerInfo);
@@ -476,9 +478,9 @@ export function createOrchestrator(config: OrchestratorConfig, deps: Orchestrato
           registry.register({
             stageId: stage.id,
             sessionId: '',
-            processId: 0,
+            processId: 0, // TODO: SessionExecutor.spawn() does not expose child PID; wire when available
             worktreePath: worktreeInfo.path,
-            spawnedAt: (deps.now ?? Date.now)(),
+            spawnedAt: now,
           });
 
           const sessionPromise = sessionExecutor.spawn(
@@ -490,6 +492,9 @@ export function createOrchestrator(config: OrchestratorConfig, deps: Orchestrato
               worktreeIndex: worktreeInfo.index,
               model: config.model,
               workflowEnv: config.workflowEnv,
+              // TODO: Persist session_id to DB via stages.updateSessionId(stageId, sessionId)
+              // Deferred: OrchestratorDeps does not have a stages repository dependency yet.
+              // The web server reads session_id from the registry via WebSocket for now.
               onSessionId: (sessionId: string) => {
                 registry.activate(stage.id, sessionId);
               },
