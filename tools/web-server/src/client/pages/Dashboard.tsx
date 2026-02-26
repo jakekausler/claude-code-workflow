@@ -1,12 +1,28 @@
+import { useCallback } from 'react';
 import { Link } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import { useStats, useBoard, useStages } from '../api/hooks.js';
 import { AlertTriangle, Activity, Layers, GitBranch } from 'lucide-react';
 import { slugToTitle } from '../utils/formatters.js';
+import { useSSE } from '../api/use-sse.js';
 
 export function Dashboard() {
   const { data: stats, isLoading: statsLoading, error: statsError } = useStats();
   const { data: board, error: boardError } = useBoard({ column: 'backlog' });
   const { data: stages, error: stagesError } = useStages();
+
+  const queryClient = useQueryClient();
+
+  const handleSSE = useCallback(
+    (_channel: string, _data: unknown) => {
+      void queryClient.invalidateQueries({ queryKey: ['stats'] });
+      void queryClient.invalidateQueries({ queryKey: ['stages'] });
+      void queryClient.invalidateQueries({ queryKey: ['board'] });
+    },
+    [queryClient],
+  );
+
+  useSSE(['board-update', 'stage-transition'], handleSSE);
 
   const blockedCount = board?.columns['backlog']?.length ?? 0;
 

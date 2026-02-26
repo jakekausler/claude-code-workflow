@@ -6,7 +6,7 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import os from 'os';
 import type { DataService } from './services/data-service.js';
-import type { OrchestratorClient } from './services/orchestrator-client.js';
+import type { OrchestratorClient, SessionInfo } from './services/orchestrator-client.js';
 import type { SessionPipeline } from './services/session-pipeline.js';
 import { type FileWatcher, type FileChangeEvent } from './services/file-watcher.js';
 import { boardRoutes } from './routes/board.js';
@@ -16,6 +16,7 @@ import { stageRoutes } from './routes/stages.js';
 import { graphRoutes } from './routes/graph.js';
 import { sessionRoutes } from './routes/sessions.js';
 import { repoRoutes } from './routes/repos.js';
+import { eventRoutes, broadcastEvent } from './routes/events.js';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -23,6 +24,7 @@ declare module 'fastify' {
     claudeProjectsDir: string;
     orchestratorClient: OrchestratorClient | null;
     sessionPipeline: SessionPipeline | null;
+    fileWatcher: FileWatcher | null;
   }
 }
 
@@ -86,6 +88,9 @@ export async function createServer(
   const sessionPipeline = options.sessionPipeline ?? null;
   app.decorate('sessionPipeline', sessionPipeline);
 
+  // FileWatcher decoration — available to route plugins (e.g. SSE) via app.fileWatcher
+  app.decorate('fileWatcher', options.fileWatcher ?? null);
+
   // FileWatcher — watches Claude project directories for JSONL changes
   if (options.fileWatcher) {
     const fw = options.fileWatcher;
@@ -98,6 +103,48 @@ export async function createServer(
         join(claudeProjectsDir, event.projectId),
         event.sessionId,
       );
+      // Push SSE event to connected browsers
+      broadcastEvent('session-update', {
+        projectId: event.projectId,
+        sessionId: event.sessionId,
+        isSubagent: event.isSubagent,
+      });
+    });
+  }
+
+  // OrchestratorClient → SSE broadcast for session lifecycle events
+  if (orchestratorClient) {
+    const oc = orchestratorClient;
+
+    oc.on('session-registered', (entry: SessionInfo) => {
+      broadcastEvent('stage-transition', {
+        stageId: entry.stageId,
+        sessionId: entry.sessionId,
+        type: 'session_started',
+        timestamp: entry.spawnedAt,
+      });
+    });
+
+    oc.on('session-status', (entry: SessionInfo) => {
+      broadcastEvent('board-update', {
+        type: 'session_status',
+        stageId: entry.stageId,
+        sessionId: entry.sessionId,
+        status: entry.status,
+      });
+    });
+
+    oc.on('session-ended', (entry: SessionInfo) => {
+      broadcastEvent('stage-transition', {
+        stageId: entry.stageId,
+        sessionId: entry.sessionId,
+        type: 'session_ended',
+        timestamp: entry.lastActivity,
+      });
+      broadcastEvent('board-update', {
+        type: 'session_ended',
+        stageId: entry.stageId,
+      });
     });
   }
 
@@ -114,6 +161,7 @@ export async function createServer(
   await app.register(graphRoutes);
   await app.register(sessionRoutes);
   await app.register(repoRoutes);
+  await app.register(eventRoutes);
 
   // --- Static serving / dev proxy ---
   if (!isDev) {

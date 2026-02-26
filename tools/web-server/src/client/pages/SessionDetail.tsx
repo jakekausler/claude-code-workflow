@@ -1,9 +1,11 @@
 import { useParams, useNavigate } from 'react-router-dom';
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useCallback } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Loader2, AlertCircle, ArrowLeft } from 'lucide-react';
 import { ChatHistory } from '../components/chat/ChatHistory.js';
 import { SessionContextPanel } from '../components/chat/context/SessionContextPanel.js';
 import { useSessionDetail } from '../api/hooks.js';
+import { useSSE } from '../api/use-sse.js';
 import { formatDuration, formatCost, formatTokenCount } from '../utils/session-formatters.js';
 import { useSessionViewStore } from '../store/session-store.js';
 import { transformChunksToConversation } from '../utils/group-transformer.js';
@@ -18,6 +20,23 @@ export function SessionDetail() {
   useEffect(() => {
     resetView();
   }, [projectId, sessionId, resetView]);
+
+  const queryClient = useQueryClient();
+
+  const handleSSE = useCallback(
+    (_channel: string, data: unknown) => {
+      const event = data as { sessionId?: string; projectId?: string };
+      // Only re-fetch if this event is for the session we're viewing
+      if (event.sessionId === sessionId && event.projectId === projectId) {
+        void queryClient.invalidateQueries({
+          queryKey: ['session', projectId, sessionId],
+        });
+      }
+    },
+    [queryClient, projectId, sessionId],
+  );
+
+  useSSE(['session-update'], handleSSE);
 
   const { data: session, isLoading, error } = useSessionDetail(projectId || '', sessionId || '');
 
