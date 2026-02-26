@@ -138,6 +138,56 @@ describe('FileWatcher decoration', () => {
   });
 });
 
+describe('SSE integration', () => {
+  let app: FastifyInstance;
+  let tempDir: string;
+  let baseUrl: string;
+
+  beforeEach(async () => {
+    tempDir = mkdtempSync(join(tmpdir(), 'sse-int-test-'));
+    const fw = new FileWatcher({ rootDir: tempDir, debounceMs: 10 });
+    app = await createServer({
+      logger: false,
+      claudeProjectsDir: tempDir,
+      fileWatcher: fw,
+      sessionPipeline: new SessionPipeline(),
+    });
+    const address = await app.listen({ port: 0 });
+    baseUrl = address;
+  });
+
+  afterEach(async () => {
+    await app?.close();
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it('full pipeline: broadcast reaches connected SSE client', async () => {
+    const controller = new AbortController();
+    try {
+      const response = await fetch(`${baseUrl}/api/events`, {
+        signal: controller.signal,
+      });
+      const reader = response.body!.getReader();
+      const decoder = new TextDecoder();
+
+      // Read and discard the initial "connected" event
+      await reader.read();
+
+      // Broadcast a session-update
+      broadcastEvent('session-update', { projectId: 'proj-1', sessionId: 'sess-1', isSubagent: false });
+
+      // Read the next chunk — should contain the broadcast
+      const { value } = await reader.read();
+      const text = decoder.decode(value);
+      expect(text).toContain('event: session-update');
+      expect(text).toContain('"projectId":"proj-1"');
+      expect(text).toContain('"sessionId":"sess-1"');
+    } finally {
+      controller.abort();
+    }
+  });
+});
+
 describe('OrchestratorClient → SSE broadcast', () => {
   let app: FastifyInstance;
   let tempDir: string;
