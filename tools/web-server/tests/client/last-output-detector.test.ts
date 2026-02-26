@@ -15,26 +15,7 @@ describe('findLastOutput', () => {
     expect(findLastOutput([])).toBeNull();
   });
 
-  it('returns interruption when present (priority 1)', () => {
-    const steps: SemanticStep[] = [
-      makeStep({ type: 'output', content: 'some output' }),
-      makeStep({ type: 'interruption', content: 'User cancelled' }),
-    ];
-    const result = findLastOutput(steps);
-    expect(result).not.toBeNull();
-    expect(result!.type).toBe('interruption');
-    expect(result!.interruptionMessage).toBe('User cancelled');
-  });
-
-  it('interruption takes priority over ongoing', () => {
-    const steps: SemanticStep[] = [
-      makeStep({ type: 'interruption', content: 'Stopped' }),
-    ];
-    const result = findLastOutput(steps, true);
-    expect(result!.type).toBe('interruption');
-  });
-
-  it('returns ongoing when flag is true and no interruption (priority 2)', () => {
+  it('returns ongoing when flag is true (priority 1)', () => {
     const steps: SemanticStep[] = [
       makeStep({ type: 'output', content: 'some output' }),
     ];
@@ -42,7 +23,7 @@ describe('findLastOutput', () => {
     expect(result!.type).toBe('ongoing');
   });
 
-  it('returns plan_exit for ExitPlanMode with no later output (priority 3)', () => {
+  it('returns plan_exit for ExitPlanMode with no later output (priority 2)', () => {
     const steps: SemanticStep[] = [
       makeStep({ type: 'output', content: 'Here is the plan:' }),
       makeStep({
@@ -104,7 +85,7 @@ describe('findLastOutput', () => {
     expect(result!.planPreamble).toBeUndefined();
   });
 
-  it('returns text for last output step (priority 4)', () => {
+  it('returns text for last output step (priority 3)', () => {
     const steps: SemanticStep[] = [
       makeStep({ type: 'thinking', content: 'reasoning' }),
       makeStep({ type: 'output', content: 'First output' }),
@@ -115,7 +96,7 @@ describe('findLastOutput', () => {
     expect(result!.text).toBe('Last output');
   });
 
-  it('returns tool_result for last tool result step (priority 5)', () => {
+  it('returns tool_result for last tool result step (priority 4)', () => {
     const steps: SemanticStep[] = [
       makeStep({ type: 'thinking', content: 'thinking' }),
       makeStep({

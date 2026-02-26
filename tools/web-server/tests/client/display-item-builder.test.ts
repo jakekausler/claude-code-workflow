@@ -137,16 +137,15 @@ describe('buildDisplayItems', () => {
     expect(subItems).toHaveLength(1);
   });
 
-  it('handles interruption steps as output items', () => {
+  it('no longer produces interruption steps (filtered as hardNoise before reaching display)', () => {
+    // Interruption messages are now classified as hardNoise and never reach
+    // the display item builder. Only standard step types are handled.
     const steps: SemanticStep[] = [
-      makeStep({ type: 'interruption', content: 'User cancelled' }),
+      makeStep({ type: 'output', content: 'Some output text' }),
     ];
     const { items } = buildDisplayItems(steps, null, [], []);
     expect(items).toHaveLength(1);
     expect(items[0].type).toBe('output');
-    if (items[0].type === 'output') {
-      expect(items[0].content).toBe('User cancelled');
-    }
   });
 
   it('items preserve step order (no re-sorting)', () => {

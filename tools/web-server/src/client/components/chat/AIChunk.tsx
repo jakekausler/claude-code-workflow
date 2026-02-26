@@ -41,7 +41,6 @@ function buildStepSummary(steps: SemanticStep[]): string {
     thinking: 'thinking',
     output: 'output',
     subagent: 'subagent',
-    interruption: 'interruption',
   };
 
   const parts: string[] = [];
@@ -236,13 +235,6 @@ function AIStepRenderer({
         </div>
       );
     }
-
-    case 'interruption':
-      return (
-        <div className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded px-2 py-1 my-1">
-          {step.content || 'Interrupted'}
-        </div>
-      );
 
     default:
       return step.content ? <TextItem content={step.content} /> : null;

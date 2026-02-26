@@ -79,7 +79,12 @@ export function buildDisplayItems(
         break;
 
       case 'subagent': {
-        const process = processes.find((p) => p.id === step.subagentId);
+        // step.subagentId is the tool_use block ID (from the Task tool call),
+        // while process.id is the agent ID from the filename. The link between
+        // them is process.parentTaskId which matches the tool call ID.
+        const process = processes.find(
+          (p) => p.id === step.subagentId || p.parentTaskId === step.subagentId,
+        );
         if (process) {
           items.push({ type: 'subagent', subagent: process });
         }
@@ -95,13 +100,6 @@ export function buildDisplayItems(
         });
         break;
 
-      case 'interruption':
-        items.push({
-          type: 'output',
-          content: step.content || 'Request interrupted by user',
-          timestamp: timestamp,
-        });
-        break;
     }
   }
 
@@ -356,13 +354,6 @@ function findLastOutputStepIndex(
     // Find the last output step matching the text
     for (let i = steps.length - 1; i >= 0; i--) {
       if (steps[i].type === 'output' && steps[i].content === lastOutput.text) return i;
-    }
-  }
-
-  if (lastOutput.type === 'interruption') {
-    // Find the last interruption step
-    for (let i = steps.length - 1; i >= 0; i--) {
-      if (steps[i].type === 'interruption') return i;
     }
   }
 

@@ -1,7 +1,48 @@
-import { AlertTriangle, CheckCircle2, FileCheck, XCircle } from 'lucide-react';
+import { CheckCircle2, FileCheck, XCircle } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import type { Components } from 'react-markdown';
 import type { AIGroupLastOutput } from '../../types/groups.js';
+
+const markdownComponents: Components = {
+  ol({ children }) {
+    return (
+      <ol className="my-2 list-decimal space-y-1 pl-5 text-slate-700">
+        {children}
+      </ol>
+    );
+  },
+  ul({ children }) {
+    return (
+      <ul className="my-2 list-disc space-y-1 pl-5 text-slate-700">
+        {children}
+      </ul>
+    );
+  },
+  li({ children }) {
+    return <li className="text-sm text-slate-700">{children}</li>;
+  },
+};
+
+const planMarkdownComponents: Components = {
+  ol({ children }) {
+    return (
+      <ol className="my-2 list-decimal space-y-1 pl-5 text-indigo-800">
+        {children}
+      </ol>
+    );
+  },
+  ul({ children }) {
+    return (
+      <ul className="my-2 list-disc space-y-1 pl-5 text-indigo-800">
+        {children}
+      </ul>
+    );
+  },
+  li({ children }) {
+    return <li className="text-sm text-indigo-800">{children}</li>;
+  },
+};
 
 interface Props {
   lastOutput: AIGroupLastOutput | null;
@@ -15,7 +56,7 @@ export function LastOutputDisplay({ lastOutput }: Props) {
       return (
         <div className="rounded-lg bg-slate-50 border border-slate-200 px-4 py-3 mt-2 max-h-48 overflow-y-auto">
           <div className="prose prose-sm prose-slate max-w-none">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+            <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
               {lastOutput.text ?? ''}
             </ReactMarkdown>
           </div>
@@ -54,14 +95,6 @@ export function LastOutputDisplay({ lastOutput }: Props) {
       );
     }
 
-    case 'interruption':
-      return (
-        <div className="flex items-center gap-2 rounded-lg bg-amber-50 border border-amber-200 px-4 py-2 mt-2">
-          <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0" />
-          <span className="text-sm text-amber-700">Interrupted</span>
-        </div>
-      );
-
     case 'ongoing':
       return (
         <div className="flex items-center gap-2 mt-2 px-1">
@@ -76,7 +109,9 @@ export function LastOutputDisplay({ lastOutput }: Props) {
           {lastOutput.planPreamble && (
             <div className="rounded-lg bg-slate-50 border border-slate-200 px-4 py-3 mb-2">
               <div className="prose prose-sm prose-slate max-w-none">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{lastOutput.planPreamble}</ReactMarkdown>
+                <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                  {lastOutput.planPreamble}
+                </ReactMarkdown>
               </div>
             </div>
           )}
@@ -85,7 +120,9 @@ export function LastOutputDisplay({ lastOutput }: Props) {
             <div className="flex-1">
               <div className="text-sm font-medium text-indigo-700 mb-1">Plan Ready for Approval</div>
               <div className="prose prose-sm prose-indigo max-w-none">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{lastOutput.planContent ?? ''}</ReactMarkdown>
+                <ReactMarkdown remarkPlugins={[remarkGfm]} components={planMarkdownComponents}>
+                  {lastOutput.planContent ?? ''}
+                </ReactMarkdown>
               </div>
             </div>
           </div>

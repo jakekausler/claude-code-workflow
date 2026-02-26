@@ -131,7 +131,7 @@ describe('ChunkBuilder', () => {
       expect(classifyMessage(msg)).toBe('hardNoise');
     });
 
-    it('classifies interruption text as "ai" (recovered as interruption step)', () => {
+    it('classifies interruption string message as "hardNoise"', () => {
       const msg = {
         type: 'user',
         isMeta: false,
@@ -139,10 +139,10 @@ describe('ChunkBuilder', () => {
         toolCalls: [],
         toolResults: [],
       } as unknown as ParsedMessage;
-      expect(classifyMessage(msg)).toBe('ai');
+      expect(classifyMessage(msg)).toBe('hardNoise');
     });
 
-    it('classifies "interrupted for tool use" text as "ai"', () => {
+    it('classifies "interrupted for tool use" string message as "hardNoise"', () => {
       const msg = {
         type: 'user',
         isMeta: false,
@@ -150,7 +150,62 @@ describe('ChunkBuilder', () => {
         toolCalls: [],
         toolResults: [],
       } as unknown as ParsedMessage;
+      expect(classifyMessage(msg)).toBe('hardNoise');
+    });
+
+    it('classifies interruption array message as "hardNoise"', () => {
+      const msg = {
+        type: 'user',
+        isMeta: false,
+        content: [{ type: 'text', text: '[Request interrupted by user]' }],
+        toolCalls: [],
+        toolResults: [],
+      } as unknown as ParsedMessage;
+      expect(classifyMessage(msg)).toBe('hardNoise');
+    });
+
+    it('classifies empty stdout as "hardNoise"', () => {
+      const msg = {
+        type: 'user',
+        isMeta: false,
+        content: '<local-command-stdout></local-command-stdout>',
+        toolCalls: [],
+        toolResults: [],
+      } as unknown as ParsedMessage;
+      expect(classifyMessage(msg)).toBe('hardNoise');
+    });
+
+    it('classifies empty stderr as "hardNoise"', () => {
+      const msg = {
+        type: 'user',
+        isMeta: false,
+        content: '<local-command-stderr></local-command-stderr>',
+        toolCalls: [],
+        toolResults: [],
+      } as unknown as ParsedMessage;
+      expect(classifyMessage(msg)).toBe('hardNoise');
+    });
+
+    it('classifies teammate message as "ai" (not "user")', () => {
+      const msg = {
+        type: 'user',
+        isMeta: false,
+        content: '<teammate-message teammate_id="jake">Some response</teammate-message>',
+        toolCalls: [],
+        toolResults: [],
+      } as unknown as ParsedMessage;
       expect(classifyMessage(msg)).toBe('ai');
+    });
+
+    it('classifies array content with noise tags as "hardNoise"', () => {
+      const msg = {
+        type: 'user',
+        isMeta: false,
+        content: [{ type: 'text', text: '<system-reminder>Some reminder</system-reminder>' }],
+        toolCalls: [],
+        toolResults: [],
+      } as unknown as ParsedMessage;
+      expect(classifyMessage(msg)).toBe('hardNoise');
     });
 
     it('classifies non-isMeta user message with only tool_result blocks as "ai"', () => {
@@ -534,7 +589,8 @@ describe('ChunkBuilder', () => {
       expect(steps[0].isError).toBe(false);
     });
 
-    it('extracts interruption step from "[Request interrupted by user]" message', () => {
+    it('does not produce interruption steps (interruption messages are filtered as hardNoise)', () => {
+      // If an interruption message somehow reached the AI chunk, it would be treated as output
       const chunk: AIChunk = {
         type: 'ai',
         messages: [
@@ -548,47 +604,15 @@ describe('ChunkBuilder', () => {
             toolCalls: [],
             toolResults: [],
           },
-          {
-            uuid: 'int1',
-            type: 'user',
-            isMeta: false,
-            content: '[Request interrupted by user]',
-            timestamp: new Date(),
-            isSidechain: false,
-            toolCalls: [],
-            toolResults: [],
-          },
-        ] as ParsedMessage[],
-        timestamp: new Date(),
-      };
-      const steps = extractSemanticSteps(chunk, []);
-      expect(steps).toHaveLength(2);
-      expect(steps[0].type).toBe('output');
-      expect(steps[1].type).toBe('interruption');
-      expect(steps[1].content).toBe('[Request interrupted by user]');
-    });
-
-    it('extracts interruption step from "interrupted for tool use" message', () => {
-      const chunk: AIChunk = {
-        type: 'ai',
-        messages: [
-          {
-            uuid: 'int1',
-            type: 'user',
-            isMeta: false,
-            content: '[Request interrupted by user for tool use]',
-            timestamp: new Date(),
-            isSidechain: false,
-            toolCalls: [],
-            toolResults: [],
-          },
         ] as ParsedMessage[],
         timestamp: new Date(),
       };
       const steps = extractSemanticSteps(chunk, []);
       expect(steps).toHaveLength(1);
-      expect(steps[0].type).toBe('interruption');
-      expect(steps[0].content).toBe('[Request interrupted by user for tool use]');
+      expect(steps[0].type).toBe('output');
+      // No interruption step type exists anymore
+      const stepTypes = steps.map((s) => s.type);
+      expect(stepTypes).not.toContain('interruption');
     });
 
     it('returns empty array for chunk with no content', () => {
