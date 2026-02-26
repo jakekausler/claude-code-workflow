@@ -115,8 +115,8 @@ function createSystemGroup(chunk: SystemChunk): SystemGroup {
 function createAIGroup(chunk: AIChunk, turnIndex: number): AIGroup {
   const messages = chunk.messages;
   const isEnhanced = isEnhancedAIChunk(chunk);
-  const steps: SemanticStep[] = isEnhanced ? (chunk as EnhancedAIChunk).semanticSteps : [];
-  const subagents = isEnhanced ? (chunk as EnhancedAIChunk).subagents : [];
+  const steps: SemanticStep[] = isEnhanced ? ((chunk as EnhancedAIChunk).semanticSteps ?? []) : [];
+  const subagents = isEnhanced ? ((chunk as EnhancedAIChunk).subagents ?? []) : [];
 
   // Calculate timing from message timestamps
   const startTime = messages.length > 0 ? messages[0].timestamp : chunk.timestamp;
