@@ -237,16 +237,13 @@ function enrichGroupPhases(items: ChatItem[]): number {
 
 /**
  * Mark the last AI group as ongoing.
- * Does NOT override interrupted status.
  */
 function markLastAIGroupOngoing(items: ChatItem[]): void {
   for (let i = items.length - 1; i >= 0; i--) {
     if (items[i].type === 'ai') {
       const group = (items[i] as { type: 'ai'; group: AIGroup }).group;
-      if (group.status !== 'interrupted') {
-        group.isOngoing = true;
-        group.status = 'in_progress';
-      }
+      group.isOngoing = true;
+      group.status = 'in_progress';
       return;
     }
   }
@@ -276,9 +273,6 @@ function calculateTokens(messages: ParsedMessage[]): AIGroupTokens {
 }
 
 function determineStatus(steps: SemanticStep[]): AIGroupStatus {
-  // Check for interruption
-  if (steps.some((s) => s.type === 'interruption')) return 'interrupted';
-
   // Check for error steps
   if (steps.some((s) => s.isError)) return 'error';
 

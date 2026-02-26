@@ -54,7 +54,7 @@ export interface SystemGroup {
   commandOutput: string;
 }
 
-export type AIGroupStatus = 'complete' | 'in_progress' | 'interrupted' | 'error';
+export type AIGroupStatus = 'complete' | 'in_progress' | 'error';
 
 export interface AIGroup {
   id: string;
@@ -118,12 +118,11 @@ export interface EnhancedAIGroup extends AIGroup {
 }
 
 export interface AIGroupLastOutput {
-  type: 'text' | 'tool_result' | 'interruption' | 'ongoing' | 'plan_exit';
+  type: 'text' | 'tool_result' | 'ongoing' | 'plan_exit';
   text?: string;
   toolName?: string;
   toolResult?: string;
   isError?: boolean;
-  interruptionMessage?: string;
   planContent?: string;
   planPreamble?: string;
   timestamp: Date;

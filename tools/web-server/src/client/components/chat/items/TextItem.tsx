@@ -35,6 +35,23 @@ const markdownComponents: Components = {
   pre({ children }) {
     return <>{children}</>;
   },
+  ol({ children }) {
+    return (
+      <ol className="my-2 list-decimal space-y-1 pl-5 text-slate-700">
+        {children}
+      </ol>
+    );
+  },
+  ul({ children }) {
+    return (
+      <ul className="my-2 list-disc space-y-1 pl-5 text-slate-700">
+        {children}
+      </ul>
+    );
+  },
+  li({ children }) {
+    return <li className="text-sm text-slate-700">{children}</li>;
+  },
   table({ children }) {
     return (
       <div className="overflow-x-auto">

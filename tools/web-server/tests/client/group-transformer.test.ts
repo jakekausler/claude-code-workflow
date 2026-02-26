@@ -352,7 +352,7 @@ describe('transformChunksToConversation', () => {
     }
   });
 
-  it('detects interrupted status from interruption step', () => {
+  it('detects error status from error steps', () => {
     const enhancedChunk: EnhancedAIChunk = {
       type: 'ai',
       messages: [
@@ -364,7 +364,7 @@ describe('transformChunksToConversation', () => {
       ],
       timestamp: new Date('2025-01-01T00:00:00Z'),
       semanticSteps: [
-        { type: 'interruption', content: 'User cancelled' },
+        { type: 'tool_result', content: 'Error occurred', isError: true },
       ],
       subagents: [],
     };
@@ -372,34 +372,7 @@ describe('transformChunksToConversation', () => {
     const result = transformChunksToConversation(chunks, false);
     const group = result.items[0].group;
     if ('status' in group) {
-      expect(group.status).toBe('interrupted');
-    }
-  });
-
-  it('does not override interrupted status when marking ongoing', () => {
-    const enhancedChunk: EnhancedAIChunk = {
-      type: 'ai',
-      messages: [
-        makeMsg({
-          type: 'assistant',
-          content: [],
-          usage: { input_tokens: 100, output_tokens: 50 },
-        }),
-      ],
-      timestamp: new Date('2025-01-01T00:00:00Z'),
-      semanticSteps: [
-        { type: 'interruption', content: 'User cancelled' },
-      ],
-      subagents: [],
-    };
-    const chunks: Chunk[] = [enhancedChunk];
-    const result = transformChunksToConversation(chunks, true);
-    const group = result.items[0].group;
-    if ('status' in group) {
-      expect(group.status).toBe('interrupted');
-    }
-    if ('isOngoing' in group) {
-      expect(group.isOngoing).toBeFalsy();
+      expect(group.status).toBe('error');
     }
   });
 

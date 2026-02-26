@@ -237,8 +237,7 @@ export type SemanticStepType =
   | 'tool_call'
   | 'tool_result'
   | 'subagent'
-  | 'output'
-  | 'interruption';
+  | 'output';
 
 export interface SemanticStep {
   type: SemanticStepType;
