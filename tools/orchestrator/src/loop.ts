@@ -342,6 +342,15 @@ export function createOrchestrator(config: OrchestratorConfig, deps: Orchestrato
       }
     }
 
+    // Check for queued follow-up messages and log them
+    const queue = sessionExecutor.getMessageQueue();
+    const queued = queue.take(stageId);
+    if (queued) {
+      logger.info(`[${stageId}] Found queued message, will resume with --resume`);
+      // TODO: Implement resume spawn in a future task — for now, log the queued message
+      logger.info(`[${stageId}] Queued message: "${queued.message}"`);
+    }
+
     await locker.releaseLock(workerInfo.stageFilePath);
     await worktreeManager.remove(workerInfo.worktreePath);
     await sessionLogger.close();

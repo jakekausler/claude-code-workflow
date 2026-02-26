@@ -1,5 +1,9 @@
 import { spawn as nodeSpawn } from 'node:child_process';
+import { PassThrough } from 'node:stream';
 import { StreamParser } from './stream-parser.js';
+import { ProtocolPeer } from './protocol-peer.js';
+import { ApprovalService } from './approval-service.js';
+import { MessageQueue } from './message-queue.js';
 
 /**
  * Options for spawning a Claude Code session.
@@ -76,6 +80,10 @@ export interface SessionExecutor {
   spawn(options: SpawnOptions, sessionLogger: SessionLoggerLike): Promise<SessionResult>;
   getActiveSessions(): ActiveSession[];
   killAll(signal?: NodeJS.Signals): void;
+  getPeer(stageId: string): ProtocolPeer | undefined;
+  getApprovalService(): ApprovalService;
+  getMessageQueue(): MessageQueue;
+  buildSpawnArgs(opts: { model: string; resumeSessionId?: string }): string[];
 }
 
 function defaultSpawnProcess(command: string, args: string[], options: SpawnProcessOptions): ChildProcessLike {
@@ -121,6 +129,24 @@ export function assemblePrompt(options: SpawnOptions): string {
 export function createSessionExecutor(deps: Partial<SessionDeps> = {}): SessionExecutor {
   const resolved: SessionDeps = { ...defaultDeps, ...deps };
   const activeSessions = new Map<number, ActiveSession>();
+  const peers = new Map<string, ProtocolPeer>();
+  const approvalService = new ApprovalService();
+  const messageQueue = new MessageQueue();
+
+  function buildSpawnArgs(opts: { model: string; resumeSessionId?: string }): string[] {
+    const args = [
+      '-p',
+      '--model', opts.model,
+      '--output-format', 'stream-json',
+      '--input-format', 'stream-json',
+      '--permission-prompt-tool=stdio',
+      '--verbose',
+    ];
+    if (opts.resumeSessionId) {
+      args.push('--resume', opts.resumeSessionId);
+    }
+    return args;
+  }
 
   return {
     spawn(options: SpawnOptions, sessionLogger: SessionLoggerLike): Promise<SessionResult> {
@@ -128,13 +154,8 @@ export function createSessionExecutor(deps: Partial<SessionDeps> = {}): SessionE
         const prompt = assemblePrompt(options);
         const startTime = resolved.now();
 
-        const child = resolved.spawnProcess('claude', [
-          '-p',
-          '--model', options.model,
-          '--output-format', 'stream-json',
-          '--input-format', 'stream-json',
-          '--verbose',
-        ], {
+        const spawnArgs = buildSpawnArgs({ model: options.model });
+        const child = resolved.spawnProcess('claude', spawnArgs, {
           cwd: options.worktreePath,
           env: {
             ...process.env,
@@ -152,15 +173,34 @@ export function createSessionExecutor(deps: Partial<SessionDeps> = {}): SessionE
           options.onSessionId?.(sessionId);
         });
 
+        // Create a PassThrough stream to tee stdout to both StreamParser and ProtocolPeer
+        const protocolStream = new PassThrough();
+        let protocolStreamEnded = false;
+
         child.stdout.on('data', (chunk: Buffer) => {
           const text = chunk.toString();
           parser.feed(text);
           sessionLogger.write(text);
+          if (!protocolStreamEnded) {
+            protocolStream.write(chunk);
+          }
+        });
+
+        child.stdout.on('end', () => {
+          protocolStreamEnded = true;
+          protocolStream.end();
         });
 
         child.stderr.on('data', (chunk: Buffer) => {
           sessionLogger.write(chunk.toString());
         });
+
+        // Set the current stage context for approval tagging
+        approvalService.setCurrentStageId(options.stageId);
+
+        // Create ProtocolPeer for bidirectional communication with Claude
+        const peer = new ProtocolPeer(child.stdin, protocolStream, approvalService);
+        peers.set(options.stageId, peer);
 
         let settled = false;
 
@@ -173,6 +213,14 @@ export function createSessionExecutor(deps: Partial<SessionDeps> = {}): SessionE
           if (child.pid !== undefined) {
             activeSessions.delete(child.pid);
           }
+
+          // Clean up peer and approval service
+          const peer = peers.get(options.stageId);
+          if (peer) {
+            peer.destroy();
+            peers.delete(options.stageId);
+          }
+          approvalService.clearForStage(options.stageId);
 
           resolve({
             exitCode: code ?? 1,
@@ -220,6 +268,22 @@ export function createSessionExecutor(deps: Partial<SessionDeps> = {}): SessionE
         // kill() returning false is expected during shutdown (process already dead)
         session.kill(signal ?? 'SIGTERM');
       }
+    },
+
+    getPeer(stageId: string): ProtocolPeer | undefined {
+      return peers.get(stageId);
+    },
+
+    getApprovalService(): ApprovalService {
+      return approvalService;
+    },
+
+    getMessageQueue(): MessageQueue {
+      return messageQueue;
+    },
+
+    buildSpawnArgs(opts: { model: string; resumeSessionId?: string }): string[] {
+      return buildSpawnArgs(opts);
     },
   };
 }

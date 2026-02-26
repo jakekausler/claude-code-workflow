@@ -192,7 +192,7 @@ describe('createSessionExecutor', () => {
 
       expect(deps.spawnProcess).toHaveBeenCalledWith(
         'claude',
-        ['-p', '--model', 'sonnet', '--output-format', 'stream-json', '--input-format', 'stream-json', '--verbose'],
+        ['-p', '--model', 'sonnet', '--output-format', 'stream-json', '--input-format', 'stream-json', '--permission-prompt-tool=stdio', '--verbose'],
         expect.objectContaining({
           cwd: options.worktreePath,
           stdio: ['pipe', 'pipe', 'pipe'],
