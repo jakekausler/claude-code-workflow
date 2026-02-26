@@ -1,11 +1,13 @@
 import { useParams, useNavigate } from 'react-router-dom';
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { Loader2, AlertCircle, ArrowLeft } from 'lucide-react';
 import { ChatHistory } from '../components/chat/ChatHistory.js';
 import { SessionContextPanel } from '../components/chat/context/SessionContextPanel.js';
 import { useSessionDetail } from '../api/hooks.js';
 import { formatDuration, formatCost, formatTokenCount } from '../utils/session-formatters.js';
 import { useSessionViewStore } from '../store/session-store.js';
+import { transformChunksToConversation } from '../utils/group-transformer.js';
+import { processSessionContextWithPhases } from '../utils/context-tracker.js';
 
 export function SessionDetail() {
   const { projectId, sessionId } = useParams<{ projectId: string; sessionId: string }>();
@@ -53,6 +55,16 @@ export function SessionDetail() {
     .flatMap((c) => c.messages)
     .find((m) => m.model)?.model;
 
+  // Enrichment pipeline: transform raw chunks into grouped ChatItems
+  const conversation = useMemo(() => {
+    return transformChunksToConversation(chunks, session.isOngoing, sessionId ?? '');
+  }, [chunks, session.isOngoing, sessionId]);
+
+  // Context tracking: compute per-turn context stats with phase boundaries
+  const contextResult = useMemo(() => {
+    return processSessionContextWithPhases(conversation.items);
+  }, [conversation]);
+
   return (
     <div className="flex flex-col h-full">
       {/* Top bar: session metadata */}
@@ -77,7 +89,13 @@ export function SessionDetail() {
       {/* Main content: chat + context panel */}
       <div className="flex flex-1 overflow-hidden">
         <div className="flex-1 flex flex-col min-w-0">
-          <ChatHistory chunks={chunks} />
+          <ChatHistory
+            chunks={chunks}
+            items={conversation.items}
+            subagents={session.subagents}
+            contextStats={contextResult.statsMap}
+            phases={contextResult.phases}
+          />
         </div>
         <div className="w-80 flex-shrink-0 hidden lg:block">
           <SessionContextPanel metrics={metrics} chunks={chunks} model={model} />
