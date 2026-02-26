@@ -75,8 +75,7 @@ export function useInteractionSSE() {
           }
           break;
         }
-        case 'approval-cancelled':
-        case 'approval-resolved': {
+        case 'approval-cancelled': {
           const p = payload as { requestId: string };
           if (p.requestId) {
             store.removeApproval(p.requestId);
@@ -103,7 +102,7 @@ export function useInteractionSSE() {
   );
 
   useSSE(
-    ['approval-requested', 'question-requested', 'approval-cancelled', 'approval-resolved', 'message-queued', 'message-sent'],
+    ['approval-requested', 'question-requested', 'approval-cancelled', 'message-queued', 'message-sent'],
     handler,
   );
 }

@@ -96,6 +96,9 @@ export class OrchestratorClient extends EventEmitter {
   }
 
   getPendingForStage(_stageId: string): unknown[] {
+    // TODO: Implement by maintaining pending state from WS events.
+    // Currently returns empty array; the /api/sessions/:stageId/pending
+    // endpoint will always return { pending: [] } until this is wired.
     return [];
   }
 

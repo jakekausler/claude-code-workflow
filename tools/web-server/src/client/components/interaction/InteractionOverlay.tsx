@@ -16,6 +16,9 @@ export function InteractionOverlay() {
   const firstApproval = approvals[0];
   const firstQuestion = questions[0];
 
+  // Intentionally a no-op: modals in the overlay must be explicitly resolved
+  // (Allow/Deny/Submit) rather than dismissed via Escape or clicking away.
+  // The child components' Escape handlers become inactive as a result.
   const noop = useCallback(() => {}, []);
 
   // Approvals take priority over questions
