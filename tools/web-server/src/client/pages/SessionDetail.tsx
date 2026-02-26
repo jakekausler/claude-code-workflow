@@ -1,20 +1,88 @@
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
+import { useEffect } from 'react';
+import { Loader2, AlertCircle, ArrowLeft } from 'lucide-react';
+import { ChatHistory } from '../components/chat/ChatHistory.js';
+import { SessionContextPanel } from '../components/chat/context/SessionContextPanel.js';
+import { useSessionDetail } from '../api/hooks.js';
+import { formatDuration, formatCost, formatTokenCount } from '../utils/session-formatters.js';
+import { useSessionViewStore } from '../store/session-store.js';
 
 export function SessionDetail() {
-  const { projectId, sessionId } = useParams<{
-    projectId: string;
-    sessionId: string;
-  }>();
+  const { projectId, sessionId } = useParams<{ projectId: string; sessionId: string }>();
+  const navigate = useNavigate();
+  const resetView = useSessionViewStore((s) => s.resetView);
+
+  // Reset view state when session changes
+  useEffect(() => {
+    resetView();
+  }, [projectId, sessionId, resetView]);
+
+  const { data: session, isLoading, error } = useSessionDetail(projectId || '', sessionId || '');
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+        <span className="ml-3 text-slate-600">Loading session…</span>
+      </div>
+    );
+  }
+
+  if (error || !session) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="text-center">
+          <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-3" />
+          <p className="text-slate-600">Failed to load session</p>
+          <p className="text-sm text-slate-400 mt-1">
+            {error instanceof Error ? error.message : 'Unknown error'}
+          </p>
+          <button onClick={() => navigate(-1)} className="mt-4 text-sm text-blue-600 hover:text-blue-800">
+            Go back
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const { chunks, metrics } = session;
+
+  // Detect model from first assistant message with a model field
+  const model = chunks
+    .filter((c): c is Extract<typeof c, { type: 'ai' }> => c.type === 'ai')
+    .flatMap((c) => c.messages)
+    .find((m) => m.model)?.model;
 
   return (
-    <div>
-      <h1 className="text-2xl font-bold text-slate-900">Session Detail</h1>
-      <p className="mt-2 text-slate-600">
-        Session{' '}
-        <code className="rounded bg-slate-200 px-1">{sessionId}</code> in
-        project{' '}
-        <code className="rounded bg-slate-200 px-1">{projectId}</code>
-      </p>
+    <div className="flex flex-col h-full">
+      {/* Top bar: session metadata */}
+      <div className="flex items-center gap-4 px-4 py-3 border-b border-slate-200 bg-white">
+        <button onClick={() => navigate(-1)} className="text-slate-400 hover:text-slate-600 transition-colors">
+          <ArrowLeft className="w-5 h-5" />
+        </button>
+        <div className="flex-1 min-w-0">
+          <h1 className="text-sm font-semibold text-slate-800 truncate">
+            Session {sessionId?.slice(0, 8)}
+          </h1>
+          <div className="flex items-center gap-3 text-xs text-slate-500">
+            {model && <span>{model}</span>}
+            <span>{formatDuration(metrics.duration)}</span>
+            <span>{formatTokenCount(metrics.totalTokens)} tokens</span>
+            <span>{formatCost(metrics.totalCost)}</span>
+            {session.isOngoing && <span className="text-blue-600 font-medium">Live</span>}
+          </div>
+        </div>
+      </div>
+
+      {/* Main content: chat + context panel */}
+      <div className="flex flex-1 overflow-hidden">
+        <div className="flex-1 flex flex-col min-w-0">
+          <ChatHistory chunks={chunks} />
+        </div>
+        <div className="w-80 flex-shrink-0 hidden lg:block">
+          <SessionContextPanel metrics={metrics} chunks={chunks} model={model} />
+        </div>
+      </div>
     </div>
   );
 }
