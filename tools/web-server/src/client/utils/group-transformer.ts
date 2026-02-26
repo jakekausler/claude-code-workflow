@@ -35,8 +35,9 @@ export function transformChunksToConversation(
     }
   }
 
-  // Post-pass: enrich CompactGroups with tokenDelta and phaseNumber
-  enrichCompactGroups(items);
+  // Post-pass: enrich CompactGroups with tokenDelta and phaseNumber,
+  // and assign phaseNumber to each AIGroup
+  const totalPhases = enrichGroupPhases(items);
 
   // Post-pass: mark last AI group as ongoing if session is ongoing
   if (isOngoing) {
@@ -50,6 +51,7 @@ export function transformChunksToConversation(
     totalSystemGroups: items.filter((i) => i.type === 'system').length,
     totalAIGroups: items.filter((i) => i.type === 'ai').length,
     totalCompactGroups: items.filter((i) => i.type === 'compact').length,
+    totalPhases,
   };
 }
 
@@ -192,33 +194,45 @@ function createCompactGroup(chunk: CompactChunk): CompactGroup {
 }
 
 /**
- * Enrich CompactGroups with tokenDelta and phaseNumber.
- * Walks items, tracks phase counter (increment at each compact).
+ * Enrich CompactGroups with tokenDelta and startingPhaseNumber,
+ * and assign phaseNumber to each AIGroup.
+ *
+ * Phase 1 = items before the first CompactGroup.
+ * Each CompactGroup increments the phase for subsequent items.
+ *
+ * Returns the total number of phases.
  */
-function enrichCompactGroups(items: ChatItem[]): void {
-  let phaseNumber = 1;
+function enrichGroupPhases(items: ChatItem[]): number {
+  let currentPhase = 1;
 
   for (let i = 0; i < items.length; i++) {
     const item = items[i];
-    if (item.type !== 'compact') continue;
 
-    item.group.startingPhaseNumber = phaseNumber;
-    phaseNumber++;
+    if (item.type === 'ai') {
+      item.group.phaseNumber = currentPhase;
+    }
 
-    // Find last AI group before this compact
-    const preTokens = findLastAIGroupTokensBefore(items, i);
+    if (item.type === 'compact') {
+      item.group.startingPhaseNumber = currentPhase;
+      currentPhase++;
 
-    // Find first AI group after this compact
-    const postTokens = findFirstAIGroupTokensAfter(items, i);
+      // Find last AI group before this compact
+      const preTokens = findLastAIGroupTokensBefore(items, i);
 
-    if (preTokens !== null && postTokens !== null) {
-      item.group.tokenDelta = {
-        preCompactionTokens: preTokens,
-        postCompactionTokens: postTokens,
-        delta: postTokens - preTokens,
-      };
+      // Find first AI group after this compact
+      const postTokens = findFirstAIGroupTokensAfter(items, i);
+
+      if (preTokens !== null && postTokens !== null) {
+        item.group.tokenDelta = {
+          preCompactionTokens: preTokens,
+          postCompactionTokens: postTokens,
+          delta: postTokens - preTokens,
+        };
+      }
     }
   }
+
+  return currentPhase;
 }
 
 /**
@@ -258,7 +272,7 @@ function calculateTokens(messages: ParsedMessage[]): AIGroupTokens {
   const output = usage.output_tokens ?? 0;
   const cacheRead = usage.cache_read_input_tokens ?? 0;
   const cacheCreation = usage.cache_creation_input_tokens ?? 0;
-  return { input, output, cacheRead, cacheCreation, total: input + output };
+  return { input, output, cacheRead, cacheCreation, total: input + output + cacheRead + cacheCreation };
 }
 
 function determineStatus(steps: SemanticStep[]): AIGroupStatus {

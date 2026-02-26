@@ -157,6 +157,52 @@ describe('ContextTracker', () => {
       expect(aiTurn.turnTokens.toolOutputs).toBe(0);
     });
 
+    it('tracks CLAUDE.md and user message tokens independently', () => {
+      const content =
+        'Hello, help me.\n<system-reminder>Important config</system-reminder>';
+      const chunks: Chunk[] = [
+        createUserChunk(content),
+        createAIChunk([createAssistantMsg('Sure', 50, 10)]),
+      ];
+      const result = trackContext(chunks);
+      const userTurn = result.perTurn[0];
+      // Both claudeMd and userMessages should be non-zero
+      expect(userTurn.turnTokens.claudeMd).toBeGreaterThan(0);
+      expect(userTurn.turnTokens.userMessages).toBeGreaterThan(0);
+    });
+
+    it('tracks CLAUDE.md + @-mentioned files + user text independently', () => {
+      const content =
+        'Please review this.\n' +
+        'Contents of /home/user/.claude/CLAUDE.md\nSome instructions.\n' +
+        'Also check @src/main.ts';
+      const chunks: Chunk[] = [
+        createUserChunk(content),
+        createAIChunk([createAssistantMsg('Ok', 50, 10)]),
+      ];
+      const result = trackContext(chunks);
+      const userTurn = result.perTurn[0];
+      expect(userTurn.turnTokens.claudeMd).toBeGreaterThan(0);
+      expect(userTurn.turnTokens.mentionedFiles).toBeGreaterThan(0);
+      // User text ("Please review this.\n...Also check ") also tracked
+      expect(userTurn.turnTokens.userMessages).toBeGreaterThan(0);
+    });
+
+    it('pure @-mentioned file content tracked independently from user text', () => {
+      const content = 'Check @src/utils.ts for the helper function';
+      const chunks: Chunk[] = [
+        createUserChunk(content),
+        createAIChunk([createAssistantMsg('Found it', 50, 10)]),
+      ];
+      const result = trackContext(chunks);
+      const userTurn = result.perTurn[0];
+      // mentionedFiles and userMessages are tracked independently
+      expect(userTurn.turnTokens.mentionedFiles).toBeGreaterThan(0);
+      expect(userTurn.turnTokens.claudeMd).toBe(0);
+      // userMessages also gets tokens (independent tracking, no claudeMd to subtract)
+      expect(userTurn.turnTokens.userMessages).toBeGreaterThan(0);
+    });
+
     it('compaction creates phase boundary', () => {
       const chunks: Chunk[] = [
         createUserChunk('First message'),
@@ -236,6 +282,257 @@ describe('ContextTracker', () => {
       const result = trackContext(chunks);
       expect(result.perTurn).toEqual([]);
       expect(result.phases).toEqual([]);
+    });
+
+    it('creates separate toolOutputItem per individual tool call', () => {
+      // 4 Read calls should produce 4 separate entries, not 1 aggregated "Read" entry
+      const chunks: Chunk[] = [
+        createUserChunk('Read four files'),
+        createAIChunk([
+          {
+            uuid: 'a1',
+            parentUuid: null,
+            type: 'assistant',
+            timestamp: new Date(),
+            isSidechain: false,
+            isMeta: false,
+            content: [
+              { type: 'tool_use', id: 'tu_1', name: 'Read', input: { path: 'a.ts' } },
+              { type: 'tool_use', id: 'tu_2', name: 'Read', input: { path: 'b.ts' } },
+              { type: 'tool_use', id: 'tu_3', name: 'Read', input: { path: 'c.ts' } },
+              { type: 'tool_use', id: 'tu_4', name: 'Read', input: { path: 'd.ts' } },
+            ],
+            usage: { input_tokens: 100, output_tokens: 50 },
+            toolCalls: [],
+            toolResults: [],
+          } as ParsedMessage,
+          {
+            uuid: 'tr1',
+            parentUuid: null,
+            type: 'user',
+            timestamp: new Date(),
+            isSidechain: false,
+            isMeta: true,
+            content: [
+              { type: 'tool_result', tool_use_id: 'tu_1', content: 'content of a.ts' },
+              { type: 'tool_result', tool_use_id: 'tu_2', content: 'content of b.ts' },
+              { type: 'tool_result', tool_use_id: 'tu_3', content: 'content of c.ts' },
+              { type: 'tool_result', tool_use_id: 'tu_4', content: 'content of d.ts' },
+            ],
+            toolCalls: [],
+            toolResults: [],
+          } as ParsedMessage,
+        ]),
+      ];
+      const result = trackContext(chunks);
+      const aiTurn = result.perTurn[1];
+      expect(aiTurn.toolOutputItems).toBeDefined();
+      expect(aiTurn.toolOutputItems!).toHaveLength(4);
+      // Each entry should be "Read" with non-zero tokens
+      for (const item of aiTurn.toolOutputItems!) {
+        expect(item.toolName).toBe('Read');
+        expect(item.tokenCount).toBeGreaterThan(0);
+      }
+    });
+
+    it('pairs tool_result with tool_use by id', () => {
+      const chunks: Chunk[] = [
+        createUserChunk('Run and read'),
+        createAIChunk([
+          {
+            uuid: 'a1',
+            parentUuid: null,
+            type: 'assistant',
+            timestamp: new Date(),
+            isSidechain: false,
+            isMeta: false,
+            content: [
+              { type: 'tool_use', id: 'tu_bash', name: 'Bash', input: { command: 'ls' } },
+              { type: 'tool_use', id: 'tu_read', name: 'Read', input: { path: 'x.ts' } },
+            ],
+            usage: { input_tokens: 50, output_tokens: 30 },
+            toolCalls: [],
+            toolResults: [],
+          } as ParsedMessage,
+          {
+            uuid: 'tr1',
+            parentUuid: null,
+            type: 'user',
+            timestamp: new Date(),
+            isSidechain: false,
+            isMeta: true,
+            content: [
+              { type: 'tool_result', tool_use_id: 'tu_bash', content: 'file1.txt' },
+              { type: 'tool_result', tool_use_id: 'tu_read', content: 'export const x = 1;' },
+            ],
+            toolCalls: [],
+            toolResults: [],
+          } as ParsedMessage,
+        ]),
+      ];
+      const result = trackContext(chunks);
+      const aiTurn = result.perTurn[1];
+      expect(aiTurn.toolOutputItems).toBeDefined();
+      expect(aiTurn.toolOutputItems!).toHaveLength(2);
+
+      const bashEntry = aiTurn.toolOutputItems!.find(t => t.toolName === 'Bash');
+      const readEntry = aiTurn.toolOutputItems!.find(t => t.toolName === 'Read');
+      expect(bashEntry).toBeDefined();
+      expect(readEntry).toBeDefined();
+      // Each includes both call input + result tokens
+      expect(bashEntry!.tokenCount).toBeGreaterThan(0);
+      expect(readEntry!.tokenCount).toBeGreaterThan(0);
+    });
+
+    it('coordination tool results go to taskCoordination, not toolOutputs', () => {
+      const chunks: Chunk[] = [
+        createUserChunk('Create tasks'),
+        createAIChunk([
+          {
+            uuid: 'a1',
+            parentUuid: null,
+            type: 'assistant',
+            timestamp: new Date(),
+            isSidechain: false,
+            isMeta: false,
+            content: [
+              { type: 'tool_use', id: 'tu_tc', name: 'TaskCreate', input: { subject: 'do stuff' } },
+            ],
+            usage: { input_tokens: 50, output_tokens: 30 },
+            toolCalls: [],
+            toolResults: [],
+          } as ParsedMessage,
+          {
+            uuid: 'tr1',
+            parentUuid: null,
+            type: 'user',
+            timestamp: new Date(),
+            isSidechain: false,
+            isMeta: true,
+            content: [
+              { type: 'tool_result', tool_use_id: 'tu_tc', content: 'Task created: #1' },
+            ],
+            toolCalls: [],
+            toolResults: [],
+          } as ParsedMessage,
+        ]),
+      ];
+      const result = trackContext(chunks);
+      const aiTurn = result.perTurn[1];
+      expect(aiTurn.turnTokens.taskCoordination).toBeGreaterThan(0);
+      expect(aiTurn.turnTokens.toolOutputs).toBe(0);
+      // Coordination items breakdown
+      expect(aiTurn.taskCoordinationItems).toBeDefined();
+      expect(aiTurn.taskCoordinationItems!).toHaveLength(1);
+      expect(aiTurn.taskCoordinationItems![0].label).toBe('TaskCreate');
+    });
+
+    it('includes TaskList, TaskGet, and TeamDelete as coordination tools', () => {
+      const coordNames = ['TaskList', 'TaskGet', 'TeamDelete'];
+      for (const toolName of coordNames) {
+        const chunks: Chunk[] = [
+          createUserChunk('coord test'),
+          createAIChunk([
+            {
+              uuid: 'a1',
+              parentUuid: null,
+              type: 'assistant',
+              timestamp: new Date(),
+              isSidechain: false,
+              isMeta: false,
+              content: [
+                { type: 'tool_use', id: `tu_${toolName}`, name: toolName, input: {} },
+              ],
+              usage: { input_tokens: 50, output_tokens: 30 },
+              toolCalls: [],
+              toolResults: [],
+            } as ParsedMessage,
+          ]),
+        ];
+        const result = trackContext(chunks);
+        const aiTurn = result.perTurn[1];
+        expect(aiTurn.turnTokens.taskCoordination).toBeGreaterThan(0);
+        expect(aiTurn.turnTokens.toolOutputs).toBe(0);
+      }
+    });
+
+    it('thinking and text breakdown tracks separately', () => {
+      const thinkingText = 'Let me analyze this complex problem step by step...';
+      const outputText = 'The answer is 42.';
+      const chunks: Chunk[] = [
+        createUserChunk('What is the meaning of life?'),
+        createAIChunk([
+          {
+            uuid: 'a1',
+            parentUuid: null,
+            type: 'assistant',
+            timestamp: new Date(),
+            isSidechain: false,
+            isMeta: false,
+            content: [
+              { type: 'thinking', thinking: thinkingText, signature: 'sig' },
+              { type: 'text', text: outputText },
+            ],
+            usage: { input_tokens: 50, output_tokens: 30 },
+            model: 'claude-sonnet-4-6',
+            toolCalls: [],
+            toolResults: [],
+          } as ParsedMessage,
+        ]),
+      ];
+      const result = trackContext(chunks);
+      const aiTurn = result.perTurn[1];
+      expect(aiTurn.thinkingTextDetail).toBeDefined();
+      expect(aiTurn.thinkingTextDetail!.thinking).toBe(Math.ceil(thinkingText.length / 4));
+      expect(aiTurn.thinkingTextDetail!.text).toBe(Math.ceil(outputText.length / 4));
+      expect(aiTurn.turnTokens.thinkingText).toBe(
+        aiTurn.thinkingTextDetail!.thinking + aiTurn.thinkingTextDetail!.text,
+      );
+    });
+
+    it('CLAUDE.md detection splits per-file with correct token estimates', () => {
+      const content =
+        'Contents of /home/user/.claude/CLAUDE.md\n' +
+        'Global instructions here, keep it simple.\n' +
+        'Contents of /project/CLAUDE.md\n' +
+        'Project-specific guidelines.';
+      const chunks: Chunk[] = [
+        createUserChunk(content),
+        createAIChunk([createAssistantMsg('Got it', 50, 10)]),
+      ];
+      const result = trackContext(chunks);
+      const userTurn = result.perTurn[0];
+      expect(userTurn.claudeMdItems).toBeDefined();
+      expect(userTurn.claudeMdItems!).toHaveLength(2);
+      expect(userTurn.claudeMdItems![0].label).toContain('.claude/CLAUDE.md');
+      expect(userTurn.claudeMdItems![1].label).toContain('/project/CLAUDE.md');
+      // Each section has its own token estimate
+      expect(userTurn.claudeMdItems![0].tokens).toBeGreaterThan(0);
+      expect(userTurn.claudeMdItems![1].tokens).toBeGreaterThan(0);
+      // Total claudeMd = sum of both sections
+      expect(userTurn.turnTokens.claudeMd).toBe(
+        userTurn.claudeMdItems![0].tokens + userTurn.claudeMdItems![1].tokens,
+      );
+    });
+
+    it('user message tokens = remainder after CLAUDE.md extraction', () => {
+      const userText = 'Please help me with this task.';
+      const claudeMdSection = 'Contents of /home/user/.claude/CLAUDE.md\nDo not use emojis.';
+      const fullContent = userText + '\n' + claudeMdSection;
+      const chunks: Chunk[] = [
+        createUserChunk(fullContent),
+        createAIChunk([createAssistantMsg('Ok', 50, 10)]),
+      ];
+      const result = trackContext(chunks);
+      const userTurn = result.perTurn[0];
+
+      // claudeMd section tokens are extracted
+      const claudeMdTokens = userTurn.turnTokens.claudeMd;
+      expect(claudeMdTokens).toBeGreaterThan(0);
+
+      // user message tokens = total - claudeMd tokens (remainder)
+      const totalTokens = Math.ceil(fullContent.length / 4);
+      expect(userTurn.turnTokens.userMessages).toBe(totalTokens - claudeMdTokens);
     });
 
     it('multiple consecutive compactions skip empty phases', () => {

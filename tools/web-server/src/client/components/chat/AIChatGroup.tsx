@@ -13,6 +13,7 @@ import type { ContextStats } from '../../types/session.js';
 interface Props {
   aiGroup: AIGroup;
   contextStats?: ContextStats;
+  totalPhases?: number;
   // Note: precedingSlash and claudeMdStats are wired during integration (Task 22).
   // Currently passed as undefined by ChatHistory; will be connected when
   // ChatHistory gains awareness of preceding user groups' slash commands.
@@ -26,7 +27,7 @@ const MODEL_COLORS: Record<string, string> = {
   haiku: 'text-emerald-700 bg-emerald-100',
 };
 
-export function AIChatGroup({ aiGroup, contextStats, precedingSlash, claudeMdStats }: Props) {
+export function AIChatGroup({ aiGroup, contextStats, totalPhases, precedingSlash, claudeMdStats }: Props) {
   const expanded = useSessionViewStore((s) => s.expandedGroups.has(aiGroup.id));
   const toggleGroup = useSessionViewStore((s) => s.toggleGroup);
 
@@ -64,13 +65,23 @@ export function AIChatGroup({ aiGroup, contextStats, precedingSlash, claudeMdSta
           <ChevronRight className={`w-4 h-4 text-slate-400 transition-transform ${expanded ? 'rotate-90' : ''}`} />
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
-          {contextStats && (
-            <ContextBadge
-              totalNewTokens={contextStats.totalTokens}
-              categories={categoryBreakdown(contextStats)}
-            />
+          {aiGroup.phaseNumber != null && totalPhases != null && totalPhases > 1 && (
+            <span
+              className="rounded px-1 py-0.5 text-[10px] font-medium"
+              style={{ backgroundColor: 'rgba(99, 102, 241, 0.15)', color: '#818cf8' }}
+            >
+              Phase {aiGroup.phaseNumber}/{totalPhases}
+            </span>
           )}
-          <TokenUsageDisplay tokens={aiGroup.tokens} />
+          {contextStats && (
+            <ContextBadge stats={contextStats} />
+          )}
+          <TokenUsageDisplay
+            tokens={aiGroup.tokens}
+            contextCategories={contextStats ? categoryBreakdown(contextStats) : undefined}
+            modelName={enhanced.mainModel?.name}
+            modelFamily={enhanced.mainModel?.family}
+          />
           {aiGroup.durationMs > 0 && (
             <span className="text-xs text-slate-400 flex items-center gap-0.5">
               <Clock className="w-3 h-3" />

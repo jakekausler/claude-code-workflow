@@ -98,7 +98,7 @@ describe('transformChunksToConversation', () => {
       expect(group.tokens.input).toBe(100);
       expect(group.tokens.output).toBe(50);
       expect(group.tokens.cacheRead).toBe(20);
-      expect(group.tokens.total).toBe(150); // input + output
+      expect(group.tokens.total).toBe(170); // input + output + cacheRead + cacheCreation
     }
   });
 

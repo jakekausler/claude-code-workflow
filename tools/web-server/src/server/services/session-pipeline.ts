@@ -13,6 +13,8 @@ import { buildChunks, extractSemanticSteps } from './chunk-builder.js';
 import { resolveSubagents } from './subagent-resolver.js';
 import { calculateSessionCost } from './pricing.js';
 import { DataCache } from './data-cache.js';
+import { discoverClaudeMdFiles, decodeProjectRoot } from './claude-md-reader.js';
+import { readMentionedFiles } from './mentioned-file-reader.js';
 
 export interface SessionPipelineOptions {
   cacheSizeMB?: number;
@@ -41,17 +43,31 @@ export class SessionPipeline {
     enhanceAIChunks(chunks, toolExecutions);
 
     const subagents = await resolveSubagents(messages, { projectDir, sessionId });
-    // Context tracking (trackContext) is not called here because ParsedSession
-    // doesn't carry context fields. Add it back when ParsedSession is extended
-    // with per-turn context stats or cost-by-model data.
     const { totalCost } = calculateSessionCost(messages);
     const metrics = computeMetrics(messages, toolExecutions, totalCost);
+
+    // Discover CLAUDE.md files on disk. Claude Code injects these at API time
+    // but does NOT store them in the session JSONL, so we read the actual files.
+    // Extract the project root from the first message's cwd field, falling back
+    // to decoding the project directory name (e.g., '-storage-programs-my-project'
+    // → '/storage/programs/my-project') for sessions without parseable messages.
+    const projectRoot = messages.find(m => m.cwd)?.cwd ?? decodeProjectRoot(projectDir);
+    const claudeMdFiles = await discoverClaudeMdFiles(projectRoot);
+
+    // Read @-mentioned files from disk to get accurate token estimates.
+    // Without this, the client can only estimate tokens from the file path
+    // string (~87 tokens) instead of the actual content (~4.9k tokens).
+    const mentionedFileTokens = projectRoot
+      ? await readMentionedFiles(messages, projectRoot)
+      : [];
 
     const session: ParsedSession = {
       chunks,
       metrics,
       subagents,
       isOngoing: detectOngoing(messages),
+      claudeMdFiles: claudeMdFiles.length > 0 ? claudeMdFiles : undefined,
+      mentionedFileTokens: mentionedFileTokens.length > 0 ? mentionedFileTokens : undefined,
     };
 
     // Estimate size for cache (rough: JSON.stringify length * 2 for UTF-16)
@@ -116,7 +132,7 @@ function computeMetrics(
   const endTime = messages[messages.length - 1]?.timestamp?.getTime() ?? 0;
 
   return {
-    totalTokens: inputTokens + outputTokens,
+    totalTokens: inputTokens + outputTokens + cacheReadTokens + cacheCreationTokens,
     inputTokens,
     outputTokens,
     cacheReadTokens,

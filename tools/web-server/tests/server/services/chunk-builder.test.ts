@@ -131,7 +131,7 @@ describe('ChunkBuilder', () => {
       expect(classifyMessage(msg)).toBe('hardNoise');
     });
 
-    it('classifies interruption text as "hardNoise"', () => {
+    it('classifies interruption text as "ai" (recovered as interruption step)', () => {
       const msg = {
         type: 'user',
         isMeta: false,
@@ -139,7 +139,18 @@ describe('ChunkBuilder', () => {
         toolCalls: [],
         toolResults: [],
       } as unknown as ParsedMessage;
-      expect(classifyMessage(msg)).toBe('hardNoise');
+      expect(classifyMessage(msg)).toBe('ai');
+    });
+
+    it('classifies "interrupted for tool use" text as "ai"', () => {
+      const msg = {
+        type: 'user',
+        isMeta: false,
+        content: '[Request interrupted by user for tool use]',
+        toolCalls: [],
+        toolResults: [],
+      } as unknown as ParsedMessage;
+      expect(classifyMessage(msg)).toBe('ai');
     });
 
     it('classifies non-isMeta user message with only tool_result blocks as "ai"', () => {
@@ -521,6 +532,63 @@ describe('ChunkBuilder', () => {
       expect(steps[0].type).toBe('tool_result');
       expect(steps[0].content).toBe('file.txt');
       expect(steps[0].isError).toBe(false);
+    });
+
+    it('extracts interruption step from "[Request interrupted by user]" message', () => {
+      const chunk: AIChunk = {
+        type: 'ai',
+        messages: [
+          {
+            uuid: 'a1',
+            type: 'assistant',
+            content: [{ type: 'text', text: 'Working on it...' }],
+            timestamp: new Date(),
+            isSidechain: false,
+            isMeta: false,
+            toolCalls: [],
+            toolResults: [],
+          },
+          {
+            uuid: 'int1',
+            type: 'user',
+            isMeta: false,
+            content: '[Request interrupted by user]',
+            timestamp: new Date(),
+            isSidechain: false,
+            toolCalls: [],
+            toolResults: [],
+          },
+        ] as ParsedMessage[],
+        timestamp: new Date(),
+      };
+      const steps = extractSemanticSteps(chunk, []);
+      expect(steps).toHaveLength(2);
+      expect(steps[0].type).toBe('output');
+      expect(steps[1].type).toBe('interruption');
+      expect(steps[1].content).toBe('[Request interrupted by user]');
+    });
+
+    it('extracts interruption step from "interrupted for tool use" message', () => {
+      const chunk: AIChunk = {
+        type: 'ai',
+        messages: [
+          {
+            uuid: 'int1',
+            type: 'user',
+            isMeta: false,
+            content: '[Request interrupted by user for tool use]',
+            timestamp: new Date(),
+            isSidechain: false,
+            toolCalls: [],
+            toolResults: [],
+          },
+        ] as ParsedMessage[],
+        timestamp: new Date(),
+      };
+      const steps = extractSemanticSteps(chunk, []);
+      expect(steps).toHaveLength(1);
+      expect(steps[0].type).toBe('interruption');
+      expect(steps[0].content).toBe('[Request interrupted by user for tool use]');
     });
 
     it('returns empty array for chunk with no content', () => {

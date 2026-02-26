@@ -315,11 +315,35 @@ export interface SessionMetrics {
 
 // ─── 12. Parsed session ──────────────────────────────────────────────────────
 
+/**
+ * Token estimate for a CLAUDE.md file discovered on disk.
+ * Used to attribute CLAUDE.md context that Claude Code injects at API time
+ * but does NOT store in the session JSONL.
+ */
+export interface ClaudeMdFileEstimate {
+  path: string;
+  estimatedTokens: number;
+}
+
+/**
+ * Token estimate for an @-mentioned file read from disk.
+ * Used to provide accurate token counts for mentioned files instead of
+ * estimating from the file path string alone.
+ */
+export interface MentionedFileEstimate {
+  path: string;
+  estimatedTokens: number;
+}
+
 export interface ParsedSession {
   chunks: Chunk[];
   metrics: SessionMetrics;
   subagents: Process[];
   isOngoing: boolean;
+  /** CLAUDE.md files discovered on disk with token estimates. */
+  claudeMdFiles?: ClaudeMdFileEstimate[];
+  /** @-mentioned files read from disk with token estimates. */
+  mentionedFileTokens?: MentionedFileEstimate[];
 }
 
 // ─── 13. Context tracking types ──────────────────────────────────────────────
@@ -333,11 +357,33 @@ export interface TokensByCategory {
   userMessages: number;
 }
 
+export interface ToolTokenBreakdown {
+  toolName: string;
+  tokenCount: number;
+}
+
+export interface ContextItemDetail {
+  label: string;
+  tokens: number;
+}
+
+export interface ThinkingTextBreakdown {
+  thinking: number;
+  text: number;
+}
+
 export interface ContextStats {
   turnIndex: number;
   cumulativeTokens: TokensByCategory;
   turnTokens: TokensByCategory;
   totalTokens: number;
+  // Per-item breakdowns for expandable ContextBadge
+  claudeMdItems?: ContextItemDetail[];
+  mentionedFileItems?: ContextItemDetail[];
+  toolOutputItems?: ToolTokenBreakdown[];
+  taskCoordinationItems?: ContextItemDetail[];
+  thinkingTextDetail?: ThinkingTextBreakdown;
+  userMessageItems?: ContextItemDetail[];
 }
 
 export interface ContextPhaseInfo {

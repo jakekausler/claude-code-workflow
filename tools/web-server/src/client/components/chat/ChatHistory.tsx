@@ -11,6 +11,7 @@ import type { ContextStats } from '../../types/session.js';
 interface Props {
   items: ChatItem[];
   contextStats?: Map<string, ContextStats>;
+  totalPhases?: number;
 }
 
 const VIRTUALIZATION_THRESHOLD = 120;
@@ -18,7 +19,7 @@ const ESTIMATE_SIZE = 260;
 const OVERSCAN = 8;
 const NEAR_BOTTOM_PX = 100;
 
-export function ChatHistory({ items, contextStats }: Props) {
+export function ChatHistory({ items, contextStats, totalPhases }: Props) {
   const parentRef = useRef<HTMLDivElement>(null);
   const { isNearBottom, setIsNearBottom } = useSessionViewStore();
 
@@ -51,6 +52,7 @@ export function ChatHistory({ items, contextStats }: Props) {
         parentRef={parentRef}
         items={items}
         contextStats={contextStats}
+        totalPhases={totalPhases}
         onScroll={handleScroll}
       />
     );
@@ -63,7 +65,7 @@ export function ChatHistory({ items, contextStats }: Props) {
       onScroll={handleScroll}
     >
       {items.map((item, i) => (
-        <ItemRenderer key={itemKey(item, i)} item={item} contextStats={contextStats} />
+        <ItemRenderer key={itemKey(item, i)} item={item} contextStats={contextStats} totalPhases={totalPhases} />
       ))}
     </div>
   );
@@ -77,9 +79,10 @@ function itemKey(item: ChatItem, index: number): string {
   return `${item.type}-${item.group.id}-${index}`;
 }
 
-function ItemRenderer({ item, contextStats }: {
+function ItemRenderer({ item, contextStats, totalPhases }: {
   item: ChatItem;
   contextStats?: Map<string, ContextStats>;
+  totalPhases?: number;
 }) {
   switch (item.type) {
     case 'user':
@@ -89,6 +92,7 @@ function ItemRenderer({ item, contextStats }: {
         <AIChatGroup
           aiGroup={item.group}
           contextStats={contextStats?.get(item.group.id)}
+          totalPhases={totalPhases}
         />
       );
     case 'system':
@@ -104,11 +108,13 @@ function VirtualizedItemList({
   parentRef,
   items,
   contextStats,
+  totalPhases,
   onScroll,
 }: {
   parentRef: React.RefObject<HTMLDivElement | null>;
   items: ChatItem[];
   contextStats?: Map<string, ContextStats>;
+  totalPhases?: number;
   onScroll: () => void;
 }) {
   const virtualizer = useVirtualizer({
@@ -148,6 +154,7 @@ function VirtualizedItemList({
               <ItemRenderer
                 item={items[virtualItem.index]}
                 contextStats={contextStats}
+                totalPhases={totalPhases}
               />
             </div>
           </div>
