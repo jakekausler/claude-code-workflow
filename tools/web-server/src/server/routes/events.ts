@@ -9,14 +9,19 @@ export interface SSEClient {
 const clients = new Set<SSEClient>();
 
 export function broadcastEvent(channel: string, data: unknown): void {
-  const payload = `event: ${channel}\ndata: ${JSON.stringify(data)}\n\n`;
+  const safeChannel = channel.replace(/[\n\r]/g, '');
+  const payload = `event: ${safeChannel}\ndata: ${JSON.stringify(data)}\n\n`;
+  const dead: SSEClient[] = [];
   for (const client of clients) {
     try {
       client.reply.raw.write(payload);
     } catch {
-      clearInterval(client.timer);
-      clients.delete(client);
+      dead.push(client);
     }
+  }
+  for (const client of dead) {
+    clearInterval(client.timer);
+    clients.delete(client);
   }
 }
 
@@ -27,13 +32,13 @@ export function getClientCount(): number {
 const KEEPALIVE_MS = 30_000;
 
 const eventsPlugin: FastifyPluginCallback = (app, _opts, done) => {
-  app.get('/api/events', async (request, reply) => {
+  app.get('/api/events', (request, reply) => {
+    reply.hijack();
     reply.raw.writeHead(200, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
       'Connection': 'keep-alive',
     });
-    reply.hijack();
 
     // Send initial connected event
     reply.raw.write(
