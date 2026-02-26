@@ -22,6 +22,7 @@ export interface StageUpsertData {
   is_draft?: number;
   pending_merge_parents?: string | null;
   mr_target_branch?: string | null;
+  session_id?: string | null;
   file_path: string;
   last_synced: string;
 }
@@ -46,8 +47,8 @@ export class StageRepository {
         `INSERT OR REPLACE INTO stages
          (id, ticket_id, epic_id, repo_id, title, status, kanban_column, refinement_type,
           worktree_branch, pr_url, pr_number, priority, due_date, session_active, locked_at, locked_by,
-          is_draft, pending_merge_parents, mr_target_branch, file_path, last_synced)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          is_draft, pending_merge_parents, mr_target_branch, session_id, file_path, last_synced)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         data.id,
@@ -69,6 +70,7 @@ export class StageRepository {
         data.is_draft ?? 0,
         data.pending_merge_parents ?? null,
         data.mr_target_branch ?? null,
+        data.session_id ?? null,
         data.file_path,
         data.last_synced
       );
@@ -135,6 +137,27 @@ export class StageRepository {
            AND kanban_column != 'done'`
       )
       .all(repoId) as StageRow[];
+  }
+
+  /**
+   * Find a stage by its session ID.
+   */
+  findBySessionId(sessionId: string): StageRow | null {
+    const row = this.db
+      .raw()
+      .prepare('SELECT * FROM stages WHERE session_id = ?')
+      .get(sessionId) as StageRow | undefined;
+    return row ?? null;
+  }
+
+  /**
+   * Update the session_id for a stage (targeted update, no full upsert needed).
+   */
+  updateSessionId(stageId: string, sessionId: string | null): void {
+    this.db
+      .raw()
+      .prepare('UPDATE stages SET session_id = ? WHERE id = ?')
+      .run(sessionId, stageId);
   }
 
   /**

@@ -46,6 +46,7 @@ export interface StageRow {
   is_draft: number;
   pending_merge_parents: string | null;
   mr_target_branch: string | null;
+  session_id: string | null;
   file_path: string;
   last_synced: string;
 }

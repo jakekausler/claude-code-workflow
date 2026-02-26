@@ -57,6 +57,7 @@ CREATE TABLE IF NOT EXISTS stages (
   is_draft BOOLEAN DEFAULT 0,
   pending_merge_parents TEXT,
   mr_target_branch TEXT,
+  session_id TEXT DEFAULT NULL,
   file_path TEXT NOT NULL,
   last_synced TEXT NOT NULL
 )`;
@@ -130,6 +131,7 @@ export const ALTER_TABLE_MIGRATIONS = [
   'ALTER TABLE stages ADD COLUMN mr_target_branch TEXT',
   'ALTER TABLE dependencies ADD COLUMN target_repo_name TEXT',
   CREATE_REPOS_NAME_UNIQUE_INDEX,
+  'ALTER TABLE stages ADD COLUMN session_id TEXT DEFAULT NULL',
 ] as const;
 
 export const ALL_CREATE_STATEMENTS = [

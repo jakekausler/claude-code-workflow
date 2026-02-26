@@ -441,6 +441,7 @@ describe('Repositories', () => {
         is_draft: number;
         pending_merge_parents: string | null;
         mr_target_branch: string | null;
+        session_id: string | null;
         file_path: string;
         last_synced: string;
       }> = {}
@@ -704,6 +705,64 @@ describe('Repositories', () => {
       // Clear parents (empty array)
       stages.updatePendingMergeParents('stage-pmp', []);
       expect(stages.findById('stage-pmp')!.pending_merge_parents).toBeNull();
+    });
+
+    it('updateSessionId writes a session ID and findBySessionId reads it back', () => {
+      const { stages, repoId } = setupStagePrereqs();
+
+      stages.upsert(makeStageData(repoId, { id: 'stage-sess' }));
+
+      // Initially null
+      expect(stages.findById('stage-sess')!.session_id).toBeNull();
+
+      // Set session ID
+      stages.updateSessionId('stage-sess', 'session-abc-123');
+
+      const found = stages.findById('stage-sess');
+      expect(found!.session_id).toBe('session-abc-123');
+
+      // Find by session ID
+      const bySession = stages.findBySessionId('session-abc-123');
+      expect(bySession).not.toBeNull();
+      expect(bySession!.id).toBe('stage-sess');
+    });
+
+    it('findBySessionId returns null for unknown session ID', () => {
+      const stages = new StageRepository(db);
+      expect(stages.findBySessionId('nonexistent-session')).toBeNull();
+    });
+
+    it('updateSessionId with null clears the session_id', () => {
+      const { stages, repoId } = setupStagePrereqs();
+
+      stages.upsert(makeStageData(repoId, { id: 'stage-clear' }));
+      stages.updateSessionId('stage-clear', 'session-to-clear');
+      expect(stages.findById('stage-clear')!.session_id).toBe('session-to-clear');
+
+      // Clear it
+      stages.updateSessionId('stage-clear', null);
+      expect(stages.findById('stage-clear')!.session_id).toBeNull();
+      expect(stages.findBySessionId('session-to-clear')).toBeNull();
+    });
+
+    it('upsert preserves session_id when provided', () => {
+      const { stages, repoId } = setupStagePrereqs();
+
+      stages.upsert(makeStageData(repoId, { id: 'stage-preserve', session_id: 'sess-xyz' }));
+      expect(stages.findById('stage-preserve')!.session_id).toBe('sess-xyz');
+
+      // Re-upsert with session_id still set
+      stages.upsert(makeStageData(repoId, { id: 'stage-preserve', title: 'Updated', session_id: 'sess-xyz' }));
+      const found = stages.findById('stage-preserve');
+      expect(found!.title).toBe('Updated');
+      expect(found!.session_id).toBe('sess-xyz');
+    });
+
+    it('upsert without session_id defaults to null', () => {
+      const { stages, repoId } = setupStagePrereqs();
+
+      stages.upsert(makeStageData(repoId, { id: 'stage-no-sess' }));
+      expect(stages.findById('stage-no-sess')!.session_id).toBeNull();
     });
 
     it('list methods return new fields on StageRow', () => {
