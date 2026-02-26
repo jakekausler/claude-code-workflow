@@ -1,5 +1,17 @@
 import { create } from 'zustand';
 
+export interface QuestionOption {
+  label: string;
+  description?: string;
+}
+
+export interface QuestionDef {
+  question: string;
+  header?: string;
+  options?: QuestionOption[];
+  multiSelect?: boolean;
+}
+
 export interface PendingApprovalUI {
   stageId: string;
   requestId: string;
@@ -11,7 +23,7 @@ export interface PendingApprovalUI {
 export interface PendingQuestionUI {
   stageId: string;
   requestId: string;
-  questions: unknown[];
+  questions: QuestionDef[];
   input: unknown;
   createdAt: number;
 }

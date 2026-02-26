@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { ShieldCheck, ShieldX } from 'lucide-react';
 import { useApproveToolCall } from '../../api/interaction-hooks.js';
 import { useInteractionStore } from '../../store/interaction-store.js';
@@ -33,11 +33,19 @@ export function ApprovalDialog({ stageId, requestId, toolName, input, onClose }:
     onClose();
   }, [requestId, reason, showReason, approveMutation, removeApproval, onClose]);
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
   const inputStr = typeof input === 'string' ? input : JSON.stringify(input, null, 2);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-      <div className="w-full max-w-lg rounded-lg border border-zinc-700 bg-zinc-900 shadow-xl">
+      <div className="w-full max-w-lg rounded-lg border border-zinc-700 bg-zinc-900 shadow-xl" role="dialog" aria-modal="true">
         <div className="border-b border-zinc-700 px-4 py-3">
           <h3 className="text-sm font-semibold text-zinc-100">Tool Approval Required</h3>
           <p className="mt-1 text-xs text-zinc-400">Stage: {stageId}</p>

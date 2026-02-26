@@ -37,10 +37,7 @@ export function useAnswerQuestion(stageId: string) {
         method: 'POST',
         body: JSON.stringify(params),
       });
-      return { ...res, requestId: params.requestId };
-    },
-    onSuccess: (data: { success: boolean; requestId: string }) => {
-      useInteractionStore.getState().removeQuestion(data.requestId);
+      return res;
     },
   });
 }

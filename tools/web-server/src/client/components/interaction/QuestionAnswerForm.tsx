@@ -1,19 +1,7 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { MessageSquare, Check } from 'lucide-react';
 import { useAnswerQuestion } from '../../api/interaction-hooks.js';
-import { useInteractionStore } from '../../store/interaction-store.js';
-
-interface QuestionOption {
-  label: string;
-  description?: string;
-}
-
-interface QuestionDef {
-  question: string;
-  header?: string;
-  options?: QuestionOption[];
-  multiSelect?: boolean;
-}
+import { useInteractionStore, type QuestionDef, type QuestionOption } from '../../store/interaction-store.js';
 
 export interface QuestionAnswerFormProps {
   stageId: string;
@@ -43,11 +31,19 @@ export function QuestionAnswerForm({ stageId, requestId, questions, onClose }: Q
     onClose();
   }, [requestId, answers, answerMutation, removeQuestion, onClose]);
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
   const allAnswered = questions.every((q) => answers[q.question]?.trim());
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-      <div className="w-full max-w-lg rounded-lg border border-zinc-700 bg-zinc-900 shadow-xl">
+      <div className="w-full max-w-lg rounded-lg border border-zinc-700 bg-zinc-900 shadow-xl" role="dialog" aria-modal="true">
         <div className="border-b border-zinc-700 px-4 py-3">
           <h3 className="flex items-center gap-2 text-sm font-semibold text-zinc-100">
             <MessageSquare size={16} />
@@ -57,8 +53,8 @@ export function QuestionAnswerForm({ stageId, requestId, questions, onClose }: Q
         </div>
 
         <div className="max-h-96 overflow-auto px-4 py-3 space-y-4">
-          {questions.map((q) => (
-            <div key={q.question}>
+          {questions.map((q, index) => (
+            <div key={index}>
               {q.header && (
                 <span className="mb-1 inline-block rounded bg-zinc-700 px-2 py-0.5 text-xs text-zinc-300">
                   {q.header}

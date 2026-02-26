@@ -44,6 +44,7 @@ export function MessageInput({ stageId, disabled, queuedMessage }: MessageInputP
           placeholder={disabled ? 'No active session' : 'Send a follow-up message...'}
           disabled={disabled}
           rows={1}
+          aria-label="Send a message to Claude"
           className="flex-1 resize-none rounded border border-zinc-600 bg-zinc-800 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-500 focus:border-blue-500 focus:outline-none disabled:opacity-50"
         />
         <button
