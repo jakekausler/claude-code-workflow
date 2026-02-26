@@ -17,6 +17,7 @@ import { graphRoutes } from './routes/graph.js';
 import { sessionRoutes } from './routes/sessions.js';
 import { repoRoutes } from './routes/repos.js';
 import { eventRoutes, broadcastEvent } from './routes/events.js';
+import { interactionRoutes } from './routes/interaction.js';
 
 declare module 'fastify' {
   interface FastifyInstance {
