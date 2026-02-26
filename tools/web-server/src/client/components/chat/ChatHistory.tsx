@@ -59,7 +59,7 @@ export function ChatHistory({ chunks }: Props) {
       onScroll={handleScroll}
     >
       {chunks.map((chunk, i) => (
-        <ChunkRenderer key={i} chunk={chunk} />
+        <ChunkRenderer key={`${chunk.type}-${i}`} chunk={chunk} />
       ))}
     </div>
   );

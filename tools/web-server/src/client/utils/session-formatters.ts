@@ -21,6 +21,7 @@ export function formatTokenCount(tokens: number): string {
  */
 export function formatDuration(ms: number): string {
   if (ms === 0) return '0s';
+  if (ms > 0 && ms < 1000) return `${Math.round(ms)}ms`;
   const totalSeconds = Math.floor(ms / 1000);
   const hours = Math.floor(totalSeconds / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);

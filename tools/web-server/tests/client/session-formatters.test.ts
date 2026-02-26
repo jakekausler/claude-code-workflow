@@ -36,6 +36,12 @@ describe('session-formatters', () => {
     it('returns 0s for zero', () => {
       expect(formatDuration(0)).toBe('0s');
     });
+    it('formats sub-second durations in milliseconds', () => {
+      expect(formatDuration(150)).toBe('150ms');
+      expect(formatDuration(500)).toBe('500ms');
+      expect(formatDuration(1)).toBe('1ms');
+      expect(formatDuration(999)).toBe('999ms');
+    });
   });
 
   describe('formatCost', () => {

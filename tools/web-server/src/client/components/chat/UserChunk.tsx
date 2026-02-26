@@ -1,13 +1,23 @@
+import { useState } from 'react';
 import { User } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { formatTimestamp } from '../../utils/session-formatters.js';
-import type { UserChunk as UserChunkType, TextContent } from '../../types/session.js';
+import type { UserChunk as UserChunkType, TextContent, ImageContent, ContentBlock } from '../../types/session.js';
+
+const COLLAPSE_THRESHOLD = 500;
 
 interface Props {
   chunk: UserChunkType;
 }
 
 export function UserChunk({ chunk }: Props) {
+  const [expanded, setExpanded] = useState(false);
   const { message, timestamp } = chunk;
+
+  const contentBlocks: ContentBlock[] | null =
+    typeof message.content === 'string' ? null : message.content;
+
   const text =
     typeof message.content === 'string'
       ? message.content
@@ -16,11 +26,35 @@ export function UserChunk({ chunk }: Props) {
           .map((b) => b.text)
           .join('\n');
 
+  const imageCount = contentBlocks
+    ? contentBlocks.filter((b): b is ImageContent => b.type === 'image').length
+    : 0;
+
+  const isLong = text.length > COLLAPSE_THRESHOLD;
+  const displayText = isLong && !expanded ? text.slice(0, COLLAPSE_THRESHOLD) + '\u2026' : text;
+
   return (
     <div className="flex justify-end mb-4">
       <div className="max-w-[80%] flex gap-2">
         <div className="bg-blue-600 text-white rounded-2xl rounded-tr-sm px-4 py-3 shadow-sm">
-          <p className="whitespace-pre-wrap text-sm">{text}</p>
+          {imageCount > 0 && (
+            <span className="inline-block text-xs bg-blue-500 text-blue-100 rounded px-1.5 py-0.5 mb-1">
+              [{imageCount} image{imageCount > 1 ? 's' : ''}]
+            </span>
+          )}
+          <div className="prose prose-sm prose-invert max-w-none text-sm [&_p]:my-1 [&_pre]:bg-blue-700 [&_code]:bg-blue-700 [&_code]:text-blue-100">
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+              {displayText}
+            </ReactMarkdown>
+          </div>
+          {isLong && (
+            <button
+              onClick={() => setExpanded(!expanded)}
+              className="text-xs text-blue-200 hover:text-white underline mt-1"
+            >
+              {expanded ? 'Show less' : 'Show more'}
+            </button>
+          )}
           <div className="text-xs text-blue-200 mt-1 text-right">
             {formatTimestamp(timestamp)}
           </div>

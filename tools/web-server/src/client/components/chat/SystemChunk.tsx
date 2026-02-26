@@ -10,11 +10,14 @@ export function SystemChunk({ chunk }: Props) {
   const { messages, timestamp } = chunk;
   const texts = messages
     .map((m) => {
-      if (typeof m.content === 'string') return m.content;
-      return m.content
-        .filter((b): b is TextContent => b.type === 'text')
-        .map((b) => b.text)
-        .join('\n');
+      const raw =
+        typeof m.content === 'string'
+          ? m.content
+          : m.content
+              .filter((b): b is TextContent => b.type === 'text')
+              .map((b) => b.text)
+              .join('\n');
+      return raw.replace(/\x1B\[[0-9;]*m/g, '');
     })
     .filter(Boolean);
 
