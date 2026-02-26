@@ -81,7 +81,7 @@ export function AIChunk({ chunk, chunkIndex }: Props) {
           endTime,
           durationMs:
             endTime && startTime
-              ? endTime.getTime() - startTime.getTime()
+              ? new Date(endTime).getTime() - new Date(startTime).getTime()
               : undefined,
           isOrphaned: !matchingResult,
         });
@@ -101,7 +101,8 @@ export function AIChunk({ chunk, chunkIndex }: Props) {
   // Compute duration from first to last message timestamp
   const duration =
     messages.length >= 2
-      ? messages[messages.length - 1].timestamp.getTime() - messages[0].timestamp.getTime()
+      ? new Date(messages[messages.length - 1].timestamp).getTime() -
+        new Date(messages[0].timestamp).getTime()
       : undefined;
 
   // Non-enhanced fallback: render raw text from messages (NOT collapsible)
