@@ -1,4 +1,5 @@
-import { useMemo } from 'react';
+import { useMemo, useCallback } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useBoard, useEpics, useTickets } from '../api/hooks.js';
 import { useBoardStore } from '../store/board-store.js';
 import { useDrawerStore, type DrawerEntry } from '../store/drawer-store.js';
@@ -7,6 +8,7 @@ import { BoardLayout } from '../components/board/BoardLayout.js';
 import { BoardColumn } from '../components/board/BoardColumn.js';
 import { BoardCard } from '../components/board/BoardCard.js';
 import { slugToTitle, columnColor, statusColor } from '../utils/formatters.js';
+import { useSSE } from '../api/use-sse.js';
 import type { BoardStageItem, BoardTicketItem, BoardItem, EpicListItem, TicketListItem } from '../api/hooks.js';
 
 /** Priority map for known system columns; lower = further left. */
@@ -42,6 +44,19 @@ export function Board() {
   const { selectedRepo, selectedEpic, selectedTicket } = useBoardStore();
   const { open, stack } = useDrawerStore();
   const currentDrawerId = stack.length > 0 ? stack[stack.length - 1].id : null;
+
+  const queryClient = useQueryClient();
+
+  const handleSSE = useCallback(
+    (_channel: string, _data: unknown) => {
+      void queryClient.invalidateQueries({ queryKey: ['board'] });
+      void queryClient.invalidateQueries({ queryKey: ['epics'] });
+      void queryClient.invalidateQueries({ queryKey: ['tickets'] });
+    },
+    [queryClient],
+  );
+
+  useSSE(['board-update'], handleSSE);
 
   const filters: Record<string, string | boolean | undefined> = {};
   if (selectedRepo) filters.repo = selectedRepo;
