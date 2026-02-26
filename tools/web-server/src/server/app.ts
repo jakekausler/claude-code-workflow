@@ -112,6 +112,42 @@ export async function createServer(
     });
   }
 
+  // OrchestratorClient → SSE broadcast for session lifecycle events
+  if (options.orchestratorClient) {
+    const oc = options.orchestratorClient;
+
+    oc.on('session-registered', (entry) => {
+      broadcastEvent('stage-transition', {
+        stageId: entry.stageId,
+        sessionId: entry.sessionId,
+        type: 'session_started',
+        timestamp: entry.spawnedAt,
+      });
+    });
+
+    oc.on('session-status', (entry) => {
+      broadcastEvent('board-update', {
+        type: 'session_status',
+        stageId: entry.stageId,
+        sessionId: entry.sessionId,
+        status: entry.status,
+      });
+    });
+
+    oc.on('session-ended', (entry) => {
+      broadcastEvent('stage-transition', {
+        stageId: entry.stageId,
+        sessionId: entry.sessionId,
+        type: 'session_ended',
+        timestamp: entry.lastActivity,
+      });
+      broadcastEvent('board-update', {
+        type: 'session_ended',
+        stageId: entry.stageId,
+      });
+    });
+  }
+
   // --- API routes ---
   app.get('/api/health', async () => ({
     status: 'ok',

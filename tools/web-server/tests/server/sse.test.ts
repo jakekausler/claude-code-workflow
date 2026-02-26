@@ -3,6 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import { createServer } from '../../src/server/app.js';
 import { SessionPipeline } from '../../src/server/services/session-pipeline.js';
 import { FileWatcher } from '../../src/server/services/file-watcher.js';
+import { OrchestratorClient } from '../../src/server/services/orchestrator-client.js';
 import { broadcastEvent, getClientCount } from '../../src/server/routes/events.js';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
@@ -135,5 +136,69 @@ describe('FileWatcher decoration', () => {
       claudeProjectsDir: tempDir,
     });
     expect(app.fileWatcher).toBeNull();
+  });
+});
+
+describe('OrchestratorClient → SSE broadcast', () => {
+  let app: FastifyInstance;
+  let tempDir: string;
+  let mockClient: OrchestratorClient;
+
+  beforeEach(async () => {
+    tempDir = mkdtempSync(join(tmpdir(), 'sse-orch-test-'));
+    mockClient = new OrchestratorClient('ws://localhost:0');
+    app = await createServer({
+      logger: false,
+      claudeProjectsDir: tempDir,
+      orchestratorClient: mockClient,
+    });
+    await app.ready();
+  });
+
+  afterEach(async () => {
+    await app?.close();
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it('does not throw when orchestrator emits session-registered', () => {
+    expect(() => {
+      mockClient.emit('session-registered', {
+        stageId: 'stage-1',
+        sessionId: 'sess-abc',
+        processId: 1234,
+        worktreePath: '/tmp/wt',
+        status: 'starting',
+        spawnedAt: Date.now(),
+        lastActivity: Date.now(),
+      });
+    }).not.toThrow();
+  });
+
+  it('does not throw when orchestrator emits session-status', () => {
+    expect(() => {
+      mockClient.emit('session-status', {
+        stageId: 'stage-1',
+        sessionId: 'sess-abc',
+        processId: 1234,
+        worktreePath: '/tmp/wt',
+        status: 'active',
+        spawnedAt: Date.now(),
+        lastActivity: Date.now(),
+      });
+    }).not.toThrow();
+  });
+
+  it('does not throw when orchestrator emits session-ended', () => {
+    expect(() => {
+      mockClient.emit('session-ended', {
+        stageId: 'stage-1',
+        sessionId: 'sess-abc',
+        processId: 1234,
+        worktreePath: '/tmp/wt',
+        status: 'ended',
+        spawnedAt: Date.now(),
+        lastActivity: Date.now(),
+      });
+    }).not.toThrow();
   });
 });
