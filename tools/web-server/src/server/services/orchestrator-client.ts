@@ -12,8 +12,8 @@ export interface SessionInfo {
 }
 
 interface WsMessage {
-  type: 'init' | 'session_registered' | 'session_status' | 'session_ended';
-  data: SessionInfo | SessionInfo[];
+  type: 'init' | 'session_registered' | 'session_status' | 'session_ended' | 'approval_requested' | 'question_requested' | 'approval_cancelled' | 'message_queued' | 'message_sent';
+  data: SessionInfo | SessionInfo[] | unknown;
 }
 
 export interface OrchestratorClientOptions {
@@ -67,6 +67,32 @@ export class OrchestratorClient extends EventEmitter {
     return Array.from(this.sessions.values());
   }
 
+  sendMessage(stageId: string, message: string): void {
+    this.send({ type: 'send_message', stageId, message });
+  }
+
+  approveTool(stageId: string, requestId: string, decision: 'allow' | 'deny', reason?: string): void {
+    this.send({ type: 'approve_tool', stageId, requestId, decision, reason });
+  }
+
+  answerQuestion(stageId: string, requestId: string, answers: Record<string, string>): void {
+    this.send({ type: 'answer_question', stageId, requestId, answers });
+  }
+
+  interruptSession(stageId: string): void {
+    this.send({ type: 'interrupt', stageId });
+  }
+
+  getPendingForStage(_stageId: string): unknown[] {
+    return [];
+  }
+
+  private send(data: unknown): void {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify(data));
+    }
+  }
+
   private tryConnect(): void {
     if (!this.shouldConnect) return;
     try {
@@ -118,6 +144,21 @@ export class OrchestratorClient extends EventEmitter {
         case 'session_ended':
           this.sessions.delete((msg.data as SessionInfo).stageId);
           this.emit('session-ended', msg.data);
+          break;
+        case 'approval_requested':
+          this.emit('approval-requested', msg.data);
+          break;
+        case 'question_requested':
+          this.emit('question-requested', msg.data);
+          break;
+        case 'approval_cancelled':
+          this.emit('approval-cancelled', msg.data);
+          break;
+        case 'message_queued':
+          this.emit('message-queued', msg.data);
+          break;
+        case 'message_sent':
+          this.emit('message-sent', msg.data);
           break;
       }
     } catch {
