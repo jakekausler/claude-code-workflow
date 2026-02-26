@@ -5,6 +5,8 @@ import {
   formatCost,
   generateToolSummary,
   formatTimestamp,
+  formatTokensCompact,
+  formatTimestampLong,
 } from '../../src/client/utils/session-formatters.js';
 
 describe('session-formatters', () => {
@@ -25,7 +27,7 @@ describe('session-formatters', () => {
 
   describe('formatDuration', () => {
     it('formats seconds', () => {
-      expect(formatDuration(5000)).toBe('5s');
+      expect(formatDuration(5000)).toBe('5.0s');
     });
     it('formats minutes and seconds', () => {
       expect(formatDuration(125000)).toBe('2m 5s');
@@ -41,6 +43,10 @@ describe('session-formatters', () => {
       expect(formatDuration(500)).toBe('500ms');
       expect(formatDuration(1)).toBe('1ms');
       expect(formatDuration(999)).toBe('999ms');
+    });
+    it('returns 0s for negative values', () => {
+      expect(formatDuration(-1000)).toBe('0s');
+      expect(formatDuration(-1)).toBe('0s');
     });
   });
 
@@ -65,17 +71,25 @@ describe('session-formatters', () => {
       const input = { file_path: '/src/utils.ts', offset: 1, limit: 100 };
       expect(generateToolSummary('Read', input)).toBe('utils.ts \u2014 lines 1-100');
     });
+    it('generates Read summary with offset and limit calculation', () => {
+      const input = { file_path: '/src/utils.ts', offset: 100, limit: 50 };
+      expect(generateToolSummary('Read', input)).toBe('utils.ts \u2014 lines 100-149');
+    });
     it('generates Read summary without line range', () => {
       const input = { file_path: '/src/utils.ts' };
       expect(generateToolSummary('Read', input)).toBe('utils.ts');
     });
-    it('generates Bash summary with truncated command', () => {
-      const input = { command: 'npm run build && npm run test -- --coverage --reporter=verbose' };
-      expect(generateToolSummary('Bash', input)).toBe('npm run build && npm run test -- --cove\u2026');
+    it('generates Bash summary with description', () => {
+      const input = { description: 'Run build and tests', command: 'npm run build && npm run test' };
+      expect(generateToolSummary('Bash', input)).toBe('Run build and tests');
     });
-    it('generates Bash summary for short commands', () => {
+    it('generates Bash summary with command when no description', () => {
       const input = { command: 'git status' };
-      expect(generateToolSummary('Bash', input)).toBe('git status');
+      expect(generateToolSummary('Bash', input)).toBe('git');
+    });
+    it('generates Bash summary extracting first word from complex command', () => {
+      const input = { command: 'npm run build && npm run test -- --coverage' };
+      expect(generateToolSummary('Bash', input)).toBe('npm');
     });
     it('generates Grep summary', () => {
       const input = { pattern: 'TODO', glob: '*.ts' };
@@ -203,6 +217,37 @@ describe('session-formatters', () => {
 
     it('returns empty string for invalid Date object', () => {
       expect(formatTimestamp(new Date('invalid'))).toBe('');
+    });
+  });
+
+  describe('formatTokensCompact', () => {
+    it('formats thousands with lowercase k', () => {
+      expect(formatTokensCompact(50000)).toBe('50.0k');
+    });
+    it('formats millions', () => {
+      expect(formatTokensCompact(1500000)).toBe('1.5M');
+    });
+    it('returns raw number under 1000', () => {
+      expect(formatTokensCompact(500)).toBe('500');
+    });
+    it('formats exact 1000', () => {
+      expect(formatTokensCompact(1000)).toBe('1.0k');
+    });
+  });
+
+  describe('formatTimestampLong', () => {
+    it('formats Date to 12h with seconds', () => {
+      // Test with a known date - the exact output depends on locale
+      const d = new Date('2025-01-01T14:30:45Z');
+      const result = formatTimestampLong(d);
+      expect(result).toMatch(/\d{1,2}:\d{2}:\d{2}\s[AP]M/);
+    });
+    it('handles string timestamps', () => {
+      const result = formatTimestampLong('2025-01-01T10:15:30Z');
+      expect(result).toMatch(/\d{1,2}:\d{2}:\d{2}\s[AP]M/);
+    });
+    it('returns empty for invalid', () => {
+      expect(formatTimestampLong('not-a-date')).toBe('');
     });
   });
 });

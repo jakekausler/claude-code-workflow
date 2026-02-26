@@ -163,8 +163,8 @@ describe('processSessionContextWithPhases', () => {
   it('CLAUDE.md content attributed to claudeMd category', () => {
     const items: ChatItem[] = [
       makeUserItem(
-        'Here is the CLAUDE.md content with instructions',
-        { rawText: 'Here is the CLAUDE.md content with instructions' },
+        'Contents of /home/user/.claude/CLAUDE.md ...',
+        { rawText: 'Contents of /home/user/.claude/CLAUDE.md with instructions' },
       ),
       makeAIItem([step('output', 'Ok')], 'ai-claude-md'),
     ];
@@ -242,9 +242,9 @@ describe('processSessionContextWithPhases', () => {
     const items: ChatItem[] = [
       makeAIItem([
         step('tool_call', 'Create task for implementation', 'TaskCreate'),
-        step('tool_result', 'Task created'),
+        step('tool_result', 'Task created', 'TaskCreate'),
         step('tool_call', 'Send message to subagent', 'SendMessage'),
-        step('tool_result', 'Message sent'),
+        step('tool_result', 'Message sent', 'SendMessage'),
       ], 'ai-coord'),
     ];
 
@@ -252,8 +252,8 @@ describe('processSessionContextWithPhases', () => {
     const stats = result.statsMap.get('ai-coord')!;
 
     expect(stats.turnTokens.taskCoordination).toBeGreaterThan(0);
-    // tool_result steps go to toolOutputs regardless of the tool name
-    expect(stats.turnTokens.toolOutputs).toBeGreaterThan(0);
+    // tool_result steps for coordination tools also go to taskCoordination
+    expect(stats.turnTokens.toolOutputs).toBe(0);
   });
 
   it('thinking steps attributed to thinkingText category', () => {
@@ -343,5 +343,19 @@ describe('processSessionContextWithPhases', () => {
     const stats = result.statsMap.get('ai-with-system')!;
     expect(stats.turnIndex).toBe(0);
     expect(stats.turnTokens.userMessages).toBeGreaterThan(0);
+  });
+
+  it('handles consecutive compact items with no AI groups between them', () => {
+    const items: ChatItem[] = [
+      makeAIItem([step('output', 'hello')], 'ai-1'),
+      makeCompactItem(),
+      makeCompactItem(), // second compact immediately after first
+      makeAIItem([step('output', 'world')], 'ai-2'),
+    ];
+    const result = processSessionContextWithPhases(items);
+    expect(result.statsMap.size).toBe(2);
+    // Should have 3 phases: before first compact, empty between compacts, after second compact
+    // Or 2 phases if the empty phase is skipped
+    expect(result.phases.length).toBeGreaterThanOrEqual(2);
   });
 });

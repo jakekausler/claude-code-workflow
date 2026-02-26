@@ -51,6 +51,9 @@ export function enhanceAIGroup(
 /**
  * For each subagent with a parentTaskId, find the matching Task tool
  * and set mainSessionImpact (how many tokens the subagent cost in the parent context).
+ *
+ * Note: Mutates processes in-place. This is intentional — the enhanced result
+ * shares the processes array with the input AIGroup.
  */
 function attachMainSessionImpact(
   processes: Process[],

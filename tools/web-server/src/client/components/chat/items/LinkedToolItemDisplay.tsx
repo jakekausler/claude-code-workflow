@@ -39,6 +39,7 @@ const toolIcons: Record<string, typeof FileText> = {
 
 /**
  * Adapt a LinkedToolItemData to the ToolExecution shape expected by tool renderers.
+ * Spreads tool.result to include all its fields alongside toolUseId.
  */
 function toToolExecution(tool: LinkedToolItemData): ToolExecution {
   return {
@@ -46,11 +47,7 @@ function toToolExecution(tool: LinkedToolItemData): ToolExecution {
     toolName: tool.name,
     input: tool.input,
     result: tool.result
-      ? {
-          toolUseId: tool.id,
-          content: tool.result.content,
-          isError: tool.result.isError,
-        }
+      ? { toolUseId: tool.id, ...tool.result }
       : undefined,
     startTime: tool.startTime,
     endTime: tool.endTime,

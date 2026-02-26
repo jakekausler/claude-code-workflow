@@ -8,11 +8,19 @@ interface Props {
   items: AIGroupDisplayItem[];
 }
 
+function displayItemKey(item: AIGroupDisplayItem, index: number): string {
+  switch (item.type) {
+    case 'tool': return `tool-${item.tool.id}`;
+    case 'subagent': return `sub-${item.subagent.id}`;
+    default: return `${item.type}-${index}`;
+  }
+}
+
 export function DisplayItemList({ items }: Props) {
   return (
     <div className="space-y-1">
       {items.map((item, i) => (
-        <DisplayItemRenderer key={i} item={item} />
+        <DisplayItemRenderer key={displayItemKey(item, i)} item={item} />
       ))}
     </div>
   );

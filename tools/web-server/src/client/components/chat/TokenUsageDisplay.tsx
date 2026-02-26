@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState } from 'react';
 import { formatTokensCompact } from '../../utils/session-formatters.js';
 import type { AIGroupTokens } from '../../types/groups.js';
 
@@ -10,15 +10,16 @@ interface Props {
 
 export function TokenUsageDisplay({ tokens, phaseNumber, totalPhases }: Props) {
   const [showPopover, setShowPopover] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
 
   if (tokens.total === 0) return null;
 
   return (
-    <div className="relative inline-block" ref={ref}>
+    <div className="relative inline-block">
       <button
         onMouseEnter={() => setShowPopover(true)}
         onMouseLeave={() => setShowPopover(false)}
+        onFocus={() => setShowPopover(true)}
+        onBlur={() => setShowPopover(false)}
         className="text-xs text-slate-500 font-mono hover:text-slate-700 transition-colors"
       >
         {formatTokensCompact(tokens.total)}

@@ -127,7 +127,12 @@ function attributeUserGroup(
 ): void {
   const rawText = userGroup.content.rawText ?? userGroup.content.text ?? '';
 
-  if (rawText.includes('CLAUDE.md') || rawText.includes('<system-reminder>')) {
+  // Check for CLAUDE.md system injection patterns (not casual mentions of "CLAUDE.md" in chat).
+  // Matches: full system injections with "Contents of" text, or system-reminder blocks
+  const isClaudeMdInjection =
+    (rawText.includes('Contents of') && rawText.includes('CLAUDE.md')) ||
+    rawText.includes('<system-reminder>');
+  if (isClaudeMdInjection) {
     tokens.claudeMd += estimateTokens(rawText);
   } else if (userGroup.content.fileReferences.length > 0) {
     tokens.mentionedFiles += estimateTokens(rawText);
@@ -151,6 +156,10 @@ function attributeAISteps(
     switch (step.type) {
       case 'thinking':
       case 'output':
+        // Both thinking and visible output text are attributed to thinkingText.
+        // This matches devtools' approach of grouping all model-generated text
+        // into a single category. The field name is inherited from the server-side
+        // TokensByCategory type which is used across the pipeline.
         tokens.thinkingText += estimateTokens(step.content);
         break;
 
@@ -163,7 +172,11 @@ function attributeAISteps(
         break;
 
       case 'tool_result':
-        tokens.toolOutputs += estimateTokens(step.content);
+        if (step.toolName && COORD_TOOLS.has(step.toolName)) {
+          tokens.taskCoordination += estimateTokens(step.content);
+        } else {
+          tokens.toolOutputs += estimateTokens(step.content);
+        }
         break;
 
       // subagent steps: skip (subagent token usage is tracked separately)

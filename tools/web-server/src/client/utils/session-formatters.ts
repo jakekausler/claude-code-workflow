@@ -17,19 +17,22 @@ export function formatTokenCount(tokens: number): string {
 
 /**
  * Format duration in ms to human-readable.
- * 5000 -> "5s", 125000 -> "2m 5s", 3661000 -> "1h 1m"
+ * 5000 -> "5.0s", 125000 -> "2m 5s", 3661000 -> "1h 1m"
  */
 export function formatDuration(ms: number): string {
+  if (ms < 0) return '0s';
   if (ms === 0) return '0s';
   if (ms > 0 && ms < 1000) return `${Math.round(ms)}ms`;
-  const totalSeconds = Math.floor(ms / 1000);
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-
-  if (hours > 0) return `${hours}h ${minutes}m`;
-  if (minutes > 0) return `${minutes}m ${seconds}s`;
-  return `${seconds}s`;
+  const totalSeconds = ms / 1000;
+  if (totalSeconds < 60) {
+    return `${totalSeconds.toFixed(1)}s`;
+  }
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = Math.floor(totalSeconds % 60);
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  if (hours > 0) return `${hours}h ${remainingMinutes}m`;
+  return `${minutes}m ${seconds}s`;
 }
 
 /**
@@ -39,6 +42,34 @@ export function formatCost(cost: number): string {
   if (cost === 0) return '$0.00';
   if (cost < 0.01) return `$${cost.toFixed(4)}`;
   return `$${cost.toFixed(2)}`;
+}
+
+/**
+ * Format tokens in compact format matching devtools style.
+ * Uses lowercase 'k' (not 'K'): 50.0k, 1.5M
+ */
+export function formatTokensCompact(tokens: number): string {
+  if (tokens >= 1_000_000) {
+    return `${(tokens / 1_000_000).toFixed(1)}M`;
+  }
+  if (tokens >= 1_000) {
+    return `${(tokens / 1_000).toFixed(1)}k`;
+  }
+  return String(tokens);
+}
+
+/**
+ * Format timestamp in 12-hour format with seconds: "2:45:30 PM"
+ */
+export function formatTimestampLong(date: Date | string | number): string {
+  const d = date instanceof Date ? date : new Date(date);
+  if (isNaN(d.getTime())) return '';
+  return d.toLocaleTimeString('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: true,
+  });
 }
 
 /**
@@ -76,7 +107,7 @@ export function generateToolSummary(
       const offset = input.offset as number | undefined;
       const limit = input.limit as number | undefined;
       if (offset != null && limit != null) {
-        return `${name} \u2014 lines ${offset}-${limit}`;
+        return `${name} \u2014 lines ${offset}-${offset + limit - 1}`;
       }
       return name;
     }
@@ -92,9 +123,16 @@ export function generateToolSummary(
       return name;
     }
     case 'Bash': {
-      const cmd = input.command as string | undefined;
       const desc = input.description as string | undefined;
-      return truncate(desc || cmd || 'Bash', 40);
+      if (desc) return truncate(desc, 40);
+      const cmd = input.command as string | undefined;
+      if (cmd) {
+        // Extract just the command, not the full path arguments
+        const parts = cmd.split(/\s+/);
+        const command = parts[0] || cmd;
+        return truncate(command, 40);
+      }
+      return 'Bash';
     }
     case 'Grep': {
       const pattern = input.pattern as string | undefined;

@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState } from 'react';
 import { Database } from 'lucide-react';
 import { formatTokensCompact } from '../../../utils/session-formatters.js';
 
@@ -14,15 +14,16 @@ interface Props {
 
 export function ContextBadge({ totalNewTokens, categories = [] }: Props) {
   const [showPopover, setShowPopover] = useState(false);
-  const badgeRef = useRef<HTMLDivElement>(null);
 
   if (totalNewTokens === 0) return null;
 
   return (
-    <div className="relative inline-block" ref={badgeRef}>
+    <div className="relative inline-block">
       <button
         onMouseEnter={() => setShowPopover(true)}
         onMouseLeave={() => setShowPopover(false)}
+        onFocus={() => setShowPopover(true)}
+        onBlur={() => setShowPopover(false)}
         className="flex items-center gap-1 text-xs text-violet-600 bg-violet-50 border border-violet-200 rounded-full px-2 py-0.5 hover:bg-violet-100 transition-colors"
       >
         <Database className="w-3 h-3" />

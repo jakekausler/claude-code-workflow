@@ -13,6 +13,9 @@ import type { ContextStats } from '../../types/session.js';
 interface Props {
   aiGroup: AIGroup;
   contextStats?: ContextStats;
+  // Note: precedingSlash and claudeMdStats are wired during integration (Task 22).
+  // Currently passed as undefined by ChatHistory; will be connected when
+  // ChatHistory gains awareness of preceding user groups' slash commands.
   precedingSlash?: SlashItem;
   claudeMdStats?: { paths: string[]; totalTokens: number };
 }

@@ -213,6 +213,7 @@ describe('enhanceAIGroup', () => {
           id: toolCallId,
           name: 'Task',
           input: { description: 'Run analysis' },
+          isTask: true,
         }],
       }),
     ];
@@ -295,5 +296,12 @@ describe('enhanceAIGroup', () => {
     const p = result.processes.find((p) => p.id === 'proc-no-parent');
     expect(p).toBeDefined();
     expect(p!.mainSessionImpact).toBeUndefined();
+  });
+
+  it('handles empty steps with non-ongoing group', () => {
+    const group = makeAIGroup({ steps: [], isOngoing: false });
+    const result = enhanceAIGroup(group);
+    expect(result.lastOutput).toBeNull();
+    expect(result.displayItems).toEqual([]);
   });
 });
