@@ -96,6 +96,16 @@ describe('SSE endpoint', () => {
   });
 });
 
+describe('broadcastEvent utility', () => {
+  it('does not throw with no connected clients', () => {
+    expect(() => broadcastEvent('session-update', { projectId: 'test', sessionId: 'sess-1' })).not.toThrow();
+  });
+
+  it('does not throw for board-update channel', () => {
+    expect(() => broadcastEvent('board-update', { type: 'stage_transition', stageId: 'stage-1' })).not.toThrow();
+  });
+});
+
 describe('FileWatcher decoration', () => {
   let app: FastifyInstance;
   let tempDir: string;
