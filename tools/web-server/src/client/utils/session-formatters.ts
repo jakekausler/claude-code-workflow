@@ -116,6 +116,17 @@ export function generateToolSummary(
 }
 
 /**
+ * Extract string content from a ToolResult.
+ * Returns the content as-is if string, or JSON-stringified if array/object.
+ */
+export function extractResultContent(result: { content: string | unknown[]; isError: boolean } | undefined): string | null {
+  if (!result) return null;
+  return typeof result.content === 'string'
+    ? result.content
+    : JSON.stringify(result.content, null, 2);
+}
+
+/**
  * Format a Date as a local time string (HH:MM).
  */
 export function formatTimestamp(date: Date): string {

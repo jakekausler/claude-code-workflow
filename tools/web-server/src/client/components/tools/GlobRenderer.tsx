@@ -1,4 +1,5 @@
 import { FolderSearch } from 'lucide-react';
+import { extractResultContent } from '../../utils/session-formatters.js';
 import type { ToolExecution } from '../../types/session.js';
 
 interface Props {
@@ -6,14 +7,10 @@ interface Props {
 }
 
 export function GlobRenderer({ execution }: Props) {
-  const { input, result } = execution;
+  const { input } = execution;
   const pattern = input.pattern as string | undefined;
 
-  const output = result
-    ? typeof result.content === 'string'
-      ? result.content
-      : JSON.stringify(result.content, null, 2)
-    : null;
+  const output = extractResultContent(execution.result);
 
   const files = output ? output.split('\n').filter(Boolean) : [];
 

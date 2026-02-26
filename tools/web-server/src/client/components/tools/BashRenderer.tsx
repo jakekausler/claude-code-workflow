@@ -1,5 +1,5 @@
 import { TerminalSquare } from 'lucide-react';
-import { formatDuration } from '../../utils/session-formatters.js';
+import { extractResultContent, formatDuration } from '../../utils/session-formatters.js';
 import type { ToolExecution } from '../../types/session.js';
 
 interface Props {
@@ -11,11 +11,7 @@ export function BashRenderer({ execution }: Props) {
   const command = input.command as string | undefined;
   const description = input.description as string | undefined;
 
-  const output = result
-    ? typeof result.content === 'string'
-      ? result.content
-      : JSON.stringify(result.content, null, 2)
-    : null;
+  const output = extractResultContent(result);
 
   const isStderrLine = (line: string) =>
     line.startsWith('Error:') ||

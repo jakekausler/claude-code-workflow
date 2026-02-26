@@ -1,4 +1,5 @@
 import { FileText } from 'lucide-react';
+import { extractResultContent } from '../../utils/session-formatters.js';
 import type { ToolExecution } from '../../types/session.js';
 
 interface Props {
@@ -11,11 +12,7 @@ export function ReadRenderer({ execution }: Props) {
   const offset = input.offset as number | undefined;
   const limit = input.limit as number | undefined;
 
-  const content = result
-    ? typeof result.content === 'string'
-      ? result.content
-      : JSON.stringify(result.content, null, 2)
-    : null;
+  const content = extractResultContent(result);
 
   return (
     <div className="space-y-2 text-sm">

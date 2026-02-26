@@ -1,4 +1,5 @@
 import { Zap } from 'lucide-react';
+import { extractResultContent } from '../../utils/session-formatters.js';
 import type { ToolExecution } from '../../types/session.js';
 
 interface Props {
@@ -6,15 +7,11 @@ interface Props {
 }
 
 export function SkillRenderer({ execution }: Props) {
-  const { input, result } = execution;
+  const { input } = execution;
   const skillName = input.skill as string | undefined;
   const args = input.args as string | undefined;
 
-  const output = result
-    ? typeof result.content === 'string'
-      ? result.content
-      : JSON.stringify(result.content, null, 2)
-    : null;
+  const output = extractResultContent(execution.result);
 
   return (
     <div className="space-y-2 text-sm">

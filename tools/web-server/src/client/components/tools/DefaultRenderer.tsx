@@ -1,3 +1,4 @@
+import { extractResultContent } from '../../utils/session-formatters.js';
 import type { ToolExecution } from '../../types/session.js';
 
 interface Props {
@@ -7,11 +8,7 @@ interface Props {
 export function DefaultRenderer({ execution }: Props) {
   const { input, result } = execution;
 
-  const resultContent = result
-    ? typeof result.content === 'string'
-      ? result.content
-      : JSON.stringify(result.content, null, 2)
-    : null;
+  const resultContent = extractResultContent(result);
 
   return (
     <div className="space-y-3 text-sm">
