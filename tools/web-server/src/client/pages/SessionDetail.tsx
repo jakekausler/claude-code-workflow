@@ -21,6 +21,29 @@ export function SessionDetail() {
 
   const { data: session, isLoading, error } = useSessionDetail(projectId || '', sessionId || '');
 
+  const chunks = session?.chunks ?? [];
+
+  // Detect model from first assistant message with a model field
+  const model = useMemo(() => {
+    if (chunks.length === 0) return undefined;
+    return chunks
+      .filter((c): c is Extract<typeof c, { type: 'ai' }> => c.type === 'ai')
+      .flatMap((c) => c.messages)
+      .find((m) => m.model)?.model;
+  }, [chunks]);
+
+  // Enrichment pipeline: transform raw chunks into grouped ChatItems
+  const conversation = useMemo(() => {
+    if (!session) return null;
+    return transformChunksToConversation(chunks, session.isOngoing, sessionId ?? '');
+  }, [chunks, session, sessionId]);
+
+  // Context tracking: compute per-turn context stats with phase boundaries
+  const contextResult = useMemo(() => {
+    if (!conversation) return null;
+    return processSessionContextWithPhases(conversation.items);
+  }, [conversation]);
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -47,25 +70,7 @@ export function SessionDetail() {
     );
   }
 
-  const { chunks, metrics } = session;
-
-  // Detect model from first assistant message with a model field
-  const model = useMemo(() => {
-    return chunks
-      .filter((c): c is Extract<typeof c, { type: 'ai' }> => c.type === 'ai')
-      .flatMap((c) => c.messages)
-      .find((m) => m.model)?.model;
-  }, [chunks]);
-
-  // Enrichment pipeline: transform raw chunks into grouped ChatItems
-  const conversation = useMemo(() => {
-    return transformChunksToConversation(chunks, session.isOngoing, sessionId ?? '');
-  }, [chunks, session.isOngoing, sessionId]);
-
-  // Context tracking: compute per-turn context stats with phase boundaries
-  const contextResult = useMemo(() => {
-    return processSessionContextWithPhases(conversation.items);
-  }, [conversation.items]);
+  const { metrics } = session;
 
   return (
     <div className="flex flex-col h-full">
@@ -92,8 +97,8 @@ export function SessionDetail() {
       <div className="flex flex-1 overflow-hidden">
         <div className="flex-1 flex flex-col min-w-0">
           <ChatHistory
-            items={conversation.items}
-            contextStats={contextResult.statsMap}
+            items={conversation?.items ?? []}
+            contextStats={contextResult?.statsMap}
           />
         </div>
         <div className="w-80 flex-shrink-0 hidden lg:block">
