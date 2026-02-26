@@ -6,6 +6,8 @@ import {
   Wrench,
   Cpu,
   ChevronRight,
+  Layers,
+  TrendingUp,
 } from 'lucide-react';
 import { formatTokenCount, formatDuration, formatCost } from '../../../utils/session-formatters.js';
 import type { SessionMetrics, Chunk } from '../../../types/session.js';
@@ -21,7 +23,7 @@ export function ContextAccordion({ metrics, chunks, model }: Props) {
 
   return (
     <div className="border-b border-slate-200 mb-2">
-      <AccordionItem title="Session Summary" defaultOpen={false}>
+      <AccordionItem id="summary" title="Session Summary" defaultOpen={false}>
         <div className="space-y-2">
           {model && <SummaryRow icon={Cpu} label="Model" value={model} />}
           <SummaryRow icon={MessageSquare} label="Turns" value={String(metrics.turnCount)} />
@@ -31,7 +33,7 @@ export function ContextAccordion({ metrics, chunks, model }: Props) {
         </div>
       </AccordionItem>
 
-      <AccordionItem title="Token Usage" defaultOpen={false}>
+      <AccordionItem id="tokens" title="Token Usage" defaultOpen={false}>
         <div className="space-y-2">
           <TokenRow label="Total" tokens={metrics.totalTokens} isTotal />
           <TokenRow label="Input" tokens={metrics.inputTokens} />
@@ -46,7 +48,11 @@ export function ContextAccordion({ metrics, chunks, model }: Props) {
       </AccordionItem>
 
       {compactionCount > 0 && (
-        <AccordionItem title={`Compactions (${compactionCount})`} defaultOpen={false}>
+        <AccordionItem
+          id="compactions"
+          title={<><Layers className="w-4 h-4 inline mr-1" />Compactions ({compactionCount})</>}
+          defaultOpen={false}
+        >
           <div className="text-xs text-slate-600">
             {compactionCount} context compaction{compactionCount > 1 ? 's' : ''} occurred during this session.
           </div>
@@ -69,7 +75,11 @@ export function ContextAccordion({ metrics, chunks, model }: Props) {
         </AccordionItem>
       )}
 
-      <AccordionItem title="Activity" defaultOpen={false}>
+      <AccordionItem
+        id="activity"
+        title={<><TrendingUp className="w-4 h-4 inline mr-1" />Activity</>}
+        defaultOpen={false}
+      >
         <div className="text-xs text-slate-600 space-y-1">
           <div>{chunks.filter((c) => c.type === 'user').length} user messages</div>
           <div>{chunks.filter((c) => c.type === 'ai').length} AI responses</div>
@@ -81,20 +91,25 @@ export function ContextAccordion({ metrics, chunks, model }: Props) {
 }
 
 function AccordionItem({
+  id,
   title,
   defaultOpen,
   children,
 }: {
-  title: string;
+  id: string;
+  title: React.ReactNode;
   defaultOpen: boolean;
   children: React.ReactNode;
 }) {
   const [isOpen, setIsOpen] = useState(defaultOpen);
+  const panelId = `accordion-${id}`;
 
   return (
     <div className="border-t border-slate-100 first:border-t-0">
       <button
         onClick={() => setIsOpen(!isOpen)}
+        aria-expanded={isOpen}
+        aria-controls={panelId}
         className="flex w-full items-center justify-between py-2 text-sm font-medium text-slate-700 hover:text-slate-900"
       >
         {title}
@@ -106,7 +121,7 @@ function AccordionItem({
           ].join(' ')}
         />
       </button>
-      {isOpen && <div className="pb-3">{children}</div>}
+      {isOpen && <div id={panelId} className="pb-3">{children}</div>}
     </div>
   );
 }
