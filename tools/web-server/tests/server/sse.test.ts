@@ -1,9 +1,10 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { createServer } from '../../src/server/app.js';
 import { SessionPipeline } from '../../src/server/services/session-pipeline.js';
 import { FileWatcher } from '../../src/server/services/file-watcher.js';
 import { OrchestratorClient } from '../../src/server/services/orchestrator-client.js';
+import * as eventsModule from '../../src/server/routes/events.js';
 import { broadcastEvent, getClientCount } from '../../src/server/routes/events.js';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
@@ -99,11 +100,9 @@ describe('SSE endpoint', () => {
 
 describe('broadcastEvent utility', () => {
   it('does not throw with no connected clients', () => {
+    // Verifies broadcastEvent gracefully handles zero clients (covered above
+    // with real SSE connection; this confirms no-op behavior in isolation)
     expect(() => broadcastEvent('session-update', { projectId: 'test', sessionId: 'sess-1' })).not.toThrow();
-  });
-
-  it('does not throw for board-update channel', () => {
-    expect(() => broadcastEvent('board-update', { type: 'stage_transition', stageId: 'stage-1' })).not.toThrow();
   });
 });
 
@@ -143,10 +142,12 @@ describe('OrchestratorClient → SSE broadcast', () => {
   let app: FastifyInstance;
   let tempDir: string;
   let mockClient: OrchestratorClient;
+  let broadcastSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(async () => {
     tempDir = mkdtempSync(join(tmpdir(), 'sse-orch-test-'));
     mockClient = new OrchestratorClient('ws://localhost:0');
+    broadcastSpy = vi.spyOn(eventsModule, 'broadcastEvent');
     app = await createServer({
       logger: false,
       claudeProjectsDir: tempDir,
@@ -156,49 +157,73 @@ describe('OrchestratorClient → SSE broadcast', () => {
   });
 
   afterEach(async () => {
+    broadcastSpy.mockRestore();
     await app?.close();
     rmSync(tempDir, { recursive: true, force: true });
   });
 
-  it('does not throw when orchestrator emits session-registered', () => {
-    expect(() => {
-      mockClient.emit('session-registered', {
-        stageId: 'stage-1',
-        sessionId: 'sess-abc',
-        processId: 1234,
-        worktreePath: '/tmp/wt',
-        status: 'starting',
-        spawnedAt: Date.now(),
-        lastActivity: Date.now(),
-      });
-    }).not.toThrow();
+  it('broadcasts stage-transition on session-registered', () => {
+    const entry = {
+      stageId: 'stage-1',
+      sessionId: 'sess-abc',
+      processId: 1234,
+      worktreePath: '/tmp/wt',
+      status: 'starting' as const,
+      spawnedAt: Date.now(),
+      lastActivity: Date.now(),
+    };
+
+    mockClient.emit('session-registered', entry);
+
+    expect(broadcastSpy).toHaveBeenCalledWith('stage-transition', expect.objectContaining({
+      stageId: 'stage-1',
+      sessionId: 'sess-abc',
+      type: 'session_started',
+    }));
   });
 
-  it('does not throw when orchestrator emits session-status', () => {
-    expect(() => {
-      mockClient.emit('session-status', {
-        stageId: 'stage-1',
-        sessionId: 'sess-abc',
-        processId: 1234,
-        worktreePath: '/tmp/wt',
-        status: 'active',
-        spawnedAt: Date.now(),
-        lastActivity: Date.now(),
-      });
-    }).not.toThrow();
+  it('broadcasts board-update on session-status', () => {
+    const entry = {
+      stageId: 'stage-1',
+      sessionId: 'sess-abc',
+      processId: 1234,
+      worktreePath: '/tmp/wt',
+      status: 'active' as const,
+      spawnedAt: Date.now(),
+      lastActivity: Date.now(),
+    };
+
+    mockClient.emit('session-status', entry);
+
+    expect(broadcastSpy).toHaveBeenCalledWith('board-update', expect.objectContaining({
+      type: 'session_status',
+      stageId: 'stage-1',
+      sessionId: 'sess-abc',
+      status: 'active',
+    }));
   });
 
-  it('does not throw when orchestrator emits session-ended', () => {
-    expect(() => {
-      mockClient.emit('session-ended', {
-        stageId: 'stage-1',
-        sessionId: 'sess-abc',
-        processId: 1234,
-        worktreePath: '/tmp/wt',
-        status: 'ended',
-        spawnedAt: Date.now(),
-        lastActivity: Date.now(),
-      });
-    }).not.toThrow();
+  it('broadcasts both stage-transition and board-update on session-ended', () => {
+    const entry = {
+      stageId: 'stage-1',
+      sessionId: 'sess-abc',
+      processId: 1234,
+      worktreePath: '/tmp/wt',
+      status: 'ended' as const,
+      spawnedAt: Date.now(),
+      lastActivity: Date.now(),
+    };
+
+    mockClient.emit('session-ended', entry);
+
+    expect(broadcastSpy).toHaveBeenCalledTimes(2);
+    expect(broadcastSpy).toHaveBeenCalledWith('stage-transition', expect.objectContaining({
+      stageId: 'stage-1',
+      type: 'session_ended',
+    }));
+    expect(broadcastSpy).toHaveBeenCalledWith('board-update', expect.objectContaining({
+      type: 'session_ended',
+      stageId: 'stage-1',
+    }));
   });
 });

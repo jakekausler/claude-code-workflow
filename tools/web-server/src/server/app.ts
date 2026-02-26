@@ -6,7 +6,7 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import os from 'os';
 import type { DataService } from './services/data-service.js';
-import type { OrchestratorClient } from './services/orchestrator-client.js';
+import type { OrchestratorClient, SessionInfo } from './services/orchestrator-client.js';
 import type { SessionPipeline } from './services/session-pipeline.js';
 import { type FileWatcher, type FileChangeEvent } from './services/file-watcher.js';
 import { boardRoutes } from './routes/board.js';
@@ -113,10 +113,10 @@ export async function createServer(
   }
 
   // OrchestratorClient → SSE broadcast for session lifecycle events
-  if (options.orchestratorClient) {
-    const oc = options.orchestratorClient;
+  if (orchestratorClient) {
+    const oc = orchestratorClient;
 
-    oc.on('session-registered', (entry) => {
+    oc.on('session-registered', (entry: SessionInfo) => {
       broadcastEvent('stage-transition', {
         stageId: entry.stageId,
         sessionId: entry.sessionId,
@@ -125,7 +125,7 @@ export async function createServer(
       });
     });
 
-    oc.on('session-status', (entry) => {
+    oc.on('session-status', (entry: SessionInfo) => {
       broadcastEvent('board-update', {
         type: 'session_status',
         stageId: entry.stageId,
@@ -134,7 +134,7 @@ export async function createServer(
       });
     });
 
-    oc.on('session-ended', (entry) => {
+    oc.on('session-ended', (entry: SessionInfo) => {
       broadcastEvent('stage-transition', {
         stageId: entry.stageId,
         sessionId: entry.sessionId,
