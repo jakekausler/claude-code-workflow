@@ -8,6 +8,7 @@ export class StageSessionRepository {
     this.db = db;
   }
 
+  /** Return all sessions for a stage, current first, then by started_at desc. */
   getSessionsByStageId(stageId: string): StageSessionRow[] {
     return this.db
       .raw()
@@ -19,6 +20,7 @@ export class StageSessionRepository {
       .all(stageId) as StageSessionRow[];
   }
 
+  /** Add a new current session for a stage, ending any previous current session. */
   addSession(stageId: string, sessionId: string, phase: string): void {
     const now = new Date().toISOString();
     const txn = this.db.raw().transaction(() => {
@@ -43,6 +45,7 @@ export class StageSessionRepository {
     txn();
   }
 
+  /** End a specific session by setting ended_at and clearing is_current. */
   endSession(stageId: string, sessionId: string): void {
     const now = new Date().toISOString();
     this.db
@@ -54,6 +57,7 @@ export class StageSessionRepository {
       .run(now, stageId, sessionId);
   }
 
+  /** Return the current (active) session for a stage, or null. */
   getCurrentSession(stageId: string): StageSessionRow | null {
     const row = this.db
       .raw()

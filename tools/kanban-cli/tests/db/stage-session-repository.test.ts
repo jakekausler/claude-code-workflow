@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import * as os from 'os';
-import * as path from 'path';
-import * as fs from 'fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import * as fs from 'node:fs';
 import { KanbanDatabase } from '../../src/db/database.js';
 import { StageSessionRepository } from '../../src/db/repositories/stage-session-repository.js';
 
@@ -37,6 +37,7 @@ describe('StageSessionRepository', () => {
     expect(sessions[0].session_id).toBe('sess-abc');
     expect(sessions[0].phase).toBe('Design');
     expect(sessions[0].is_current).toBe(1);
+    expect(sessions[0].started_at).toBeTruthy();
   });
 
   it('getSessionsByStageId returns current first, then by started_at desc', () => {
