@@ -1,15 +1,8 @@
 import { ChevronDown } from 'lucide-react';
-
-export interface SessionHistoryEntry {
-  sessionId: string;
-  phase: string;
-  startedAt: string;
-  endedAt: string | null;
-  isCurrent: boolean;
-}
+import type { StageSessionEntry } from '../../api/hooks.js';
 
 interface SessionHistoryDropdownProps {
-  sessions: SessionHistoryEntry[];
+  sessions: StageSessionEntry[];
   selectedSessionId: string;
   onSelect: (sessionId: string) => void;
 }
@@ -33,14 +26,20 @@ export function SessionHistoryDropdown({
     );
   }
 
+  const sorted = [...sessions].sort((a, b) => {
+    if (a.isCurrent !== b.isCurrent) return a.isCurrent ? -1 : 1;
+    return new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime();
+  });
+
   return (
     <div className="relative px-3 py-2">
       <select
+        aria-label="Select session"
         value={selectedSessionId}
         onChange={(e) => onSelect(e.target.value)}
         className="w-full appearance-none rounded-md border border-slate-300 bg-white px-3 py-1.5 pr-8 text-sm text-slate-700 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
       >
-        {sessions.map((session) => (
+        {sorted.map((session) => (
           <option key={session.sessionId} value={session.sessionId}>
             {session.phase} — {formatDate(session.startedAt)}
             {session.isCurrent ? ' (Live)' : ' (Read Only)'}
@@ -73,15 +72,12 @@ function ReadOnlyBadge() {
 }
 
 function formatDate(iso: string): string {
-  try {
-    const d = new Date(iso);
-    return d.toLocaleDateString(undefined, {
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  } catch {
-    return iso;
-  }
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  return d.toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 }
