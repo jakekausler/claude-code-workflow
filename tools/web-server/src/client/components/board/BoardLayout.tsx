@@ -16,6 +16,10 @@ export function BoardLayout({ children, isLoading, error, emptyMessage, isEmpty,
   useEffect(() => {
     if (selectedColumnIndex == null || !gridRef.current) return;
 
+    // On mobile, drawer is full-screen — no need to scroll board
+    const isMobile = window.innerWidth < 768;
+    if (isMobile) return;
+
     const grid = gridRef.current;
     const columns = grid.children;
     if (selectedColumnIndex >= columns.length) return;
