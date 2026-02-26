@@ -113,6 +113,7 @@ export const CREATE_EPICS_JIRA_KEY_INDEX = `CREATE INDEX IF NOT EXISTS idx_epics
 export const CREATE_TICKETS_JIRA_KEY_INDEX = `CREATE INDEX IF NOT EXISTS idx_tickets_jira_key ON tickets(jira_key, repo_id)`;
 export const CREATE_PARENT_TRACKING_CHILD_INDEX = `CREATE INDEX IF NOT EXISTS idx_parent_tracking_child ON parent_branch_tracking(child_stage_id)`;
 export const CREATE_PARENT_TRACKING_PARENT_INDEX = `CREATE INDEX IF NOT EXISTS idx_parent_tracking_parent ON parent_branch_tracking(parent_stage_id)`;
+export const CREATE_STAGES_SESSION_ID_INDEX = `CREATE INDEX IF NOT EXISTS idx_stages_session_id ON stages(session_id)`;
 
 // Migration: adds UNIQUE constraint on repos.name for existing databases
 // that were created before the column-level UNIQUE was added to CREATE_REPOS_TABLE.
@@ -147,4 +148,5 @@ export const ALL_CREATE_STATEMENTS = [
   CREATE_TICKETS_JIRA_KEY_INDEX,
   CREATE_PARENT_TRACKING_CHILD_INDEX,
   CREATE_PARENT_TRACKING_PARENT_INDEX,
+  CREATE_STAGES_SESSION_ID_INDEX,
 ] as const;
