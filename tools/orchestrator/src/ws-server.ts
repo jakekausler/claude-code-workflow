@@ -77,9 +77,10 @@ export function createWsServer(options: WsServerOptions): WsServerHandle {
     for (const client of wss.clients) {
       client.close();
     }
+    const server = wss;
+    wss = null;
     return new Promise((resolve) => {
-      wss!.close(() => resolve());
-      wss = null;
+      server.close(() => resolve());
     });
   }
 
