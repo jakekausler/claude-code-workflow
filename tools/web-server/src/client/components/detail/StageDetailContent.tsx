@@ -82,7 +82,11 @@ export function StageDetailContent({ stageId }: StageDetailContentProps) {
         <DrawerTabs
           tabs={tabs}
           activeTab={stageActiveTab}
-          onTabChange={(tabId) => setStageActiveTab(tabId as DrawerTab)}
+          onTabChange={(tabId) => {
+            if (tabId === 'details' || tabId === 'session') {
+              setStageActiveTab(tabId);
+            }
+          }}
         />
       )}
 
@@ -221,6 +225,12 @@ export function StageDetailContent({ stageId }: StageDetailContentProps) {
 
 // ---------------------------------------------------------------------------
 // SessionLink — fetches the stage→session mapping and renders a link
+//
+// Note: This uses `useStageSession` (singular) to resolve the *primary*
+// linked session (stage.session_id → projectId) for building the standalone
+// session page link. The parent component uses `useStageSessionHistory`
+// (plural) to list *all* sessions in the Session tab. The two hooks hit
+// different endpoints and serve different purposes, so both are needed.
 // ---------------------------------------------------------------------------
 
 function SessionLink({ stageId }: { stageId: string }) {
