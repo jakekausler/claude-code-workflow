@@ -78,11 +78,17 @@ function makeCompactItem(): ChatItem {
   return { type: 'compact', group };
 }
 
-function step(type: SemanticStep['type'], content: string, toolName?: string): SemanticStep {
+function step(
+  type: SemanticStep['type'],
+  content: string,
+  toolName?: string,
+  toolCallId?: string,
+): SemanticStep {
   return {
     type,
     content,
     ...(toolName ? { toolName } : {}),
+    ...(toolCallId ? { toolCallId } : {}),
   };
 }
 
@@ -98,9 +104,15 @@ describe('processSessionContextWithPhases', () => {
   it('computes per-turn stats for a sequence of user + AI items', () => {
     const items: ChatItem[] = [
       makeUserItem('Hello world'),
-      makeAIItem([step('output', 'Hi there')], 'ai-turn-0'),
+      makeAIItem([
+        step('thinking', 'Processing user request'),
+        step('output', 'Hi there'),
+      ], 'ai-turn-0'),
       makeUserItem('Second message'),
-      makeAIItem([step('output', 'Another response')], 'ai-turn-1'),
+      makeAIItem([
+        step('thinking', 'Another thought'),
+        step('output', 'Another response'),
+      ], 'ai-turn-1'),
     ];
 
     const result = processSessionContextWithPhases(items);
@@ -112,6 +124,8 @@ describe('processSessionContextWithPhases', () => {
     const stats0 = result.statsMap.get('ai-turn-0')!;
     expect(stats0.turnIndex).toBe(0);
     expect(stats0.turnTokens.userMessages).toBeGreaterThan(0);
+    // thinkingText counts thinking steps; the last output step is excluded
+    // (it's the chat bubble, matching devtools behavior)
     expect(stats0.turnTokens.thinkingText).toBeGreaterThan(0);
 
     const stats1 = result.statsMap.get('ai-turn-1')!;
@@ -190,7 +204,8 @@ describe('processSessionContextWithPhases', () => {
     const stats = result.statsMap.get('ai-sysrem')!;
 
     expect(stats.turnTokens.claudeMd).toBeGreaterThan(0);
-    expect(stats.turnTokens.userMessages).toBe(0);
+    // With independent tracking, "Instructions " portion is attributed to userMessages
+    expect(stats.turnTokens.userMessages).toBeGreaterThan(0);
   });
 
   it('file reference content attributed to mentionedFiles category', () => {
@@ -205,8 +220,56 @@ describe('processSessionContextWithPhases', () => {
     const stats = result.statsMap.get('ai-files')!;
 
     expect(stats.turnTokens.mentionedFiles).toBeGreaterThan(0);
-    expect(stats.turnTokens.userMessages).toBe(0);
+    // With independent tracking, user text portion is also tracked separately
+    expect(stats.turnTokens.userMessages).toBeGreaterThan(0);
     expect(stats.turnTokens.claudeMd).toBe(0);
+  });
+
+  it('mixed CLAUDE.md + file references + user text tracked independently', () => {
+    const rawText =
+      'Please review this.\n' +
+      'Contents of /home/user/.claude/CLAUDE.md\nSome CLAUDE.md instructions here.\n' +
+      'Check @src/main.ts too.';
+    const items: ChatItem[] = [
+      makeUserItem(rawText, {
+        rawText,
+        fileReferences: [{ path: 'src/main.ts' }],
+      }),
+      makeAIItem([step('output', 'Ok')], 'ai-mixed'),
+    ];
+
+    const result = processSessionContextWithPhases(items);
+    const stats = result.statsMap.get('ai-mixed')!;
+
+    // All three categories should have non-zero tokens
+    expect(stats.turnTokens.claudeMd).toBeGreaterThan(0);
+    expect(stats.turnTokens.mentionedFiles).toBeGreaterThan(0);
+    expect(stats.turnTokens.userMessages).toBeGreaterThan(0);
+
+    // Breakdowns should also have entries for each
+    expect(stats.claudeMdItems).toBeDefined();
+    expect(stats.claudeMdItems!.length).toBeGreaterThan(0);
+    expect(stats.mentionedFileItems).toBeDefined();
+    expect(stats.mentionedFileItems!.length).toBeGreaterThan(0);
+    expect(stats.userMessageItems).toBeDefined();
+    expect(stats.userMessageItems!.length).toBeGreaterThan(0);
+  });
+
+  it('CLAUDE.md with user text splits tokens independently', () => {
+    const rawText =
+      'Hello, please help me.\n<system-reminder>Important config data here</system-reminder>';
+    const items: ChatItem[] = [
+      makeUserItem(rawText, { rawText }),
+      makeAIItem([step('output', 'Sure')], 'ai-claude-user'),
+    ];
+
+    const result = processSessionContextWithPhases(items);
+    const stats = result.statsMap.get('ai-claude-user')!;
+
+    // claudeMd gets system-reminder tokens, userMessages gets the rest
+    expect(stats.turnTokens.claudeMd).toBeGreaterThan(0);
+    expect(stats.turnTokens.userMessages).toBeGreaterThan(0);
+    expect(stats.turnTokens.mentionedFiles).toBe(0);
   });
 
   it('regular user messages attributed to userMessages category', () => {
@@ -308,8 +371,13 @@ describe('processSessionContextWithPhases', () => {
   });
 
   it('AI item without preceding user item produces stats with zero user tokens', () => {
+    // Include thinking so thinkingText > 0. The last 'output' step is excluded
+    // from thinking/text (it's the final chat bubble, matching devtools behavior).
     const items: ChatItem[] = [
-      makeAIItem([step('output', 'Autonomous response')], 'ai-no-user'),
+      makeAIItem([
+        step('thinking', 'Let me think about this'),
+        step('output', 'Autonomous response'),
+      ], 'ai-no-user'),
     ];
 
     const result = processSessionContextWithPhases(items);
@@ -357,5 +425,354 @@ describe('processSessionContextWithPhases', () => {
     // Should have 3 phases: before first compact, empty between compacts, after second compact
     // Or 2 phases if the empty phase is skipped
     expect(result.phases.length).toBeGreaterThanOrEqual(2);
+  });
+
+  // ─── New: per-tool-call breakdown tests ─────────────────────────────────────
+
+  it('each tool call produces a separate toolOutputItem entry', () => {
+    const items: ChatItem[] = [
+      makeAIItem([
+        step('tool_call', 'Read first file', 'Read', 'call-1'),
+        step('tool_result', 'First file content here, fairly long content for testing', 'Read', 'call-1'),
+        step('tool_call', 'Read second file', 'Read', 'call-2'),
+        step('tool_result', 'Second file content', 'Read', 'call-2'),
+        step('tool_call', 'Run grep search', 'Grep', 'call-3'),
+        step('tool_result', 'Grep results output', 'Grep', 'call-3'),
+      ], 'ai-multi-tool'),
+    ];
+
+    const result = processSessionContextWithPhases(items);
+    const stats = result.statsMap.get('ai-multi-tool')!;
+
+    // Should have 3 separate entries (one per call), NOT 2 (aggregated by name)
+    expect(stats.toolOutputItems).toBeDefined();
+    expect(stats.toolOutputItems!.length).toBe(3);
+
+    // First two should be Read, third should be Grep
+    expect(stats.toolOutputItems![0].toolName).toBe('Read');
+    expect(stats.toolOutputItems![1].toolName).toBe('Read');
+    expect(stats.toolOutputItems![2].toolName).toBe('Grep');
+
+    // Each entry's tokens should be callTokens + result.tokenCount.
+    // callTokens = estimateTokens(toolName + JSON.stringify(input)) where input is {} (no responses).
+    // result.tokenCount = estimateTokens(tool_result step content).
+    const call1Tokens = Math.ceil(('Read' + '{}').length / 4) +
+      Math.ceil('First file content here, fairly long content for testing'.length / 4);
+    expect(stats.toolOutputItems![0].tokenCount).toBe(call1Tokens);
+  });
+
+  it('tool calls without toolCallId still produce separate entries', () => {
+    const items: ChatItem[] = [
+      makeAIItem([
+        step('tool_call', 'Read something', 'Read'),
+        step('tool_call', 'Read another', 'Read'),
+        step('tool_call', 'Run skill', 'Skill'),
+      ], 'ai-no-id'),
+    ];
+
+    const result = processSessionContextWithPhases(items);
+    const stats = result.statsMap.get('ai-no-id')!;
+
+    // Without toolCallId, each call gets a unique key and produces its own entry
+    expect(stats.toolOutputItems).toBeDefined();
+    expect(stats.toolOutputItems!.length).toBe(3);
+  });
+
+  // ─── New: CLAUDE.md section extraction tests ────────────────────────────────
+
+  it('multiple CLAUDE.md files produce separate claudeMdItems', () => {
+    const rawText =
+      'Contents of /home/user/.claude/CLAUDE.md (global):\n' +
+      'Global instructions line 1\nGlobal instructions line 2\n' +
+      'Contents of /project/CLAUDE.md (project):\n' +
+      'Project instructions line 1\nProject instructions line 2\n';
+    const items: ChatItem[] = [
+      makeUserItem(rawText, { rawText }),
+      makeAIItem([step('output', 'Ok')], 'ai-two-claude'),
+    ];
+
+    const result = processSessionContextWithPhases(items);
+    const stats = result.statsMap.get('ai-two-claude')!;
+
+    expect(stats.claudeMdItems).toBeDefined();
+    expect(stats.claudeMdItems!.length).toBe(2);
+    expect(stats.claudeMdItems![0].label).toContain('.claude/CLAUDE.md');
+    expect(stats.claudeMdItems![1].label).toContain('/project/CLAUDE.md');
+
+    // Each section should have its own token count
+    expect(stats.claudeMdItems![0].tokens).toBeGreaterThan(0);
+    expect(stats.claudeMdItems![1].tokens).toBeGreaterThan(0);
+  });
+
+  // ─── New: mentioned file content extraction from "Contents of" headers ──────
+
+  it('mentioned file content extracted from "Contents of" sections', () => {
+    const rawText =
+      'Please review:\n' +
+      'Contents of /home/user/.claude/CLAUDE.md (global):\n' +
+      'Some CLAUDE config\n' +
+      'Contents of docs/plan.md (referenced file):\n' +
+      'This is the plan file content with many lines of text here.\n';
+    const items: ChatItem[] = [
+      makeUserItem(rawText, {
+        rawText,
+        fileReferences: [{ path: 'docs/plan.md' }],
+      }),
+      makeAIItem([step('output', 'Reviewed')], 'ai-file-contents'),
+    ];
+
+    const result = processSessionContextWithPhases(items);
+    const stats = result.statsMap.get('ai-file-contents')!;
+
+    // CLAUDE.md content goes to claudeMd
+    expect(stats.turnTokens.claudeMd).toBeGreaterThan(0);
+    // Mentioned file content goes to mentionedFiles
+    expect(stats.turnTokens.mentionedFiles).toBeGreaterThan(0);
+    // "Please review:" goes to userMessages
+    expect(stats.turnTokens.userMessages).toBeGreaterThan(0);
+
+    // mentionedFileItems should reference the file path from the "Contents of" header
+    expect(stats.mentionedFileItems).toBeDefined();
+    expect(stats.mentionedFileItems!.length).toBe(1);
+    expect(stats.mentionedFileItems![0].label).toContain('docs/plan.md');
+  });
+
+  // ─── New: user message = remainder after stripping injected content ─────────
+
+  it('user message tokens are the remainder after removing injected content', () => {
+    const userTyped = 'Please help me with this task.';
+    const claudeMdContent =
+      'Contents of /home/user/.claude/CLAUDE.md\n' +
+      'A'.repeat(400) + '\n'; // ~100 tokens of CLAUDE.md
+    const rawText = userTyped + '\n' + claudeMdContent;
+
+    const items: ChatItem[] = [
+      makeUserItem(rawText, { rawText }),
+      makeAIItem([step('output', 'Ok')], 'ai-remainder'),
+    ];
+
+    const result = processSessionContextWithPhases(items);
+    const stats = result.statsMap.get('ai-remainder')!;
+
+    // User message should be much smaller than CLAUDE.md content
+    expect(stats.turnTokens.userMessages).toBeLessThan(stats.turnTokens.claudeMd);
+    // User message tokens should approximate the user's typed text
+    const expectedUserTokens = Math.ceil((userTyped + '\n').length / 4);
+    expect(stats.turnTokens.userMessages).toBe(expectedUserTokens);
+  });
+
+  // ─── New: thinking + text breakdown ─────────────────────────────────────────
+
+  it('thinkingTextDetail separates thinking from output tokens', () => {
+    const thinkingContent = 'Let me think carefully about the approach to take here...';
+    const intermediateOutput = 'Let me explore the codebase.';
+    const finalOutput = 'Here is the concise answer.';
+    // The last output step is excluded from thinking/text (it's the chat bubble).
+    // Include an intermediate output (e.g., text before tool calls) and a final output.
+    const items: ChatItem[] = [
+      makeAIItem([
+        step('thinking', thinkingContent),
+        step('output', intermediateOutput),
+        step('tool_call', 'Read', 'Read', 'tc-1'),
+        step('tool_result', 'file content', 'Read', 'tc-1'),
+        step('output', finalOutput),
+      ], 'ai-breakdown'),
+    ];
+
+    const result = processSessionContextWithPhases(items);
+    const stats = result.statsMap.get('ai-breakdown')!;
+
+    expect(stats.thinkingTextDetail).toBeDefined();
+    expect(stats.thinkingTextDetail!.thinking).toBe(Math.ceil(thinkingContent.length / 4));
+    // Only the intermediate output is counted; the final output is excluded
+    expect(stats.thinkingTextDetail!.text).toBe(Math.ceil(intermediateOutput.length / 4));
+    expect(stats.turnTokens.thinkingText).toBe(
+      stats.thinkingTextDetail!.thinking + stats.thinkingTextDetail!.text,
+    );
+  });
+
+  // ─── New: realistic devtools-matching scenario ──────────────────────────────
+
+  it('matches devtools attribution for realistic first AI group scenario', () => {
+    // Simulates the real scenario from the task description:
+    // - User types a short message (~87 tokens)
+    // - Two CLAUDE.md files injected (~4.9k + ~2.8k = ~7.7k tokens)
+    // - One mentioned file injected (~4.9k tokens)
+    // - AI responds with 5 tool calls and thinking+text
+
+    const userTyped = '@docs/plans/stage-9f-session-detail-display-handoff.md Read the referenced file and study the implementation plan. Then explore the codebase to understand the current state.';
+    const claudeMd1 = 'A'.repeat(19600); // ~4.9k tokens
+    const claudeMd2 = 'B'.repeat(11200); // ~2.8k tokens
+    const mentionedFile = 'C'.repeat(19600); // ~4.9k tokens
+
+    const rawText =
+      userTyped + '\n' +
+      '<system-reminder>\n' +
+      'Contents of /home/user/.claude/CLAUDE.md (global):\n' +
+      claudeMd1 + '\n' +
+      'Contents of /project/CLAUDE.md (project):\n' +
+      claudeMd2 + '\n' +
+      '</system-reminder>\n' +
+      'Contents of docs/plans/stage-9f-session-detail-display-handoff.md:\n' +
+      mentionedFile + '\n';
+
+    const items: ChatItem[] = [
+      makeUserItem(rawText, {
+        rawText,
+        fileReferences: [{ path: 'docs/plans/stage-9f-session-detail-display-handoff.md' }],
+      }),
+      makeAIItem([
+        step('thinking', 'D'.repeat(200)),
+        step('output', 'E'.repeat(400)),
+        step('tool_call', 'F'.repeat(100), 'Read', 'tc-1'),
+        step('tool_result', 'G'.repeat(9200), 'Read', 'tc-1'),
+        step('tool_call', 'H'.repeat(80), 'Read', 'tc-2'),
+        step('tool_result', 'I'.repeat(2564), 'Read', 'tc-2'),
+        step('tool_call', 'J'.repeat(100), 'Read', 'tc-3'),
+        step('tool_result', 'K'.repeat(8300), 'Read', 'tc-3'),
+        step('tool_call', 'L'.repeat(80), 'Read', 'tc-4'),
+        step('tool_result', 'M'.repeat(2860), 'Read', 'tc-4'),
+        step('tool_call', 'N'.repeat(100), 'Skill', 'tc-5'),
+        step('tool_result', 'O'.repeat(3240), 'Skill', 'tc-5'),
+        // Final text response (the chat bubble) — excluded from thinking/text count
+        step('output', 'P'.repeat(300)),
+      ], 'ai-realistic'),
+    ];
+
+    const result = processSessionContextWithPhases(items);
+    const stats = result.statsMap.get('ai-realistic')!;
+
+    // User message: just the typed text (~45 tokens for the short command)
+    expect(stats.turnTokens.userMessages).toBeGreaterThan(0);
+    expect(stats.turnTokens.userMessages).toBeLessThan(200);
+
+    // CLAUDE.md: two files (~7.7k tokens total)
+    expect(stats.turnTokens.claudeMd).toBeGreaterThan(7000);
+    expect(stats.claudeMdItems).toBeDefined();
+    // System-reminder wraps both CLAUDE.md files, so it's one claudeMd item
+    // (the system-reminder block contains both "Contents of" sections)
+    expect(stats.claudeMdItems!.length).toBeGreaterThanOrEqual(1);
+
+    // Mentioned files: one file (~4.9k tokens)
+    expect(stats.turnTokens.mentionedFiles).toBeGreaterThan(4000);
+    expect(stats.mentionedFileItems).toBeDefined();
+    expect(stats.mentionedFileItems!.length).toBe(1);
+
+    // Tool outputs: 5 separate entries (not aggregated)
+    expect(stats.toolOutputItems).toBeDefined();
+    expect(stats.toolOutputItems!.length).toBe(5);
+
+    // Thinking + text
+    expect(stats.thinkingTextDetail).toBeDefined();
+    expect(stats.thinkingTextDetail!.thinking).toBe(Math.ceil(200 / 4));
+    expect(stats.thinkingTextDetail!.text).toBe(Math.ceil(400 / 4));
+  });
+
+  // ─── claudeMdFiles (server-provided disk-based estimates) ─────────────────
+
+  it('injects claudeMdFiles into first AI group when provided', () => {
+    const items: ChatItem[] = [
+      makeUserItem('Hello'),
+      makeAIItem([step('output', 'Hi')], 'ai-0'),
+      makeUserItem('Second'),
+      makeAIItem([step('output', 'Response')], 'ai-1'),
+    ];
+
+    const claudeMdFiles = [
+      { path: '/home/user/.claude/CLAUDE.md', estimatedTokens: 4900 },
+      { path: '/project/CLAUDE.md', estimatedTokens: 2800 },
+    ];
+
+    const result = processSessionContextWithPhases(items, claudeMdFiles);
+
+    // First AI group should have CLAUDE.md tokens
+    const stats0 = result.statsMap.get('ai-0')!;
+    expect(stats0.turnTokens.claudeMd).toBe(4900 + 2800);
+    expect(stats0.claudeMdItems).toBeDefined();
+    expect(stats0.claudeMdItems!.length).toBe(2);
+    expect(stats0.claudeMdItems![0].label).toBe('/home/user/.claude/CLAUDE.md');
+    expect(stats0.claudeMdItems![0].tokens).toBe(4900);
+    expect(stats0.claudeMdItems![1].label).toBe('/project/CLAUDE.md');
+    expect(stats0.claudeMdItems![1].tokens).toBe(2800);
+
+    // Second AI group should NOT have CLAUDE.md tokens
+    const stats1 = result.statsMap.get('ai-1')!;
+    expect(stats1.turnTokens.claudeMd).toBe(0);
+    expect(stats1.claudeMdItems).toBeUndefined();
+
+    // Cumulative should carry CLAUDE.md through
+    expect(stats1.cumulativeTokens.claudeMd).toBe(4900 + 2800);
+  });
+
+  it('claudeMdFiles not injected when rawText already has CLAUDE.md content', () => {
+    const items: ChatItem[] = [
+      makeUserItem(
+        'Contents of /home/user/.claude/CLAUDE.md with instructions',
+        { rawText: 'Contents of /home/user/.claude/CLAUDE.md with instructions' },
+      ),
+      makeAIItem([step('output', 'Ok')], 'ai-0'),
+    ];
+
+    const claudeMdFiles = [
+      { path: '/home/user/.claude/CLAUDE.md', estimatedTokens: 4900 },
+    ];
+
+    const result = processSessionContextWithPhases(items, claudeMdFiles);
+    const stats = result.statsMap.get('ai-0')!;
+
+    // Should use the rawText-detected value, not the server-provided one
+    expect(stats.claudeMdItems).toBeDefined();
+    expect(stats.claudeMdItems!.length).toBe(1);
+    // The detected tokens from rawText (~15 tokens) should be much less than 4900
+    expect(stats.turnTokens.claudeMd).toBeLessThan(100);
+  });
+
+  it('claudeMdFiles re-injected after compact boundary', () => {
+    const items: ChatItem[] = [
+      makeUserItem('Pre-compact'),
+      makeAIItem([step('output', 'R1')], 'ai-pre'),
+      makeCompactItem(),
+      makeUserItem('Post-compact'),
+      makeAIItem([step('output', 'R2')], 'ai-post'),
+    ];
+
+    const claudeMdFiles = [
+      { path: '/home/user/.claude/CLAUDE.md', estimatedTokens: 3000 },
+    ];
+
+    const result = processSessionContextWithPhases(items, claudeMdFiles);
+
+    // Both first AI groups (in each phase) should get CLAUDE.md injection
+    const statsPre = result.statsMap.get('ai-pre')!;
+    expect(statsPre.turnTokens.claudeMd).toBe(3000);
+
+    const statsPost = result.statsMap.get('ai-post')!;
+    expect(statsPost.turnTokens.claudeMd).toBe(3000);
+  });
+
+  it('empty claudeMdFiles array does not inject anything', () => {
+    const items: ChatItem[] = [
+      makeUserItem('Hello'),
+      makeAIItem([step('output', 'Hi')], 'ai-0'),
+    ];
+
+    const result = processSessionContextWithPhases(items, []);
+    const stats = result.statsMap.get('ai-0')!;
+
+    expect(stats.turnTokens.claudeMd).toBe(0);
+    expect(stats.claudeMdItems).toBeUndefined();
+  });
+
+  it('undefined claudeMdFiles does not inject anything', () => {
+    const items: ChatItem[] = [
+      makeUserItem('Hello'),
+      makeAIItem([step('output', 'Hi')], 'ai-0'),
+    ];
+
+    const result = processSessionContextWithPhases(items, undefined);
+    const stats = result.statsMap.get('ai-0')!;
+
+    expect(stats.turnTokens.claudeMd).toBe(0);
+    expect(stats.claudeMdItems).toBeUndefined();
   });
 });

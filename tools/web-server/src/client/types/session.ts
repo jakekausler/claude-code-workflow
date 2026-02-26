@@ -23,8 +23,13 @@ export type {
   ImageContent,
   UsageMetadata,
   TokensByCategory,
+  ToolTokenBreakdown,
+  ContextItemDetail,
+  ThinkingTextBreakdown,
   ContextStats,
   ContextPhaseInfo,
+  ClaudeMdFileEstimate,
+  MentionedFileEstimate,
 } from '@server/types/jsonl.js';
 
 // Re-export group types for client components

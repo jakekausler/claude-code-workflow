@@ -14,6 +14,7 @@ export interface SessionConversation {
   totalSystemGroups: number;
   totalAIGroups: number;
   totalCompactGroups: number;
+  totalPhases: number;
 }
 
 export interface UserGroup {
@@ -69,6 +70,7 @@ export interface AIGroup {
   chunkId: string;
   responses: ParsedMessage[];
   isOngoing?: boolean;
+  phaseNumber?: number;
 }
 
 export interface AIGroupSummary {

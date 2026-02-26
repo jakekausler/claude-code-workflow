@@ -39,10 +39,16 @@ export function SessionDetail() {
   }, [chunks, session, sessionId]);
 
   // Context tracking: compute per-turn context stats with phase boundaries
+  // Pass claudeMdFiles and mentionedFileTokens from the server (read from disk)
+  // so the tracker can attribute accurate token counts for injected context.
   const contextResult = useMemo(() => {
     if (!conversation) return null;
-    return processSessionContextWithPhases(conversation.items);
-  }, [conversation]);
+    return processSessionContextWithPhases(
+      conversation.items,
+      session?.claudeMdFiles,
+      session?.mentionedFileTokens,
+    );
+  }, [conversation, session?.claudeMdFiles, session?.mentionedFileTokens]);
 
   if (isLoading) {
     return (
@@ -99,6 +105,7 @@ export function SessionDetail() {
           <ChatHistory
             items={conversation?.items ?? []}
             contextStats={contextResult?.statsMap}
+            totalPhases={conversation?.totalPhases}
           />
         </div>
         <div className="w-80 flex-shrink-0 hidden lg:block">

@@ -42,12 +42,10 @@ export function classifyMessage(msg: ParsedMessage): MessageCategory {
     ) {
       return 'hardNoise';
     }
-    // TODO: Consider producing 'interruption' SemanticStep instead of filtering as hardNoise.
-    // Currently interruptions are dropped entirely. If 9F needs to display interruption
-    // markers in the session timeline, this should be changed to pass through and let
-    // extractSemanticSteps produce an 'interruption' step.
-    if (msg.content.includes('[Request interrupted by user]')) {
-      return 'hardNoise';
+    // Interruption messages pass through as 'ai' so they stay in the AI buffer.
+    // extractSemanticSteps() detects them and produces 'interruption' steps.
+    if (msg.content.includes('[Request interrupted by user')) {
+      return 'ai';
     }
 
     // 5. System command output
@@ -156,8 +154,13 @@ export function extractSemanticSteps(
       continue;
     }
 
-    // String content in an AI chunk — treat as output
+    // String content in an AI chunk
     if (typeof msg.content === 'string') {
+      // Detect interruption messages and produce an 'interruption' step
+      if (msg.content.includes('[Request interrupted by user')) {
+        steps.push({ type: 'interruption', content: msg.content.trim() });
+        continue;
+      }
       if (msg.content.trim()) {
         steps.push({ type: 'output', content: msg.content });
       }

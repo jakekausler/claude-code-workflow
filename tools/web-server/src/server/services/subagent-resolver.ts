@@ -249,7 +249,7 @@ function calculateAgentMetrics(messages: ParsedMessage[]): SessionMetrics {
   const endTime = messages[messages.length - 1]?.timestamp?.getTime() ?? 0;
 
   return {
-    totalTokens: inputTokens + outputTokens,
+    totalTokens: inputTokens + outputTokens + cacheReadTokens + cacheCreationTokens,
     inputTokens,
     outputTokens,
     cacheReadTokens,

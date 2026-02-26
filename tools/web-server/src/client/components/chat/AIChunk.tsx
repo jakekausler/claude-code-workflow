@@ -6,7 +6,6 @@ import { ThinkingItem } from './items/ThinkingItem.js';
 import { LinkedToolItem } from './items/LinkedToolItem.js';
 import { SubagentItem } from './items/SubagentItem.js';
 import { LastOutputDisplay } from './LastOutputDisplay.js';
-import { ContextBadge } from './context/ContextBadge.js';
 import { useSessionViewStore } from '../../store/session-store.js';
 import type {
   EnhancedAIChunk as EnhancedAIChunkType,
@@ -162,7 +161,6 @@ export function AIChunk({ chunk, chunkIndex }: Props) {
 
         {/* Right side: context badge, tokens, duration, chevron */}
         <div className="flex items-center gap-2 flex-shrink-0">
-          <ContextBadge totalNewTokens={totalTokens} />
           {totalTokens > 0 && (
             <span className="text-xs text-slate-400">{formatTokenCount(totalTokens)}</span>
           )}
