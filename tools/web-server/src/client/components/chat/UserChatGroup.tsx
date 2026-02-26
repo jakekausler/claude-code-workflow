@@ -97,7 +97,17 @@ function createMarkdownComponents(knownPaths: Set<string>): Components {
 
   return {
     p: ({ children }) => <p className="my-1">{hl(children)}</p>,
-    li: ({ children }) => <li>{hl(children)}</li>,
+    ol: ({ children }) => (
+      <ol className="my-1 list-decimal space-y-0.5 pl-5">
+        {children}
+      </ol>
+    ),
+    ul: ({ children }) => (
+      <ul className="my-1 list-disc space-y-0.5 pl-5">
+        {children}
+      </ul>
+    ),
+    li: ({ children }) => <li className="text-sm">{hl(children)}</li>,
     h1: ({ children }) => <h1>{hl(children)}</h1>,
     h2: ({ children }) => <h2>{hl(children)}</h2>,
     h3: ({ children }) => <h3>{hl(children)}</h3>,
