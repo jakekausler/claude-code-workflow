@@ -85,8 +85,16 @@ describe('session-formatters', () => {
       const input = { pattern: 'src/**/*.tsx' };
       expect(generateToolSummary('Glob', input)).toBe('src/**/*.tsx');
     });
-    it('generates Write summary', () => {
-      const input = { file_path: '/src/new-file.ts', content: 'abc' };
+    it('generates Write summary with line count', () => {
+      const input = { file_path: '/src/new-file.ts', content: 'line1\nline2\nline3' };
+      expect(generateToolSummary('Write', input)).toBe('new-file.ts - 3 lines');
+    });
+    it('generates Write summary for single-line content', () => {
+      const input = { file_path: '/src/new-file.ts', content: 'single' };
+      expect(generateToolSummary('Write', input)).toBe('new-file.ts - 1 line');
+    });
+    it('generates Write summary without content', () => {
+      const input = { file_path: '/src/new-file.ts' };
       expect(generateToolSummary('Write', input)).toBe('new-file.ts');
     });
     it('generates Task summary', () => {
@@ -97,7 +105,71 @@ describe('session-formatters', () => {
       const input = { skill: 'commit' };
       expect(generateToolSummary('Skill', input)).toBe('commit');
     });
-    it('falls back to tool name for unknown tools', () => {
+    it('generates WebFetch summary with hostname and pathname', () => {
+      const input = { url: 'https://example.com/docs/guide' };
+      expect(generateToolSummary('WebFetch', input)).toBe('example.com/docs/guide');
+    });
+    it('generates WebFetch summary with invalid URL', () => {
+      const input = { url: 'not-a-url' };
+      expect(generateToolSummary('WebFetch', input)).toBe('not-a-url');
+    });
+    it('generates WebFetch summary without url', () => {
+      expect(generateToolSummary('WebFetch', {})).toBe('WebFetch');
+    });
+    it('generates WebSearch summary', () => {
+      const input = { query: 'how to test react components' };
+      expect(generateToolSummary('WebSearch', input)).toBe('"how to test react components"');
+    });
+    it('generates WebSearch summary truncated', () => {
+      const input = { query: 'a very long search query that exceeds the forty character limit for truncation' };
+      const result = generateToolSummary('WebSearch', input);
+      expect(result.startsWith('"a very long')).toBe(true);
+      expect(result.length).toBeLessThanOrEqual(43); // 40 + quotes + ellipsis
+    });
+    it('generates NotebookEdit summary with edit mode', () => {
+      const input = { notebook_path: '/notebooks/analysis.ipynb', edit_mode: 'replace' };
+      expect(generateToolSummary('NotebookEdit', input)).toBe('replace - analysis.ipynb');
+    });
+    it('generates NotebookEdit summary without edit mode', () => {
+      const input = { notebook_path: '/notebooks/analysis.ipynb' };
+      expect(generateToolSummary('NotebookEdit', input)).toBe('analysis.ipynb');
+    });
+    it('generates TodoWrite summary', () => {
+      const input = { todos: [{ id: '1' }, { id: '2' }, { id: '3' }] };
+      expect(generateToolSummary('TodoWrite', input)).toBe('3 items');
+    });
+    it('generates TodoWrite summary for single item', () => {
+      const input = { todos: [{ id: '1' }] };
+      expect(generateToolSummary('TodoWrite', input)).toBe('1 item');
+    });
+    it('generates TaskCreate summary', () => {
+      const input = { subject: 'Fix authentication bug in login flow' };
+      expect(generateToolSummary('TaskCreate', input)).toBe('Fix authentication bug in login flow');
+    });
+    it('generates TaskUpdate summary with status', () => {
+      const input = { taskId: '42', status: 'completed' };
+      expect(generateToolSummary('TaskUpdate', input)).toBe('#42 completed');
+    });
+    it('generates TaskUpdate summary without status', () => {
+      const input = { taskId: '42' };
+      expect(generateToolSummary('TaskUpdate', input)).toBe('#42');
+    });
+    it('generates TaskList summary', () => {
+      expect(generateToolSummary('TaskList', {})).toBe('List tasks');
+    });
+    it('generates TaskGet summary', () => {
+      const input = { taskId: '7' };
+      expect(generateToolSummary('TaskGet', input)).toBe('Get task #7');
+    });
+    it('uses fallback for unknown tools with common field names', () => {
+      const input = { path: '/some/path/to/file.txt' };
+      expect(generateToolSummary('mcp__custom_tool', input)).toBe('/some/path/to/file.txt');
+    });
+    it('uses fallback for unknown tools with query field', () => {
+      const input = { query: 'SELECT * FROM users' };
+      expect(generateToolSummary('mcp__custom_tool', input)).toBe('SELECT * FROM users');
+    });
+    it('falls back to tool name for unknown tools with no recognized fields', () => {
       const input = { foo: 'bar' };
       expect(generateToolSummary('mcp__custom_tool', input)).toBe('mcp__custom_tool');
     });

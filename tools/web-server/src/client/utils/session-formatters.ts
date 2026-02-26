@@ -82,7 +82,14 @@ export function generateToolSummary(
     }
     case 'Write': {
       const fp = input.file_path as string | undefined;
-      return fp ? extractFilename(fp) : 'Write';
+      if (!fp) return 'Write';
+      const name = extractFilename(fp);
+      const content = input.content as string | undefined;
+      if (content) {
+        const lineCount = (content.match(/\n/g) || []).length + 1;
+        return `${name} - ${lineCount} line${lineCount !== 1 ? 's' : ''}`;
+      }
+      return name;
     }
     case 'Bash': {
       const cmd = input.command as string | undefined;
@@ -111,8 +118,64 @@ export function generateToolSummary(
       const skill = input.skill as string | undefined;
       return skill || 'Skill';
     }
-    default:
+    case 'WebFetch': {
+      const url = input.url as string | undefined;
+      if (url) {
+        try {
+          const urlObj = new URL(url);
+          return truncate(urlObj.hostname + urlObj.pathname, 50);
+        } catch {
+          return truncate(url, 50);
+        }
+      }
+      return 'WebFetch';
+    }
+    case 'WebSearch': {
+      const query = input.query as string | undefined;
+      return query ? `"${truncate(query, 40)}"` : 'WebSearch';
+    }
+    case 'NotebookEdit': {
+      const notebookPath = input.notebook_path as string | undefined;
+      const editMode = input.edit_mode as string | undefined;
+      if (notebookPath) {
+        const nbName = extractFilename(notebookPath);
+        return editMode ? `${editMode} - ${nbName}` : nbName;
+      }
+      return 'NotebookEdit';
+    }
+    case 'TodoWrite': {
+      const todos = input.todos as unknown[] | undefined;
+      if (Array.isArray(todos)) {
+        return `${todos.length} item${todos.length !== 1 ? 's' : ''}`;
+      }
+      return 'TodoWrite';
+    }
+    case 'TaskCreate': {
+      const subject = input.subject as string | undefined;
+      return subject ? truncate(subject, 50) : 'TaskCreate';
+    }
+    case 'TaskUpdate': {
+      const taskId = input.taskId as string | undefined;
+      const status = input.status as string | undefined;
+      if (taskId && status) return `#${taskId} ${status}`;
+      if (taskId) return `#${taskId}`;
+      return 'TaskUpdate';
+    }
+    case 'TaskList':
+      return 'List tasks';
+    case 'TaskGet': {
+      const taskId = input.taskId as string | undefined;
+      return taskId ? `Get task #${taskId}` : 'TaskGet';
+    }
+    default: {
+      // Try common parameter names before falling back to tool name
+      const nameField =
+        input.name ?? input.path ?? input.file ?? input.query ?? input.command;
+      if (typeof nameField === 'string') {
+        return truncate(nameField, 50);
+      }
       return toolName;
+    }
   }
 }
 
