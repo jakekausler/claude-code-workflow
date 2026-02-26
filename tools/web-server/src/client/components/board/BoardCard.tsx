@@ -1,3 +1,5 @@
+import { PendingBadge } from '../interaction/PendingBadge.js';
+
 interface Badge {
   label: string;
   color: string;
@@ -12,6 +14,7 @@ interface BoardCardProps {
   statusDot?: string;
   isSelected?: boolean;
   onClick: () => void;
+  pendingCount?: number;
 }
 
 export type { Badge };
@@ -25,6 +28,7 @@ export function BoardCard({
   statusDot,
   isSelected,
   onClick,
+  pendingCount = 0,
 }: BoardCardProps) {
   return (
     <div
@@ -56,7 +60,10 @@ export function BoardCard({
             )}
             <span className="text-xs font-medium text-slate-500">{id}</span>
           </div>
-          <p className="mt-0.5 text-sm font-medium text-slate-900 truncate">{title}</p>
+          <div className="flex items-center gap-2 mt-0.5">
+            <p className="text-sm font-medium text-slate-900 truncate">{title}</p>
+            {pendingCount > 0 && <PendingBadge count={pendingCount} />}
+          </div>
           {subtitle && (
             <p className="mt-0.5 text-xs text-slate-500">{subtitle}</p>
           )}
