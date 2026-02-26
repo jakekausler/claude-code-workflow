@@ -195,11 +195,11 @@ export function AIChunk({ chunk, chunkIndex }: Props) {
 function AIStepRenderer({
   step,
   toolExecMap,
-  subagents,
+  subagents = [],
 }: {
   step: SemanticStep;
   toolExecMap: Map<string, ToolExecution>;
-  subagents: Process[];
+  subagents?: Process[];
 }) {
   switch (step.type) {
     case 'thinking':
