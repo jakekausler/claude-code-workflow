@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { apiFetch } from './client.js';
+import type { ParsedSession, SessionMetrics, Process } from '@server/types/jsonl.js';
 
 // ---------------------------------------------------------------------------
 // Response Types
@@ -347,5 +348,55 @@ export function useRepos() {
   return useQuery({
     queryKey: ['repos'],
     queryFn: () => apiFetch<RepoListItem[]>('/repos'),
+  });
+}
+
+// Session Detail ----------------------------------------------------------
+
+export function useSessionDetail(projectId: string, sessionId: string) {
+  return useQuery({
+    queryKey: ['session', projectId, sessionId],
+    queryFn: () =>
+      apiFetch<ParsedSession>(
+        `/api/sessions/${encodeURIComponent(projectId)}/${sessionId}`,
+      ),
+    enabled: !!projectId && !!sessionId,
+  });
+}
+
+export function useSessionMetrics(projectId: string, sessionId: string) {
+  return useQuery({
+    queryKey: ['session', projectId, sessionId, 'metrics'],
+    queryFn: () =>
+      apiFetch<SessionMetrics>(
+        `/api/sessions/${encodeURIComponent(projectId)}/${sessionId}/metrics`,
+      ),
+    enabled: !!projectId && !!sessionId,
+  });
+}
+
+export function useSubagent(
+  projectId: string,
+  sessionId: string,
+  agentId: string,
+) {
+  return useQuery({
+    queryKey: ['session', projectId, sessionId, 'subagent', agentId],
+    queryFn: () =>
+      apiFetch<Process>(
+        `/api/sessions/${encodeURIComponent(projectId)}/${sessionId}/subagents/${agentId}`,
+      ),
+    enabled: !!projectId && !!sessionId && !!agentId,
+  });
+}
+
+export function useStageSession(stageId: string) {
+  return useQuery({
+    queryKey: ['stage', stageId, 'session'],
+    queryFn: () =>
+      apiFetch<{ sessionId: string; stageId: string }>(
+        `/api/stages/${stageId}/session`,
+      ),
+    enabled: !!stageId,
   });
 }
