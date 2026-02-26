@@ -109,6 +109,32 @@ CREATE TABLE IF NOT EXISTS mr_comment_tracking (
   repo_id INTEGER REFERENCES repos(id)
 )`;
 
+export const CREATE_STAGE_SESSIONS_TABLE = `
+CREATE TABLE IF NOT EXISTS stage_sessions (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  stage_id    TEXT NOT NULL REFERENCES stages(id),
+  session_id  TEXT NOT NULL,
+  phase       TEXT NOT NULL,
+  started_at  TEXT NOT NULL,
+  ended_at    TEXT,
+  is_current  INTEGER DEFAULT 0,
+  UNIQUE(stage_id, session_id)
+)`;
+
+export const CREATE_TICKET_SESSIONS_TABLE = `
+CREATE TABLE IF NOT EXISTS ticket_sessions (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  ticket_id   TEXT NOT NULL REFERENCES tickets(id),
+  session_id  TEXT NOT NULL,
+  session_type TEXT NOT NULL DEFAULT 'convert',
+  started_at  TEXT NOT NULL,
+  ended_at    TEXT,
+  UNIQUE(ticket_id, session_id)
+)`;
+
+export const CREATE_STAGE_SESSIONS_STAGE_INDEX = `CREATE INDEX IF NOT EXISTS idx_stage_sessions_stage_id ON stage_sessions(stage_id)`;
+export const CREATE_TICKET_SESSIONS_TICKET_INDEX = `CREATE INDEX IF NOT EXISTS idx_ticket_sessions_ticket_id ON ticket_sessions(ticket_id)`;
+
 export const CREATE_EPICS_JIRA_KEY_INDEX = `CREATE INDEX IF NOT EXISTS idx_epics_jira_key ON epics(jira_key, repo_id)`;
 export const CREATE_TICKETS_JIRA_KEY_INDEX = `CREATE INDEX IF NOT EXISTS idx_tickets_jira_key ON tickets(jira_key, repo_id)`;
 export const CREATE_PARENT_TRACKING_CHILD_INDEX = `CREATE INDEX IF NOT EXISTS idx_parent_tracking_child ON parent_branch_tracking(child_stage_id)`;
@@ -149,4 +175,8 @@ export const ALL_CREATE_STATEMENTS = [
   CREATE_PARENT_TRACKING_CHILD_INDEX,
   CREATE_PARENT_TRACKING_PARENT_INDEX,
   CREATE_STAGES_SESSION_ID_INDEX,
+  CREATE_STAGE_SESSIONS_TABLE,
+  CREATE_TICKET_SESSIONS_TABLE,
+  CREATE_STAGE_SESSIONS_STAGE_INDEX,
+  CREATE_TICKET_SESSIONS_TICKET_INDEX,
 ] as const;

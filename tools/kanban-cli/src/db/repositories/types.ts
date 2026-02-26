@@ -79,3 +79,22 @@ export interface MrCommentTrackingRow {
   last_known_unresolved_count: number;
   repo_id: number;
 }
+
+export interface StageSessionRow {
+  id: number;
+  stage_id: string;
+  session_id: string;
+  phase: string;
+  started_at: string;
+  ended_at: string | null;
+  is_current: number;
+}
+
+export interface TicketSessionRow {
+  id: number;
+  ticket_id: string;
+  session_id: string;
+  session_type: string;
+  started_at: string;
+  ended_at: string | null;
+}
