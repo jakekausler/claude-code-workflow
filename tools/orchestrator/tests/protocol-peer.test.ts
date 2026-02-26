@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { PassThrough } from 'node:stream';
 import { ProtocolPeer } from '../src/protocol-peer.js';
 import type { ProtocolHandler, CanUseToolRequest, HookCallbackRequest } from '../src/protocol-types.js';

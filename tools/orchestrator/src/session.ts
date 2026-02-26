@@ -1,5 +1,6 @@
 import { spawn as nodeSpawn } from 'node:child_process';
 import { PassThrough } from 'node:stream';
+import type { Writable } from 'node:stream';
 import { StreamParser } from './stream-parser.js';
 import { ProtocolPeer } from './protocol-peer.js';
 import { ApprovalService } from './approval-service.js';
@@ -58,7 +59,10 @@ export interface SpawnProcessOptions {
 export interface ChildProcessLike {
   pid: number | undefined;
   stdin: { write(data: string): boolean; end(): void };
-  stdout: { on(event: 'data', listener: (chunk: Buffer) => void): void };
+  stdout: {
+    on(event: 'data', listener: (chunk: Buffer) => void): void;
+    on(event: 'end', listener: () => void): void;
+  };
   stderr: { on(event: 'data', listener: (chunk: Buffer) => void): void };
   on(event: 'close', listener: (code: number | null) => void): void;
   on(event: 'error', listener: (err: Error) => void): void;
@@ -199,7 +203,7 @@ export function createSessionExecutor(deps: Partial<SessionDeps> = {}): SessionE
         approvalService.setCurrentStageId(options.stageId);
 
         // Create ProtocolPeer for bidirectional communication with Claude
-        const peer = new ProtocolPeer(child.stdin, protocolStream, approvalService);
+        const peer = new ProtocolPeer(child.stdin as unknown as Writable, protocolStream, approvalService);
         peers.set(options.stageId, peer);
 
         let settled = false;
@@ -236,6 +240,14 @@ export function createSessionExecutor(deps: Partial<SessionDeps> = {}): SessionE
             activeSessions.delete(child.pid);
           }
 
+          // Clean up peer and approval service
+          const peer = peers.get(options.stageId);
+          if (peer) {
+            peer.destroy();
+            peers.delete(options.stageId);
+          }
+          approvalService.clearForStage(options.stageId);
+
           reject(err);
         });
 
@@ -253,8 +265,9 @@ export function createSessionExecutor(deps: Partial<SessionDeps> = {}): SessionE
         // Only write to stdin if the process spawned successfully (has a pid).
         // If pid is undefined, the spawn failed and stdin operations should be skipped.
         if (child.pid !== undefined) {
-          child.stdin.write(prompt);
-          child.stdin.end();
+          child.stdin.write(prompt + '\n');
+          // Do NOT call stdin.end() — ProtocolPeer needs stdin open for bidirectional communication
+          // stdin will be closed when the peer is destroyed on session exit
         }
       });
     },
