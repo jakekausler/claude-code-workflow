@@ -5,6 +5,8 @@ import {
   TicketRepository,
   StageRepository,
   DependencyRepository,
+  StageSessionRepository,
+  TicketSessionRepository,
 } from '../../../../kanban-cli/dist/db/repositories/index.js';
 
 export interface DataServiceOptions {
@@ -22,6 +24,8 @@ export class DataService {
   readonly tickets: TicketRepository;
   readonly stages: StageRepository;
   readonly dependencies: DependencyRepository;
+  readonly stageSessions: StageSessionRepository;
+  readonly ticketSessions: TicketSessionRepository;
 
   constructor(options: DataServiceOptions) {
     this.database = options.db;
@@ -30,6 +34,8 @@ export class DataService {
     this.tickets = new TicketRepository(options.db);
     this.stages = new StageRepository(options.db);
     this.dependencies = new DependencyRepository(options.db);
+    this.stageSessions = new StageSessionRepository(options.db);
+    this.ticketSessions = new TicketSessionRepository(options.db);
   }
 
   /** Close the underlying database connection. */
