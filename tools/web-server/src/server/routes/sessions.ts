@@ -2,6 +2,7 @@ import type { FastifyPluginCallback } from 'fastify';
 import fp from 'fastify-plugin';
 import { readdir, stat } from 'fs/promises';
 import { join, resolve } from 'path';
+import type { StageSessionRow, TicketSessionRow } from '../../../../kanban-cli/dist/db/repositories/index.js';
 
 /** Validate that a session ID looks safe (alphanumeric, hyphens, underscores). */
 const SESSION_ID_RE = /^[\w-]+$/;
@@ -233,7 +234,7 @@ const sessionsPlugin: FastifyPluginCallback = (app, _opts, done) => {
       const projectId = repo ? repo.path.replace(/\//g, '-') : null;
 
       return {
-        sessions: rows.map((r) => ({
+        sessions: rows.map((r: StageSessionRow) => ({
           sessionId: r.session_id,
           projectId,
           phase: r.phase,
@@ -271,7 +272,7 @@ const sessionsPlugin: FastifyPluginCallback = (app, _opts, done) => {
       const projectId = repo ? repo.path.replace(/\//g, '-') : null;
 
       return {
-        sessions: rows.map((r) => ({
+        sessions: rows.map((r: TicketSessionRow) => ({
           sessionId: r.session_id,
           projectId,
           sessionType: r.session_type,
