@@ -400,3 +400,40 @@ export function useStageSession(stageId: string) {
     enabled: !!stageId,
   });
 }
+
+/** Fetch all sessions for a stage from the junction table. */
+export function useStageSessionHistory(stageId: string) {
+  return useQuery({
+    queryKey: ['stage', stageId, 'sessions'],
+    queryFn: () =>
+      apiFetch<{
+        sessions: Array<{
+          sessionId: string;
+          projectId: string | null;
+          phase: string;
+          startedAt: string;
+          endedAt: string | null;
+          isCurrent: boolean;
+        }>;
+      }>(`/stages/${stageId}/sessions`),
+    enabled: !!stageId,
+  });
+}
+
+/** Fetch all sessions for a ticket from the junction table. */
+export function useTicketSessions(ticketId: string) {
+  return useQuery({
+    queryKey: ['ticket', ticketId, 'sessions'],
+    queryFn: () =>
+      apiFetch<{
+        sessions: Array<{
+          sessionId: string;
+          projectId: string | null;
+          sessionType: string;
+          startedAt: string;
+          endedAt: string | null;
+        }>;
+      }>(`/tickets/${ticketId}/sessions`),
+    enabled: !!ticketId,
+  });
+}
