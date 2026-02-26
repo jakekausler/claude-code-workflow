@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import {
   ChevronRight,
   CheckCircle2,
@@ -15,6 +14,7 @@ import {
 } from 'lucide-react';
 import { generateToolSummary, formatDuration } from '../../../utils/session-formatters.js';
 import { getToolRenderer } from '../../tools/index.js';
+import { useSessionViewStore } from '../../../store/session-store.js';
 import type { ToolExecution } from '../../../types/session.js';
 
 interface Props {
@@ -32,7 +32,8 @@ const toolIcons: Record<string, typeof FileText> = {
 };
 
 export function LinkedToolItem({ execution }: Props) {
-  const [expanded, setExpanded] = useState(false);
+  const expanded = useSessionViewStore((s) => s.expandedTools.has(execution.toolCallId));
+  const toggleTool = useSessionViewStore((s) => s.toggleTool);
   const { toolName, input, result, durationMs, isOrphaned } = execution;
 
   const Icon = toolIcons[toolName] || Wrench;
@@ -51,7 +52,7 @@ export function LinkedToolItem({ execution }: Props) {
       }`}
     >
       <button
-        onClick={() => setExpanded(!expanded)}
+        onClick={() => toggleTool(execution.toolCallId)}
         className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-slate-50 transition-colors"
       >
         <ChevronRight

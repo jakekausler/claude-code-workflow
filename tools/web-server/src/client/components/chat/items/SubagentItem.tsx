@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useMemo } from 'react';
 import {
   ChevronRight,
   CheckCircle2,
@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { MetricsPill } from '../MetricsPill.js';
 import { formatDuration, formatTokenCount } from '../../../utils/session-formatters.js';
+import { useSessionViewStore } from '../../../store/session-store.js';
 import { TextItem } from './TextItem.js';
 import { ThinkingItem } from './ThinkingItem.js';
 import { LinkedToolItem } from './LinkedToolItem.js';
@@ -107,8 +108,10 @@ function getUserPreview(msg: ParsedMessage): string {
 }
 
 export function SubagentItem({ process, depth = 0 }: Props) {
-  const [expanded, setExpanded] = useState(false);
-  const [showTrace, setShowTrace] = useState(false);
+  const expanded = useSessionViewStore((s) => s.expandedSubagents.has(process.id));
+  const toggleSubagent = useSessionViewStore((s) => s.toggleSubagent);
+  const showTrace = useSessionViewStore((s) => s.expandedSubagentTraces.has(process.id));
+  const toggleSubagentTrace = useSessionViewStore((s) => s.toggleSubagentTrace);
 
   const agentType = process.subagentType || 'Task';
   const Icon = typeIcons[agentType] || Bot;
@@ -135,7 +138,7 @@ export function SubagentItem({ process, depth = 0 }: Props) {
     >
       {/* Level 1: Header row */}
       <button
-        onClick={() => setExpanded(!expanded)}
+        onClick={() => toggleSubagent(process.id)}
         className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-slate-50 transition-colors"
       >
         <ChevronRight
@@ -215,7 +218,7 @@ export function SubagentItem({ process, depth = 0 }: Props) {
 
           {/* Toggle for execution trace */}
           <button
-            onClick={() => setShowTrace(!showTrace)}
+            onClick={() => toggleSubagentTrace(process.id)}
             className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-700 transition-colors"
           >
             <Cpu className="w-3.5 h-3.5" />

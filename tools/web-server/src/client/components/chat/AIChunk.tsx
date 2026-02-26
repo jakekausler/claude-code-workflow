@@ -1,9 +1,12 @@
 import { Bot } from 'lucide-react';
 import { formatTimestamp, formatTokenCount } from '../../utils/session-formatters.js';
+import { findLastOutput } from '../../utils/last-output-detector.js';
 import { TextItem } from './items/TextItem.js';
 import { ThinkingItem } from './items/ThinkingItem.js';
 import { LinkedToolItem } from './items/LinkedToolItem.js';
 import { SubagentItem } from './items/SubagentItem.js';
+import { LastOutputDisplay } from './LastOutputDisplay.js';
+import { ContextBadge } from './context/ContextBadge.js';
 import type {
   EnhancedAIChunk as EnhancedAIChunkType,
   AIChunk as AIChunkType,
@@ -93,15 +96,22 @@ export function AIChunk({ chunk }: Props) {
   }
 
   // Enhanced: render semantic steps
+  const lastOutput = findLastOutput(chunk.semanticSteps);
+
   return (
     <div className="flex gap-2 mb-4">
       <div className="flex-shrink-0 w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center">
         <Bot className="w-4 h-4 text-emerald-600" />
       </div>
       <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 mb-1">
+          {model && <span className="text-xs text-slate-400">{model}</span>}
+          <ContextBadge totalNewTokens={totalTokens} />
+        </div>
         {chunk.semanticSteps.map((step, i) => (
           <AIStepRenderer key={i} step={step} toolExecMap={toolExecutions} subagents={chunk.subagents} />
         ))}
+        <LastOutputDisplay lastOutput={lastOutput} />
         <div className="flex items-center gap-3 mt-2 text-xs text-slate-400">
           {model && <span>{model}</span>}
           {totalTokens > 0 && <span>{formatTokenCount(totalTokens)} tokens</span>}
