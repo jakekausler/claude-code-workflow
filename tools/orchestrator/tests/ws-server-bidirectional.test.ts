@@ -183,8 +183,8 @@ describe('WebSocket server (bidirectional)', () => {
       message: 'Hello from web',
     }));
 
-    // Give handler time to process
-    await new Promise(r => setTimeout(r, 100));
+    // Real timer needed: WebSocket message delivery and JSON parsing require event loop ticks
+    await new Promise(r => setTimeout(r, 50));
 
     expect(sendMessageCalls).toHaveLength(1);
     expect(sendMessageCalls[0]).toEqual({

@@ -16,6 +16,18 @@ interface WsMessage {
   data: SessionInfo | SessionInfo[] | unknown;
 }
 
+// Discriminated union for inbound messages from orchestrator ws-server
+type InboundWsMessage =
+  | { type: 'init'; data: SessionInfo[] }
+  | { type: 'session_registered'; data: SessionInfo }
+  | { type: 'session_status'; data: SessionInfo }
+  | { type: 'session_ended'; data: SessionInfo }
+  | { type: 'approval_requested'; data: unknown }
+  | { type: 'question_requested'; data: unknown }
+  | { type: 'approval_cancelled'; data: unknown }
+  | { type: 'message_queued'; data: unknown }
+  | { type: 'message_sent'; data: unknown };
+
 export interface OrchestratorClientOptions {
   /** Delay in ms before attempting reconnection (default: 3000) */
   reconnectDelay?: number;
@@ -118,31 +130,25 @@ export class OrchestratorClient extends EventEmitter {
 
   private handleMessage(raw: string): void {
     try {
-      const msg = JSON.parse(raw) as WsMessage;
+      const msg = JSON.parse(raw) as InboundWsMessage;
       switch (msg.type) {
         case 'init':
           this.sessions.clear();
-          for (const entry of msg.data as SessionInfo[]) {
+          for (const entry of msg.data) {
             this.sessions.set(entry.stageId, entry);
           }
           this.emit('init', this.getAllSessions());
           break;
         case 'session_registered':
-          this.sessions.set(
-            (msg.data as SessionInfo).stageId,
-            msg.data as SessionInfo,
-          );
+          this.sessions.set(msg.data.stageId, msg.data);
           this.emit('session-registered', msg.data);
           break;
         case 'session_status':
-          this.sessions.set(
-            (msg.data as SessionInfo).stageId,
-            msg.data as SessionInfo,
-          );
+          this.sessions.set(msg.data.stageId, msg.data);
           this.emit('session-status', msg.data);
           break;
         case 'session_ended':
-          this.sessions.delete((msg.data as SessionInfo).stageId);
+          this.sessions.delete(msg.data.stageId);
           this.emit('session-ended', msg.data);
           break;
         case 'approval_requested':
@@ -155,14 +161,17 @@ export class OrchestratorClient extends EventEmitter {
           this.emit('approval-cancelled', msg.data);
           break;
         case 'message_queued':
+          // TODO: Forward-looking stub - will be wired when orchestrator emits message_queued events
           this.emit('message-queued', msg.data);
           break;
         case 'message_sent':
+          // TODO: Forward-looking stub - will be wired when orchestrator emits message_sent events
           this.emit('message-sent', msg.data);
           break;
       }
     } catch {
-      /* ignore malformed messages */
+      // Silently ignore malformed messages from the orchestrator ws-server.
+      // This prevents a single bad message from breaking the message handler.
     }
   }
 }

@@ -73,8 +73,8 @@ describe('OrchestratorClient (bidirectional)', () => {
 
     client.sendMessage('stage-1', 'Hello from web');
 
-    // Give message time to send
-    await new Promise(r => setTimeout(r, 100));
+    // Real timer needed: WebSocket message delivery and JSON parsing require event loop ticks
+    await new Promise(r => setTimeout(r, 50));
 
     const messages = getMessages();
     expect(messages).toHaveLength(1);
@@ -91,7 +91,8 @@ describe('OrchestratorClient (bidirectional)', () => {
 
     client.approveTool('stage-1', 'req-123', 'allow');
 
-    await new Promise(r => setTimeout(r, 100));
+    // Real timer needed: WebSocket message delivery and JSON parsing require event loop ticks
+    await new Promise(r => setTimeout(r, 50));
 
     const messages = getMessages();
     expect(messages).toHaveLength(1);
@@ -109,7 +110,8 @@ describe('OrchestratorClient (bidirectional)', () => {
 
     client.approveTool('stage-1', 'req-123', 'deny', 'Too risky');
 
-    await new Promise(r => setTimeout(r, 100));
+    // Real timer needed: WebSocket message delivery and JSON parsing require event loop ticks
+    await new Promise(r => setTimeout(r, 50));
 
     const messages = getMessages();
     expect(messages).toHaveLength(1);
@@ -129,7 +131,8 @@ describe('OrchestratorClient (bidirectional)', () => {
     const answers = { name: 'John', age: '30' };
     client.answerQuestion('stage-1', 'req-456', answers);
 
-    await new Promise(r => setTimeout(r, 100));
+    // Real timer needed: WebSocket message delivery and JSON parsing require event loop ticks
+    await new Promise(r => setTimeout(r, 50));
 
     const messages = getMessages();
     expect(messages).toHaveLength(1);
@@ -147,7 +150,8 @@ describe('OrchestratorClient (bidirectional)', () => {
 
     client.interruptSession('stage-1');
 
-    await new Promise(r => setTimeout(r, 100));
+    // Real timer needed: WebSocket message delivery and JSON parsing require event loop ticks
+    await new Promise(r => setTimeout(r, 50));
 
     const messages = getMessages();
     expect(messages).toHaveLength(1);
@@ -210,7 +214,8 @@ describe('OrchestratorClient (bidirectional)', () => {
     // Don't connect at all
     client.sendMessage('stage-1', 'Should not send');
 
-    await new Promise(r => setTimeout(r, 100));
+    // Real timer needed: WebSocket message delivery and JSON parsing require event loop ticks
+    await new Promise(r => setTimeout(r, 50));
 
     const messages = getMessages();
     expect(messages).toHaveLength(0);
@@ -221,11 +226,13 @@ describe('OrchestratorClient (bidirectional)', () => {
     await waitForEvent(client, 'connected');
 
     client.disconnect();
-    await new Promise(r => setTimeout(r, 100));
+    // Real timer needed: WebSocket message delivery and JSON parsing require event loop ticks
+    await new Promise(r => setTimeout(r, 50));
 
     client.sendMessage('stage-1', 'Should not send');
 
-    await new Promise(r => setTimeout(r, 100));
+    // Real timer needed: WebSocket message delivery and JSON parsing require event loop ticks
+    await new Promise(r => setTimeout(r, 50));
 
     const messages = getMessages();
     expect(messages).toHaveLength(0);

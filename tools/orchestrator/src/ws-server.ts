@@ -1,18 +1,23 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import type { SessionRegistry, SessionEntry } from './session-registry.js';
 import type { ApprovalService } from './approval-service.js';
-import type { MessageQueue } from './message-queue.js';
 
 export interface WsMessage {
   type: 'init' | 'session_registered' | 'session_status' | 'session_ended' | 'approval_requested' | 'question_requested' | 'approval_cancelled';
   data: SessionEntry | SessionEntry[] | unknown;
 }
 
+// Discriminated union for inbound messages from web server clients
+export type InboundWsMessage =
+  | { type: 'send_message'; stageId: string; message: string }
+  | { type: 'approve_tool'; stageId: string; requestId: string; decision: 'allow' | 'deny'; reason?: string }
+  | { type: 'answer_question'; stageId: string; requestId: string; answers: Record<string, string> }
+  | { type: 'interrupt'; stageId: string };
+
 export interface WsServerOptions {
   port: number;
   registry: SessionRegistry;
   approvalService?: ApprovalService;
-  messageQueue?: MessageQueue;
   onSendMessage?: (stageId: string, message: string) => void;
   onApproveTool?: (stageId: string, requestId: string, decision: 'allow' | 'deny', reason?: string) => void;
   onAnswerQuestion?: (stageId: string, requestId: string, answers: Record<string, string>) => void;
@@ -72,32 +77,24 @@ export function createWsServer(options: WsServerOptions): WsServerHandle {
       // Handle inbound messages from web server clients
       ws.on('message', (raw) => {
         try {
-          const msg = JSON.parse(raw.toString()) as Record<string, unknown>;
+          const msg = JSON.parse(raw.toString()) as InboundWsMessage;
           switch (msg.type) {
             case 'send_message':
-              onSendMessage?.(msg.stageId as string, msg.message as string);
+              onSendMessage?.(msg.stageId, msg.message);
               break;
             case 'approve_tool':
-              onApproveTool?.(
-                msg.stageId as string,
-                msg.requestId as string,
-                msg.decision as 'allow' | 'deny',
-                msg.reason as string | undefined,
-              );
+              onApproveTool?.(msg.stageId, msg.requestId, msg.decision, msg.reason);
               break;
             case 'answer_question':
-              onAnswerQuestion?.(
-                msg.stageId as string,
-                msg.requestId as string,
-                msg.answers as Record<string, string>,
-              );
+              onAnswerQuestion?.(msg.stageId, msg.requestId, msg.answers);
               break;
             case 'interrupt':
-              onInterrupt?.(msg.stageId as string);
+              onInterrupt?.(msg.stageId);
               break;
           }
         } catch {
-          /* ignore malformed messages */
+          // Silently ignore malformed messages from the web server client.
+          // This prevents a single bad message from breaking the message handler.
         }
       });
     });
