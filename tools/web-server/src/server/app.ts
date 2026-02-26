@@ -6,6 +6,7 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import os from 'os';
 import type { DataService } from './services/data-service.js';
+import type { OrchestratorClient } from './services/orchestrator-client.js';
 import { boardRoutes } from './routes/board.js';
 import { epicRoutes } from './routes/epics.js';
 import { ticketRoutes } from './routes/tickets.js';
@@ -18,6 +19,7 @@ declare module 'fastify' {
   interface FastifyInstance {
     dataService: DataService | null;
     claudeProjectsDir: string;
+    orchestratorClient: OrchestratorClient | null;
   }
 }
 
@@ -30,6 +32,7 @@ export interface ServerOptions {
   isDev?: boolean;
   dataService?: DataService;
   claudeProjectsDir?: string;
+  orchestratorClient?: OrchestratorClient;
 }
 
 export async function createServer(
@@ -65,6 +68,14 @@ export async function createServer(
   const claudeProjectsDir =
     options.claudeProjectsDir ?? join(os.homedir(), '.claude', 'projects');
   app.decorate('claudeProjectsDir', claudeProjectsDir);
+
+  // OrchestratorClient decoration — WebSocket connection to orchestrator
+  const orchestratorClient = options.orchestratorClient ?? null;
+  app.decorate('orchestratorClient', orchestratorClient);
+  if (orchestratorClient) {
+    app.addHook('onReady', async () => orchestratorClient.connect());
+    app.addHook('onClose', async () => orchestratorClient.disconnect());
+  }
 
   // --- API routes ---
   app.get('/api/health', async () => ({
