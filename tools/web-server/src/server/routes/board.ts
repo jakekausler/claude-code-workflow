@@ -125,31 +125,60 @@ interface BoardData {
   tickets: BoardTicketRow[];
   stages: BoardStageRow[];
   dependencies: BoardDependencyRow[];
+  global: boolean;
+  repos?: string[];
 }
 
 /**
- * Fetch and map the common board data from the first repo.
- * Returns `null` when no repos exist.
+ * Fetch and map the common board data.
+ *
+ * When `repoFilter` is provided, returns data for that single repo.
+ * When omitted ("All Repos"), aggregates data across every registered repo
+ * and sets `global: true` so that `buildBoard` produces a multi-repo board.
+ *
+ * Returns `null` when no repos exist (or the requested repo is not found).
  */
 function fetchBoardData(dataService: DataService, repoFilter?: string): BoardData | null {
   const repos = dataService.repos.findAll();
   if (repos.length === 0) return null;
 
-  let repo;
   if (repoFilter) {
-    // Find by name first, then try by ID
-    repo = repos.find((r) => r.name === repoFilter) ?? repos.find((r) => String(r.id) === repoFilter);
+    // Single-repo mode: find by name first, then try by ID
+    const repo =
+      repos.find((r) => r.name === repoFilter) ?? repos.find((r) => String(r.id) === repoFilter);
     if (!repo) return null;
-  } else {
-    repo = repos[0];
+
+    return {
+      repoPath: repo.path,
+      epics: mapEpics(dataService.epics.listByRepo(repo.id)),
+      tickets: mapTickets(dataService.tickets.listByRepo(repo.id)),
+      stages: mapStages(dataService.stages.listByRepo(repo.id)),
+      dependencies: mapDependencies(dataService.dependencies.listByRepo(repo.id)),
+      global: false,
+    };
+  }
+
+  // All-repos mode: aggregate data from every repo
+  const allEpics: BoardEpicRow[] = [];
+  const allTickets: BoardTicketRow[] = [];
+  const allStages: BoardStageRow[] = [];
+  const allDependencies: BoardDependencyRow[] = [];
+
+  for (const repo of repos) {
+    allEpics.push(...mapEpics(dataService.epics.listByRepo(repo.id)));
+    allTickets.push(...mapTickets(dataService.tickets.listByRepo(repo.id)));
+    allStages.push(...mapStages(dataService.stages.listByRepo(repo.id)));
+    allDependencies.push(...mapDependencies(dataService.dependencies.listByRepo(repo.id)));
   }
 
   return {
-    repoPath: repo.path,
-    epics: mapEpics(dataService.epics.listByRepo(repo.id)),
-    tickets: mapTickets(dataService.tickets.listByRepo(repo.id)),
-    stages: mapStages(dataService.stages.listByRepo(repo.id)),
-    dependencies: mapDependencies(dataService.dependencies.listByRepo(repo.id)),
+    repoPath: repos[0].path,
+    epics: allEpics,
+    tickets: allTickets,
+    stages: allStages,
+    dependencies: allDependencies,
+    global: true,
+    repos: repos.map((r) => r.name),
   };
 }
 
@@ -192,6 +221,8 @@ const boardPlugin: FastifyPluginCallback = (app, _opts, done) => {
       stages: data.stages,
       dependencies: data.dependencies,
       filters: { epic, ticket, column, excludeDone },
+      global: data.global,
+      repos: data.repos,
     });
 
     return reply.send(board);
@@ -214,6 +245,8 @@ const boardPlugin: FastifyPluginCallback = (app, _opts, done) => {
       tickets: data.tickets,
       stages: data.stages,
       dependencies: data.dependencies,
+      global: data.global,
+      repos: data.repos,
     });
 
     return reply.send(board.stats);
