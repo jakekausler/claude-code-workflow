@@ -161,6 +161,12 @@ export const ALTER_TABLE_MIGRATIONS = [
   'ALTER TABLE dependencies ADD COLUMN target_repo_name TEXT',
   CREATE_REPOS_NAME_UNIQUE_INDEX,
   'ALTER TABLE stages ADD COLUMN session_id TEXT DEFAULT NULL',
+  // Migrate existing stages.session_id values into the stage_sessions junction table.
+  // Uses INSERT OR IGNORE so it is idempotent — safe to run on every database open.
+  `INSERT OR IGNORE INTO stage_sessions (stage_id, session_id, phase, started_at, is_current)
+   SELECT id, session_id, COALESCE(kanban_column, 'unknown'), last_synced, 1
+   FROM stages
+   WHERE session_id IS NOT NULL`,
 ] as const;
 
 export const ALL_CREATE_STATEMENTS = [
