@@ -1,10 +1,11 @@
-import { useMemo } from 'react';
+import { useMemo, useEffect } from 'react';
 import { Loader2, AlertCircle, Lock } from 'lucide-react';
 import { ChatHistory } from './ChatHistory.js';
 import { ContextAccordion } from './context/ContextAccordion.js';
 import { useSessionDetail } from '../../api/hooks.js';
 import { transformChunksToConversation } from '../../utils/group-transformer.js';
 import { processSessionContextWithPhases } from '../../utils/context-tracker.js';
+import { useSessionViewStore } from '../../store/session-store.js';
 
 interface EmbeddedSessionViewerProps {
   projectId: string;
@@ -18,6 +19,12 @@ export function EmbeddedSessionViewer({
   isReadOnly = false,
 }: EmbeddedSessionViewerProps) {
   const { data: session, isLoading, error } = useSessionDetail(projectId, sessionId);
+  const resetView = useSessionViewStore((s) => s.resetView);
+
+  // Reset view state when session changes
+  useEffect(() => {
+    resetView();
+  }, [sessionId, resetView]);
 
   const chunks = session?.chunks ?? [];
 
