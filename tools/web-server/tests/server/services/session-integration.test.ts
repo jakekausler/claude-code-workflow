@@ -119,7 +119,7 @@ const SUBAGENT_LINES = [
     isSidechain: false,
     userType: 'external',
     cwd: '/project',
-    sessionId: 'sub-session',
+    sessionId: 'test-session-001',
     version: '2.1.56',
     gitBranch: 'main',
     message: { role: 'user', content: 'Subagent task' },
@@ -132,7 +132,7 @@ const SUBAGENT_LINES = [
     isSidechain: false,
     userType: 'external',
     cwd: '/project',
-    sessionId: 'sub-session',
+    sessionId: 'test-session-001',
     version: '2.1.56',
     gitBranch: 'main',
     message: {

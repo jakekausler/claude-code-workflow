@@ -1,4 +1,4 @@
-import { readdir } from 'fs/promises';
+import { readdir, readFile } from 'fs/promises';
 import { join } from 'path';
 import type { ParsedMessage, Process, SessionMetrics } from '../types/jsonl.js';
 import { parseSessionFile } from './session-parser.js';
@@ -151,6 +151,25 @@ export async function resolveSubagents(
   return processes;
 }
 
+async function belongsToSession(filePath: string, sessionId: string): Promise<boolean> {
+  try {
+    // Read just the first line to check sessionId
+    const content = await readFile(filePath, 'utf8');
+    const firstNewline = content.indexOf('\n');
+    const firstLine = firstNewline > 0 ? content.slice(0, firstNewline) : content;
+
+    if (!firstLine.trim()) {
+      return false;
+    }
+
+    const entry = JSON.parse(firstLine) as { sessionId?: string };
+    return entry.sessionId === sessionId;
+  } catch {
+    // If we can't read or parse the file, don't include it
+    return false;
+  }
+}
+
 async function discoverSubagentFiles(
   projectDir: string,
   sessionId: string,
@@ -180,7 +199,11 @@ async function discoverSubagentFiles(
         const filePath = join(projectDir, entry);
         // Avoid duplicates if already found in new structure
         if (!results.some((r) => r.agentId === match[1])) {
-          results.push({ agentId: match[1], filePath });
+          // Filter by sessionId - only include files that belong to this session
+          const belongsToThisSession = await belongsToSession(filePath, sessionId);
+          if (belongsToThisSession) {
+            results.push({ agentId: match[1], filePath });
+          }
         }
       }
     }

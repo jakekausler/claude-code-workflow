@@ -66,6 +66,24 @@ describe('SubagentResolver', () => {
       expect(result[0].id).toBe('abc123');
     });
 
+    it('excludes legacy files from different sessions', async () => {
+      const tmpDir = createTempProject();
+      // Copy the fixture file which has sessionId 's1'
+      cpSync(
+        join(fixturesDir, 'subagents', 'agent-abc123.jsonl'),
+        join(tmpDir, 'agent-abc123.jsonl'),
+      );
+
+      // Try to resolve with a different sessionId
+      const parentMessages = createParentWithTaskCall('toolu_task1', 'abc123');
+      const result = await resolveSubagents(parentMessages, {
+        projectDir: tmpDir,
+        sessionId: 'different-session',
+      });
+      // File should be filtered out because it belongs to 's1', not 'different-session'
+      expect(result).toHaveLength(0);
+    });
+
     it('filters out warmup agents', async () => {
       const tmpDir = createTempProject();
       const subagentDir = join(tmpDir, 'test-session', 'subagents');
