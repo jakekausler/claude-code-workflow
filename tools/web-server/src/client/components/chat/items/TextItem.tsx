@@ -1,6 +1,7 @@
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { Components } from 'react-markdown';
+import { highlightLine } from '../../../utils/syntax-highlighter.js';
 
 const markdownComponents: Components = {
   code({ className, children, ...props }) {
@@ -16,10 +17,17 @@ const markdownComponents: Components = {
       );
     }
     const lang = className?.replace('language-', '') || '';
+    const raw = String(children).replace(/\n$/, '');
+    const lines = raw.split('\n');
     return (
       <pre className="bg-slate-900 text-slate-100 rounded-lg p-4 overflow-x-auto text-xs">
         <code className={className} data-language={lang} {...props}>
-          {children}
+          {lines.map((line, i) => (
+            <span key={i}>
+              {lang ? highlightLine(line, lang) : line}
+              {i < lines.length - 1 ? '\n' : null}
+            </span>
+          ))}
         </code>
       </pre>
     );
