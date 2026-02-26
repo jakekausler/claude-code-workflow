@@ -6,6 +6,7 @@ import type {
   ToolExecution,
   Chunk,
   EnhancedAIChunk,
+  Process,
 } from '../types/jsonl.js';
 import { parseSessionFile } from './session-parser.js';
 import { buildToolExecutions } from './tool-execution-builder.js';
@@ -43,6 +44,11 @@ export class SessionPipeline {
     enhanceAIChunks(chunks, toolExecutions);
 
     const subagents = await resolveSubagents(messages, { projectDir, sessionId });
+
+    // Link subagents to their corresponding AI chunks so downstream consumers
+    // (group transformer, display item builder) can access them per-chunk.
+    linkSubagentsToChunks(chunks, subagents);
+
     const { totalCost } = calculateSessionCost(messages);
     const metrics = computeMetrics(messages, toolExecutions, totalCost);
 
@@ -100,6 +106,79 @@ function enhanceAIChunks(chunks: Chunk[], toolExecutions: ToolExecution[]): void
       // freshly built and owned by this pipeline invocation.
       (chunk as EnhancedAIChunk).semanticSteps =
         extractSemanticSteps(chunk, toolExecutions);
+    }
+  }
+}
+
+/**
+ * Link resolved subagent Process objects to their corresponding AI chunks.
+ *
+ * Uses a two-tier linking strategy (matching devtools ProcessLinker):
+ * 1. Primary: parentTaskId matching — links subagents to chunks containing the
+ *    Task tool call that spawned them.
+ * 2. Fallback: Timing-based — for orphaned subagents without parentTaskId, falls
+ *    back to checking if the subagent's startTime falls within the chunk's time range.
+ */
+function linkSubagentsToChunks(chunks: Chunk[], subagents: Process[]): void {
+  if (subagents.length === 0) return;
+
+  const linkedSubagentIds = new Set<string>();
+
+  for (const chunk of chunks) {
+    if (chunk.type !== 'ai') continue;
+
+    const enhanced = chunk as EnhancedAIChunk;
+    if (!enhanced.subagents) {
+      enhanced.subagents = [];
+    }
+
+    // Build set of Task tool call IDs in this chunk's messages
+    const chunkTaskIds = new Set<string>();
+    for (const msg of chunk.messages) {
+      for (const tc of msg.toolCalls) {
+        if (tc.isTask) {
+          chunkTaskIds.add(tc.id);
+        }
+      }
+    }
+
+    // Primary linking: match by parentTaskId
+    for (const subagent of subagents) {
+      if (subagent.parentTaskId && chunkTaskIds.has(subagent.parentTaskId)) {
+        enhanced.subagents.push(subagent);
+        linkedSubagentIds.add(subagent.id);
+      }
+    }
+  }
+
+  // Fallback: timing-based linking for orphaned subagents (no parentTaskId)
+  for (const subagent of subagents) {
+    if (linkedSubagentIds.has(subagent.id)) continue;
+    if (subagent.parentTaskId) continue; // Has parentTaskId but didn't match — belongs elsewhere
+
+    for (const chunk of chunks) {
+      if (chunk.type !== 'ai') continue;
+
+      const startTime = chunk.messages[0]?.timestamp;
+      const endTime = chunk.messages[chunk.messages.length - 1]?.timestamp;
+      if (!startTime || !endTime) continue;
+
+      if (subagent.startTime >= startTime && subagent.startTime <= endTime) {
+        const enhanced = chunk as EnhancedAIChunk;
+        if (!enhanced.subagents) enhanced.subagents = [];
+        enhanced.subagents.push(subagent);
+        linkedSubagentIds.add(subagent.id);
+        break; // Only link to one chunk
+      }
+    }
+  }
+
+  // Sort subagents by start time within each chunk
+  for (const chunk of chunks) {
+    if (chunk.type !== 'ai') continue;
+    const enhanced = chunk as EnhancedAIChunk;
+    if (enhanced.subagents && enhanced.subagents.length > 1) {
+      enhanced.subagents.sort((a, b) => a.startTime.getTime() - b.startTime.getTime());
     }
   }
 }
