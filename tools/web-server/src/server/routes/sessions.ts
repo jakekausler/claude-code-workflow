@@ -206,6 +206,82 @@ const sessionsPlugin: FastifyPluginCallback = (app, _opts, done) => {
     },
   );
 
+  /**
+   * GET /api/stages/:stageId/sessions
+   *
+   * Returns all sessions for a stage from the junction table,
+   * ordered by is_current DESC, started_at DESC.
+   */
+  app.get<{ Params: { stageId: string } }>(
+    '/api/stages/:stageId/sessions',
+    async (request, reply) => {
+      const { stageId } = request.params;
+
+      if (!app.dataService) {
+        return reply.status(503).send({ error: 'Database not initialized' });
+      }
+
+      const stage = app.dataService.stages.findById(stageId);
+      if (!stage) {
+        return reply.status(404).send({ error: 'Stage not found' });
+      }
+
+      const rows = app.dataService.stageSessions.getSessionsByStageId(stageId);
+
+      // Derive projectId from repo path (same logic as existing /session endpoint)
+      const repo = app.dataService.repos.findById(stage.repo_id);
+      const projectId = repo ? repo.path.replace(/\//g, '-') : null;
+
+      return {
+        sessions: rows.map((r) => ({
+          sessionId: r.session_id,
+          projectId,
+          phase: r.phase,
+          startedAt: r.started_at,
+          endedAt: r.ended_at,
+          isCurrent: r.is_current === 1,
+        })),
+      };
+    },
+  );
+
+  /**
+   * GET /api/tickets/:ticketId/sessions
+   *
+   * Returns all sessions for a ticket from the junction table.
+   */
+  app.get<{ Params: { ticketId: string } }>(
+    '/api/tickets/:ticketId/sessions',
+    async (request, reply) => {
+      const { ticketId } = request.params;
+
+      if (!app.dataService) {
+        return reply.status(503).send({ error: 'Database not initialized' });
+      }
+
+      const ticket = app.dataService.tickets.findById(ticketId);
+      if (!ticket) {
+        return reply.status(404).send({ error: 'Ticket not found' });
+      }
+
+      const rows = app.dataService.ticketSessions.getSessionsByTicketId(ticketId);
+
+      // Derive projectId from repo path
+      const repo = app.dataService.repos.findById(ticket.repo_id);
+      const projectId = repo ? repo.path.replace(/\//g, '-') : null;
+
+      return {
+        sessions: rows.map((r) => ({
+          sessionId: r.session_id,
+          projectId,
+          sessionType: r.session_type,
+          startedAt: r.started_at,
+          endedAt: r.ended_at,
+        })),
+      };
+    },
+  );
+
   done();
 };
 

@@ -198,6 +198,23 @@ export interface SessionListItem {
   fileSize: number;
 }
 
+export interface StageSessionEntry {
+  sessionId: string;
+  projectId: string | null;
+  phase: string;
+  startedAt: string;
+  endedAt: string | null;
+  isCurrent: boolean;
+}
+
+export interface TicketSessionEntry {
+  sessionId: string;
+  projectId: string | null;
+  sessionType: string;
+  startedAt: string;
+  endedAt: string | null;
+}
+
 // Repos
 export interface RepoListItem {
   id: number;
@@ -398,5 +415,27 @@ export function useStageSession(stageId: string) {
         `/stages/${stageId}/session`,
       ),
     enabled: !!stageId,
+  });
+}
+
+// Session History ---------------------------------------------------------
+
+/** Fetch all sessions for a stage from the junction table. */
+export function useStageSessionHistory(stageId: string) {
+  return useQuery({
+    queryKey: ['stage', stageId, 'sessions'],
+    queryFn: () =>
+      apiFetch<{ sessions: StageSessionEntry[] }>(`/stages/${stageId}/sessions`),
+    enabled: !!stageId,
+  });
+}
+
+/** Fetch all sessions for a ticket from the junction table. */
+export function useTicketSessions(ticketId: string) {
+  return useQuery({
+    queryKey: ['ticket', ticketId, 'sessions'],
+    queryFn: () =>
+      apiFetch<{ sessions: TicketSessionEntry[] }>(`/tickets/${ticketId}/sessions`),
+    enabled: !!ticketId,
   });
 }
