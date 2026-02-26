@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react';
-import { Layers } from 'lucide-react';
-import { formatTokenCount } from '../../../utils/session-formatters.js';
+import { Database } from 'lucide-react';
+import { formatTokensCompact } from '../../../utils/session-formatters.js';
 
 interface ContextCategory {
   label: string;
@@ -23,25 +23,27 @@ export function ContextBadge({ totalNewTokens, categories = [] }: Props) {
       <button
         onMouseEnter={() => setShowPopover(true)}
         onMouseLeave={() => setShowPopover(false)}
-        className="inline-flex items-center gap-1 text-xs text-indigo-600 bg-indigo-50 border border-indigo-200 rounded-full px-2 py-0.5 hover:bg-indigo-100 transition-colors"
+        className="flex items-center gap-1 text-xs text-violet-600 bg-violet-50 border border-violet-200 rounded-full px-2 py-0.5 hover:bg-violet-100 transition-colors"
       >
-        <Layers className="w-3 h-3" />
-        Context +{formatTokenCount(totalNewTokens)}
+        <Database className="w-3 h-3" />
+        <span className="font-mono">{formatTokensCompact(totalNewTokens)}</span>
       </button>
       {showPopover && categories.length > 0 && (
-        <div className="absolute z-50 bottom-full left-0 mb-1 w-64 bg-white rounded-lg shadow-lg border border-slate-200 p-3">
+        <div className="absolute z-50 bottom-full right-0 mb-1 w-56 bg-white rounded-lg shadow-lg border border-slate-200 p-3">
           <div className="text-xs font-medium text-slate-700 mb-2">Context Breakdown</div>
-          <div className="space-y-1.5">
+          <div className="space-y-1 text-xs">
             {categories.map((cat) => (
-              <div key={cat.label} className="flex justify-between text-xs">
-                <span className="text-slate-600">{cat.label}</span>
-                <span className="font-mono text-slate-800">{formatTokenCount(cat.tokens)}</span>
+              <div key={cat.label} className="flex justify-between text-slate-600">
+                <span>{cat.label}</span>
+                <span className="font-mono">{formatTokensCompact(cat.tokens)}</span>
               </div>
             ))}
-          </div>
-          <div className="mt-2 pt-2 border-t border-slate-100 flex justify-between text-xs font-medium">
-            <span className="text-slate-700">Total</span>
-            <span className="font-mono text-slate-900">{formatTokenCount(totalNewTokens)}</span>
+            <div className="border-t border-slate-100 pt-1 mt-1">
+              <div className="flex justify-between font-medium text-slate-800">
+                <span>Total</span>
+                <span className="font-mono">{formatTokensCompact(totalNewTokens)}</span>
+              </div>
+            </div>
           </div>
         </div>
       )}
