@@ -3,7 +3,7 @@ import { useDrawerStore } from '../../store/drawer-store.js';
 import { StatusBadge } from './StatusBadge.js';
 import { DependencyList } from './DependencyList.js';
 import { PhaseSection } from './PhaseSection.js';
-import { slugToTitle, refinementColor } from '../../utils/formatters.js';
+import { slugToTitle } from '../../utils/formatters.js';
 import {
   ExternalLink,
   GitBranch,
@@ -37,7 +37,7 @@ export function StageDetailContent({ stageId }: StageDetailContentProps) {
     );
   }
 
-  const currentPhase = columnToPhase(stage.kanban_column);
+  const phases = getVisiblePhases(stage.status);
 
   return (
     <div className="space-y-6">
@@ -66,24 +66,6 @@ export function StageDetailContent({ stageId }: StageDetailContentProps) {
             </button>
           )}
         </div>
-
-        {/* Refinement type badges */}
-        {stage.refinement_type.length > 0 && (
-          <div className="mb-3 flex flex-wrap gap-1.5">
-            {stage.refinement_type.map((rt) => (
-              <span
-                key={rt}
-                className="rounded-full px-2.5 py-0.5 text-xs font-medium"
-                style={{
-                  backgroundColor: refinementColor(rt) + '20',
-                  color: refinementColor(rt),
-                }}
-              >
-                {rt}
-              </span>
-            ))}
-          </div>
-        )}
 
         {/* Worktree branch + PR link */}
         <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
@@ -120,34 +102,21 @@ export function StageDetailContent({ stageId }: StageDetailContentProps) {
         </div>
       </div>
 
-      {/* Phase sections — content not available from API, show placeholders */}
-      <div className="space-y-2">
-        <h3 className="text-sm font-semibold text-slate-700">Phases</h3>
-        <PhaseSection
-          title="Design"
-          content=""
-          isComplete={isPastPhase(stage.kanban_column, 'design')}
-          defaultExpanded={currentPhase === 'design'}
-        />
-        <PhaseSection
-          title="Build"
-          content=""
-          isComplete={isPastPhase(stage.kanban_column, 'build')}
-          defaultExpanded={currentPhase === 'build'}
-        />
-        <PhaseSection
-          title="Refinement"
-          content=""
-          isComplete={isPastPhase(stage.kanban_column, 'refinement')}
-          defaultExpanded={currentPhase === 'refinement'}
-        />
-        <PhaseSection
-          title="Finalize"
-          content=""
-          isComplete={isPastPhase(stage.kanban_column, 'finalize')}
-          defaultExpanded={currentPhase === 'finalize'}
-        />
-      </div>
+      {/* Phase sections — derived from pipeline config and stage status */}
+      {phases.length > 0 && (
+        <div className="space-y-2">
+          <h3 className="text-sm font-semibold text-slate-700">Phases</h3>
+          {phases.map((phase) => (
+            <PhaseSection
+              key={phase.name}
+              title={phase.name}
+              content=""
+              isComplete={phase.isComplete}
+              defaultExpanded={!phase.isComplete}
+            />
+          ))}
+        </div>
+      )}
 
       {/* Session link placeholder */}
       <div>
@@ -181,46 +150,32 @@ export function StageDetailContent({ stageId }: StageDetailContentProps) {
   );
 }
 
-/** Pipeline column order for determining phase completion */
-const COLUMN_ORDER = [
-  'backlog',
-  'ready_for_work',
-  'design',
-  'user_design_feedback',
-  'build',
-  'automatic_testing',
-  'manual_testing',
-  'refinement',
-  'finalize',
-  'pr_created',
-  'addressing_comments',
-  'review',
-  'done',
-  'archived',
+/** Pipeline phases in execution order, derived from default pipeline config */
+const PIPELINE_PHASES = [
+  'Design',
+  'User Design Feedback',
+  'Build',
+  'Automatic Testing',
+  'Manual Testing',
+  'Finalize',
+  'PR Created',
+  'Addressing Comments',
 ];
 
-/** Map any pipeline column to its parent phase for section expansion */
-function columnToPhase(column: string | null): string | null {
-  if (!column) return null;
-  const PHASE_MAP: Record<string, string> = {
-    design: 'design',
-    user_design_feedback: 'design',
-    build: 'build',
-    automatic_testing: 'build',
-    manual_testing: 'refinement',
-    refinement: 'refinement',
-    finalize: 'finalize',
-    pr_created: 'finalize',
-    addressing_comments: 'finalize',
-    review: 'finalize',
-  };
-  return PHASE_MAP[column] ?? null;
-}
-
-function isPastPhase(currentColumn: string | null, phase: string): boolean {
-  if (!currentColumn) return false;
-  const currentIdx = COLUMN_ORDER.indexOf(currentColumn);
-  const phaseIdx = COLUMN_ORDER.indexOf(phase);
-  if (currentIdx === -1 || phaseIdx === -1) return false;
-  return currentIdx > phaseIdx;
+/**
+ * Determine which phases to display based on the stage's current status.
+ * Shows all completed phases plus the current phase. Phases after the
+ * current one are not rendered.
+ */
+function getVisiblePhases(status: string): { name: string; isComplete: boolean }[] {
+  if (status === 'Not Started') return [];
+  if (status === 'Complete') {
+    return PIPELINE_PHASES.map((name) => ({ name, isComplete: true }));
+  }
+  const currentIdx = PIPELINE_PHASES.indexOf(status);
+  if (currentIdx === -1) return [];
+  return PIPELINE_PHASES.slice(0, currentIdx + 1).map((name, i) => ({
+    name,
+    isComplete: i < currentIdx,
+  }));
 }

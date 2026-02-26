@@ -1,7 +1,7 @@
 import { useTicket } from '../../api/hooks.js';
 import { useDrawerStore } from '../../store/drawer-store.js';
 import { StatusBadge } from './StatusBadge.js';
-import { slugToTitle, columnColor, refinementColor } from '../../utils/formatters.js';
+import { slugToTitle, columnColor } from '../../utils/formatters.js';
 import { ExternalLink, Loader2, AlertCircle } from 'lucide-react';
 import { JIRA_BASE_URL } from '../../utils/constants.js';
 
@@ -77,7 +77,6 @@ export function TicketDetailContent({ ticketId }: TicketDetailContentProps) {
                 <th className="px-3 py-2">ID</th>
                 <th className="px-3 py-2">Title</th>
                 <th className="px-3 py-2">Column</th>
-                <th className="px-3 py-2">Refinement</th>
                 <th className="px-3 py-2 text-center">Active</th>
               </tr>
             </thead>
@@ -114,22 +113,6 @@ export function TicketDetailContent({ ticketId }: TicketDetailContentProps) {
                     ) : (
                       <span className="text-xs text-slate-400">—</span>
                     )}
-                  </td>
-                  <td className="px-3 py-2">
-                    <div className="flex flex-wrap gap-1">
-                      {stage.refinement_type.map((rt) => (
-                        <span
-                          key={rt}
-                          className="rounded px-1.5 py-0.5 text-xs font-medium"
-                          style={{
-                            backgroundColor: refinementColor(rt) + '20',
-                            color: refinementColor(rt),
-                          }}
-                        >
-                          {rt}
-                        </span>
-                      ))}
-                    </div>
                   </td>
                   <td className="px-3 py-2 text-center">
                     {stage.session_active && (

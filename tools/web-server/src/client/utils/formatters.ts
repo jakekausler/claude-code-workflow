@@ -21,6 +21,9 @@ export function completionPercent(complete: number, total: number): number {
  * Map a column slug to a display color for the BoardColumn dot.
  */
 const COLUMN_COLORS: Record<string, string> = {
+  epics: '#6366f1',
+  converted: '#8b5cf6',
+  to_convert: '#a855f7',
   backlog: '#94a3b8',
   ready_for_work: '#3b82f6',
   design: '#8b5cf6',
@@ -55,22 +58,4 @@ export function statusColor(status: string): string {
     default:
       return '#64748b';
   }
-}
-
-/**
- * Map a refinement type to a badge color.
- */
-const REFINEMENT_COLORS: Record<string, string> = {
-  frontend: '#3b82f6',
-  backend: '#f59e0b',
-  cli: '#8b5cf6',
-  api: '#10b981',
-  database: '#ef4444',
-  infrastructure: '#6366f1',
-  documentation: '#64748b',
-  testing: '#14b8a6',
-};
-
-export function refinementColor(type: string): string {
-  return REFINEMENT_COLORS[type] ?? '#64748b';
 }

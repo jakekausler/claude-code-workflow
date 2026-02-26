@@ -10,6 +10,7 @@ interface BoardCardProps {
   badges?: Badge[];
   progress?: number;
   statusDot?: string;
+  isSelected?: boolean;
   onClick: () => void;
 }
 
@@ -22,6 +23,7 @@ export function BoardCard({
   badges,
   progress,
   statusDot,
+  isSelected,
   onClick,
 }: BoardCardProps) {
   return (
@@ -36,7 +38,11 @@ export function BoardCard({
           onClick();
         }
       }}
-      className="cursor-pointer rounded-lg border border-slate-200 bg-white p-3 shadow-sm transition-shadow hover:shadow-md"
+      className={`cursor-pointer rounded-lg border bg-white p-3 shadow-sm transition-shadow hover:shadow-md ${
+        isSelected
+          ? 'border-blue-500 ring-2 ring-blue-200'
+          : 'border-slate-200'
+      }`}
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
