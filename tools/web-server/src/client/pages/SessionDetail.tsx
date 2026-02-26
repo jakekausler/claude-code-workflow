@@ -125,6 +125,7 @@ export function SessionDetail() {
             <span>{formatTokenCount(metrics.totalTokens)} tokens</span>
             <span>{formatCost(metrics.totalCost)}</span>
             {session.isOngoing && <span className="text-blue-600 font-medium">Live</span>}
+            {totalPendingCount > 0 && <PendingBadge count={totalPendingCount} variant="bell" />}
           </div>
         </div>
       </div>
