@@ -1,4 +1,5 @@
-import { useStage } from '../../api/hooks.js';
+import { Link } from 'react-router-dom';
+import { useStage, useStageSession } from '../../api/hooks.js';
 import { useDrawerStore } from '../../store/drawer-store.js';
 import { StatusBadge } from './StatusBadge.js';
 import { DependencyList } from './DependencyList.js';
@@ -118,17 +119,10 @@ export function StageDetailContent({ stageId }: StageDetailContentProps) {
         </div>
       )}
 
-      {/* Session link placeholder */}
-      <div>
-        <button
-          disabled
-          className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-400"
-          title="Available after Stage 9E"
-        >
-          View Latest Session
-          <span className="text-xs">(coming in 9E)</span>
-        </button>
-      </div>
+      {/* Session link — only rendered when the stage has a linked session */}
+      {stage.session_id && (
+        <SessionLink stageId={stageId} />
+      )}
 
       {/* Dependencies */}
       {(stage.depends_on.length > 0 || stage.depended_on_by.length > 0) && (
@@ -147,6 +141,44 @@ export function StageDetailContent({ stageId }: StageDetailContentProps) {
         </div>
       )}
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// SessionLink — fetches the stage→session mapping and renders a link
+// ---------------------------------------------------------------------------
+
+function SessionLink({ stageId }: { stageId: string }) {
+  const { data, isLoading } = useStageSession(stageId);
+
+  if (isLoading) {
+    return (
+      <div className="inline-flex items-center gap-2 rounded-lg bg-indigo-50 px-3 py-2 text-sm text-indigo-400">
+        <Loader2 className="animate-spin" size={14} />
+        Loading session…
+      </div>
+    );
+  }
+
+  if (!data?.projectId) {
+    // session_id exists on the stage but we couldn't resolve the projectId —
+    // show session ID as informational text rather than a broken link.
+    return (
+      <div className="inline-flex items-center gap-2 rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-500">
+        <ExternalLink size={14} />
+        Session: <code className="rounded bg-slate-100 px-1 py-0.5 text-xs">{data?.sessionId ?? 'unknown'}</code>
+      </div>
+    );
+  }
+
+  return (
+    <Link
+      to={`/sessions/${encodeURIComponent(data.projectId)}/${data.sessionId}`}
+      className="inline-flex items-center gap-2 rounded-lg bg-indigo-50 px-3 py-2 text-sm font-medium text-indigo-700 transition-colors hover:bg-indigo-100"
+    >
+      <ExternalLink size={14} />
+      View Session
+    </Link>
   );
 }
 

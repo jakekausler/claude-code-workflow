@@ -394,7 +394,7 @@ export function useStageSession(stageId: string) {
   return useQuery({
     queryKey: ['stage', stageId, 'session'],
     queryFn: () =>
-      apiFetch<{ sessionId: string; stageId: string }>(
+      apiFetch<{ sessionId: string; stageId: string; projectId: string | null }>(
         `/stages/${stageId}/session`,
       ),
     enabled: !!stageId,

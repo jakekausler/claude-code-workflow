@@ -195,7 +195,14 @@ const sessionsPlugin: FastifyPluginCallback = (app, _opts, done) => {
         return reply.status(404).send({ error: 'No session linked to this stage' });
       }
 
-      return { sessionId: stage.session_id, stageId };
+      // Derive projectId from the repo path so the client can build a
+      // `/sessions/:projectId/:sessionId` URL without extra round-trips.
+      const repo = app.dataService.repos.findById(stage.repo_id);
+      const projectId = repo
+        ? repo.path.replace(/\//g, '-')
+        : null;
+
+      return { sessionId: stage.session_id, stageId, projectId };
     },
   );
 
