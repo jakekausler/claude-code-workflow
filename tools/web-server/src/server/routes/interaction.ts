@@ -36,7 +36,7 @@ const interactionPlugin: FastifyPluginCallback<{ orchestratorClient: Orchestrato
     }
 
     orchestratorClient.sendMessage(stageId, message);
-    return reply.status(200).send({ status: 'sent' });
+    return reply.status(200).send({ status: 'ok' });
   });
 
   /**
@@ -59,6 +59,11 @@ const interactionPlugin: FastifyPluginCallback<{ orchestratorClient: Orchestrato
       return reply.status(400).send({ error: 'decision must be "allow" or "deny"' });
     }
 
+    const session = orchestratorClient.getSession(stageId);
+    if (!session) {
+      return reply.status(404).send({ error: `No session for stage ${stageId}` });
+    }
+
     orchestratorClient.approveTool(stageId, requestId, decision, reason);
     return reply.status(200).send({ status: 'ok' });
   });
@@ -79,8 +84,13 @@ const interactionPlugin: FastifyPluginCallback<{ orchestratorClient: Orchestrato
       return reply.status(400).send({ error: 'requestId is required' });
     }
 
-    if (!answers || typeof answers !== 'object') {
-      return reply.status(400).send({ error: 'answers is required' });
+    if (!answers || typeof answers !== 'object' || Array.isArray(answers)) {
+      return reply.status(400).send({ error: 'answers must be an object' });
+    }
+
+    const session = orchestratorClient.getSession(stageId);
+    if (!session) {
+      return reply.status(404).send({ error: `No session for stage ${stageId}` });
     }
 
     orchestratorClient.answerQuestion(stageId, requestId, answers);
@@ -129,7 +139,7 @@ export const interactionRoutes = fp(interactionPlugin, { name: 'interaction-rout
  * Export the plugin directly for tests that need to pass custom options.
  */
 export function registerInteractionRoutes(
-  app: any,
+  app: FastifyInstance,
   orchestratorClient: OrchestratorClient,
 ): void {
   interactionPlugin(app, { orchestratorClient }, () => {});

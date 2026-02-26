@@ -37,13 +37,19 @@ export const useInteractionStore = create<InteractionState>((set, get) => ({
   queuedMessages: new Map(),
 
   addApproval: (approval) =>
-    set((s) => ({ pendingApprovals: [...s.pendingApprovals, approval] })),
+    set((s) => {
+      if (s.pendingApprovals.some((a) => a.requestId === approval.requestId)) return s;
+      return { pendingApprovals: [...s.pendingApprovals, approval] };
+    }),
 
   removeApproval: (requestId) =>
     set((s) => ({ pendingApprovals: s.pendingApprovals.filter((a) => a.requestId !== requestId) })),
 
   addQuestion: (question) =>
-    set((s) => ({ pendingQuestions: [...s.pendingQuestions, question] })),
+    set((s) => {
+      if (s.pendingQuestions.some((q) => q.requestId === question.requestId)) return s;
+      return { pendingQuestions: [...s.pendingQuestions, question] };
+    }),
 
   removeQuestion: (requestId) =>
     set((s) => ({ pendingQuestions: s.pendingQuestions.filter((q) => q.requestId !== requestId) })),

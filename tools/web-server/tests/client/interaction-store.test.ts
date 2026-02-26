@@ -51,6 +51,19 @@ describe('interaction-store', () => {
     expect(useInteractionStore.getState().pendingQuestions).toHaveLength(1);
   });
 
+  it('removeQuestion removes by requestId', () => {
+    const store = useInteractionStore.getState();
+    store.addQuestion({
+      stageId: 'STAGE-A',
+      requestId: 'req-002',
+      questions: [{ question: 'DB?' }],
+      input: {},
+      createdAt: 123,
+    });
+    store.removeQuestion('req-002');
+    expect(useInteractionStore.getState().pendingQuestions).toHaveLength(0);
+  });
+
   it('getPendingCountForStage filters by stageId', () => {
     const store = useInteractionStore.getState();
     store.addApproval({ stageId: 'STAGE-A', requestId: 'r1', toolName: 'Bash', input: {}, createdAt: 1 });
@@ -58,6 +71,15 @@ describe('interaction-store', () => {
 
     const stageA = useInteractionStore.getState().getPendingCountForStage('STAGE-A');
     expect(stageA).toBe(1);
+  });
+
+  it('getPendingCountForStage counts both approvals and questions', () => {
+    const store = useInteractionStore.getState();
+    store.addApproval({ stageId: 'STAGE-A', requestId: 'r1', toolName: 'Bash', input: {}, createdAt: 1 });
+    store.addQuestion({ stageId: 'STAGE-A', requestId: 'r2', questions: [], input: {}, createdAt: 2 });
+
+    const count = useInteractionStore.getState().getPendingCountForStage('STAGE-A');
+    expect(count).toBe(2);
   });
 
   it('setQueuedMessage and clearQueuedMessage', () => {

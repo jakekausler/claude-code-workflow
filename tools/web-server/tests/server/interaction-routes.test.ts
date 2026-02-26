@@ -71,6 +71,8 @@ describe('Interaction routes', () => {
 
   describe('POST /api/sessions/:stageId/approve', () => {
     it('returns 200 on successful approval', async () => {
+      orchestratorClient.getSession.mockReturnValue({ status: 'active' });
+
       const res = await app.inject({
         method: 'POST',
         url: '/api/sessions/STAGE-A/approve',
@@ -84,6 +86,8 @@ describe('Interaction routes', () => {
     });
 
     it('passes reason for deny decisions', async () => {
+      orchestratorClient.getSession.mockReturnValue({ status: 'active' });
+
       const res = await app.inject({
         method: 'POST',
         url: '/api/sessions/STAGE-A/approve',
@@ -105,10 +109,34 @@ describe('Interaction routes', () => {
 
       expect(res.statusCode).toBe(400);
     });
+
+    it('returns 400 when requestId is missing', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/sessions/STAGE-A/approve',
+        payload: { decision: 'allow' },
+      });
+
+      expect(res.statusCode).toBe(400);
+    });
+
+    it('returns 404 when no session exists', async () => {
+      orchestratorClient.getSession.mockReturnValue(undefined);
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/sessions/STAGE-X/approve',
+        payload: { requestId: 'req-001', decision: 'allow' },
+      });
+
+      expect(res.statusCode).toBe(404);
+    });
   });
 
   describe('POST /api/sessions/:stageId/answer', () => {
     it('returns 200 on successful answer', async () => {
+      orchestratorClient.getSession.mockReturnValue({ status: 'active' });
+
       const res = await app.inject({
         method: 'POST',
         url: '/api/sessions/STAGE-A/answer',
@@ -119,6 +147,54 @@ describe('Interaction routes', () => {
       expect(orchestratorClient.answerQuestion).toHaveBeenCalledWith(
         'STAGE-A', 'req-002', { q1: 'yes' },
       );
+    });
+
+    it('returns 400 when requestId is missing', async () => {
+      orchestratorClient.getSession.mockReturnValue({ status: 'active' });
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/sessions/STAGE-A/answer',
+        payload: { answers: { q1: 'yes' } },
+      });
+
+      expect(res.statusCode).toBe(400);
+    });
+
+    it('returns 400 when answers is an array', async () => {
+      orchestratorClient.getSession.mockReturnValue({ status: 'active' });
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/sessions/STAGE-A/answer',
+        payload: { requestId: 'req-002', answers: ['yes'] },
+      });
+
+      expect(res.statusCode).toBe(400);
+    });
+
+    it('returns 400 when answers is a string', async () => {
+      orchestratorClient.getSession.mockReturnValue({ status: 'active' });
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/sessions/STAGE-A/answer',
+        payload: { requestId: 'req-002', answers: 'yes' },
+      });
+
+      expect(res.statusCode).toBe(400);
+    });
+
+    it('returns 404 when no session exists', async () => {
+      orchestratorClient.getSession.mockReturnValue(undefined);
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/sessions/STAGE-X/answer',
+        payload: { requestId: 'req-002', answers: { q1: 'yes' } },
+      });
+
+      expect(res.statusCode).toBe(404);
     });
   });
 
@@ -133,6 +209,17 @@ describe('Interaction routes', () => {
 
       expect(res.statusCode).toBe(200);
       expect(orchestratorClient.interruptSession).toHaveBeenCalledWith('STAGE-A');
+    });
+
+    it('returns 404 when no session exists', async () => {
+      orchestratorClient.getSession.mockReturnValue(undefined);
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/sessions/STAGE-X/interrupt',
+      });
+
+      expect(res.statusCode).toBe(404);
     });
   });
 

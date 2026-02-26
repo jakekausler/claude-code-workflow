@@ -1,7 +1,7 @@
 import { useMutation } from '@tanstack/react-query';
 import { apiFetch } from './client.js';
 import { useSSE } from './use-sse.js';
-import { useInteractionStore } from '../store/interaction-store.js';
+import { useInteractionStore, PendingApprovalUI, PendingQuestionUI } from '../store/interaction-store.js';
 import { useCallback } from 'react';
 
 // -- Mutations --
@@ -37,7 +37,10 @@ export function useAnswerQuestion(stageId: string) {
         method: 'POST',
         body: JSON.stringify(params),
       });
-      return res;
+      return { ...res, requestId: params.requestId };
+    },
+    onSuccess: (data: { success: boolean; requestId: string }) => {
+      useInteractionStore.getState().removeQuestion(data.requestId);
     },
   });
 }
@@ -56,33 +59,50 @@ export function useInterruptSession(stageId: string) {
 // -- SSE subscription --
 
 export function useInteractionSSE() {
-  const store = useInteractionStore();
-
   const handler = useCallback(
-    (channel: string, data: unknown) => {
+    (_channel: string, data: unknown) => {
       const payload = data as Record<string, unknown>;
-      switch (channel) {
-        case 'approval-requested':
-          store.addApproval(payload as any);
+      const store = useInteractionStore.getState();
+      switch (_channel) {
+        case 'approval-requested': {
+          const p = payload as PendingApprovalUI;
+          if (p.requestId && p.stageId) {
+            store.addApproval(p);
+          }
           break;
-        case 'question-requested':
-          store.addQuestion(payload as any);
+        }
+        case 'question-requested': {
+          const p = payload as PendingQuestionUI;
+          if (p.requestId && p.stageId) {
+            store.addQuestion(p);
+          }
           break;
+        }
         case 'approval-cancelled':
-          store.removeApproval((payload as any).requestId);
+        case 'approval-resolved': {
+          const p = payload as { requestId: string };
+          if (p.requestId) {
+            store.removeApproval(p.requestId);
+          }
           break;
-        case 'approval-resolved':
-          store.removeApproval((payload as any).requestId);
+        }
+        case 'message-queued': {
+          const p = payload as { stageId: string; message: string };
+          if (p.stageId && p.message) {
+            store.setQueuedMessage(p.stageId, p.message);
+          }
           break;
-        case 'message-queued':
-          store.setQueuedMessage((payload as any).stageId, (payload as any).message);
+        }
+        case 'message-sent': {
+          const p = payload as { stageId: string };
+          if (p.stageId) {
+            store.clearQueuedMessage(p.stageId);
+          }
           break;
-        case 'message-sent':
-          store.clearQueuedMessage((payload as any).stageId);
-          break;
+        }
       }
     },
-    [store],
+    [],
   );
 
   useSSE(
