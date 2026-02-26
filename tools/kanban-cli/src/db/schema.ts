@@ -134,6 +134,8 @@ CREATE TABLE IF NOT EXISTS ticket_sessions (
 
 export const CREATE_STAGE_SESSIONS_STAGE_INDEX = `CREATE INDEX IF NOT EXISTS idx_stage_sessions_stage_id ON stage_sessions(stage_id)`;
 export const CREATE_TICKET_SESSIONS_TICKET_INDEX = `CREATE INDEX IF NOT EXISTS idx_ticket_sessions_ticket_id ON ticket_sessions(ticket_id)`;
+export const CREATE_STAGE_SESSIONS_SESSION_INDEX = `CREATE INDEX IF NOT EXISTS idx_stage_sessions_session_id ON stage_sessions(session_id)`;
+export const CREATE_TICKET_SESSIONS_SESSION_INDEX = `CREATE INDEX IF NOT EXISTS idx_ticket_sessions_session_id ON ticket_sessions(session_id)`;
 
 export const CREATE_EPICS_JIRA_KEY_INDEX = `CREATE INDEX IF NOT EXISTS idx_epics_jira_key ON epics(jira_key, repo_id)`;
 export const CREATE_TICKETS_JIRA_KEY_INDEX = `CREATE INDEX IF NOT EXISTS idx_tickets_jira_key ON tickets(jira_key, repo_id)`;
@@ -179,4 +181,6 @@ export const ALL_CREATE_STATEMENTS = [
   CREATE_TICKET_SESSIONS_TABLE,
   CREATE_STAGE_SESSIONS_STAGE_INDEX,
   CREATE_TICKET_SESSIONS_TICKET_INDEX,
+  CREATE_STAGE_SESSIONS_SESSION_INDEX,
+  CREATE_TICKET_SESSIONS_SESSION_INDEX,
 ] as const;

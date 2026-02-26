@@ -57,7 +57,7 @@ describe('session junction tables', () => {
         `INSERT INTO stage_sessions (stage_id, session_id, phase, started_at)
          VALUES ('s1', 'sess-1', 'Design', '2026-01-02T00:00:00Z')`
       ).run();
-    }).toThrow();
+    }).toThrow(/UNIQUE constraint failed/);
   });
 
   it('enforces unique (ticket_id, session_id) constraint', () => {
@@ -72,7 +72,7 @@ describe('session junction tables', () => {
         `INSERT INTO ticket_sessions (ticket_id, session_id, session_type, started_at)
          VALUES ('t1', 'sess-1', 'convert', '2026-01-02T00:00:00Z')`
       ).run();
-    }).toThrow();
+    }).toThrow(/UNIQUE constraint failed/);
   });
 
   it('allows multiple sessions per stage', () => {
