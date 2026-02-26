@@ -5,8 +5,10 @@ import { Loader2, AlertCircle, ArrowLeft } from 'lucide-react';
 import { ChatHistory } from '../components/chat/ChatHistory.js';
 import { ContextAccordion } from '../components/chat/context/ContextAccordion.js';
 import { SessionContextPanel } from '../components/chat/context/SessionContextPanel.js';
+import { PendingBadge } from '../components/interaction/PendingBadge.js';
 import { useSessionDetail } from '../api/hooks.js';
 import { useSSE } from '../api/use-sse.js';
+import { useInteractionStore } from '../store/interaction-store.js';
 import { formatDuration, formatCost, formatTokenCount } from '../utils/session-formatters.js';
 import { useSessionViewStore } from '../store/session-store.js';
 import { transformChunksToConversation } from '../utils/group-transformer.js';
@@ -16,6 +18,14 @@ export function SessionDetail() {
   const { projectId, sessionId } = useParams<{ projectId: string; sessionId: string }>();
   const navigate = useNavigate();
   const resetView = useSessionViewStore((s) => s.resetView);
+  // TODO: SessionDetail doesn't have stageId from route params. PendingBadge needs a specific stage to count pending approvals.
+  // To show pending count here, we need either: (1) stageId in route params, or (2) session-level pending count in store.
+  // For now, we display pending badge without it in the session header.
+  const totalPendingCount = useInteractionStore((s) => {
+    const approvalCount = s.pendingApprovals.length;
+    const questionCount = s.pendingQuestions.length;
+    return approvalCount + questionCount;
+  });
 
   // Reset view state when session changes
   useEffect(() => {
