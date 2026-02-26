@@ -1,4 +1,6 @@
+import { useEffect, useRef } from 'react';
 import { useDrawerStore } from '../../store/drawer-store.js';
+import { useDrawerSessionStore } from '../../store/drawer-session-store.js';
 import { DetailDrawer } from './DetailDrawer.js';
 import { EpicDetailContent } from './EpicDetailContent.js';
 import { TicketDetailContent } from './TicketDetailContent.js';
@@ -8,10 +10,25 @@ import type { DrawerEntry } from '../../store/drawer-store.js';
 
 export function DrawerHost() {
   const { stack } = useDrawerStore();
+  const reset = useDrawerSessionStore((s) => s.reset);
 
-  if (stack.length === 0) return null;
+  const current = stack.length > 0 ? stack[stack.length - 1] : null;
+  const prevEntryRef = useRef<{ type: string; id: string } | null>(null);
 
-  const current = stack[stack.length - 1];
+  useEffect(() => {
+    const prevType = prevEntryRef.current?.type;
+    const prevId = prevEntryRef.current?.id;
+    const curType = current?.type ?? null;
+    const curId = current?.id ?? null;
+
+    if (prevType !== curType || prevId !== curId) {
+      reset();
+    }
+
+    prevEntryRef.current = current ? { type: current.type, id: current.id } : null;
+  }, [current?.type, current?.id, reset]);
+
+  if (!current) return null;
 
   return <DrawerContent entry={current} />;
 }
