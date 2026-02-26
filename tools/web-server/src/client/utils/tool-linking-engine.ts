@@ -1,5 +1,6 @@
 import type { SemanticStep, ParsedMessage } from '../types/session.js';
 import type { LinkedToolItemData } from '../types/groups.js';
+import { toDate } from './display-helpers.js';
 
 /**
  * Match tool_call steps to their tool_result steps by toolCallId.
@@ -102,7 +103,7 @@ export function linkToolCallsToResults(
     if (step.durationMs != null) {
       item.durationMs = step.durationMs;
     } else if (inputData?.startTime && resultContentData?.endTime) {
-      item.durationMs = resultContentData.endTime.getTime() - inputData.startTime.getTime();
+      item.durationMs = toDate(resultContentData.endTime).getTime() - toDate(inputData.startTime).getTime();
     }
 
     linked.set(step.toolCallId, item);

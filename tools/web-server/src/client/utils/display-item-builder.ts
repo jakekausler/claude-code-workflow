@@ -4,7 +4,7 @@ import type {
   SlashItem, TeammateMessage, CompactionTokenDelta,
 } from '../types/groups.js';
 import { linkToolCallsToResults, estimateTokens } from './tool-linking-engine.js';
-import { extractTextContent } from './display-helpers.js';
+import { extractTextContent, toDate } from './display-helpers.js';
 
 /**
  * Build display items for a main session AI group.
@@ -271,7 +271,7 @@ export function buildDisplayItemsFromMessages(
     };
 
     if (resultData?.endTime) {
-      linked.durationMs = resultData.endTime.getTime() - toolUse.startTime.getTime();
+      linked.durationMs = toDate(resultData.endTime).getTime() - toDate(toolUse.startTime).getTime();
     }
 
     items.push({ type: 'tool', tool: linked });
@@ -308,15 +308,15 @@ function getDisplayItemTimestamp(item: AIGroupDisplayItem): Date {
     case 'output':
     case 'subagent_input':
     case 'compact_boundary':
-      return item.timestamp;
+      return toDate(item.timestamp);
     case 'tool':
-      return item.tool.startTime;
+      return toDate(item.tool.startTime);
     case 'subagent':
-      return item.subagent.startTime ?? new Date(0);
+      return toDate(item.subagent.startTime ?? new Date(0));
     case 'slash':
-      return item.slash.timestamp;
+      return toDate(item.slash.timestamp);
     case 'teammate_message':
-      return item.teammateMessage.timestamp;
+      return toDate(item.teammateMessage.timestamp);
   }
 }
 

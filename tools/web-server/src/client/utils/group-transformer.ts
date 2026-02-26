@@ -7,7 +7,7 @@ import type {
   SystemGroup, AIGroup, AIGroupTokens, AIGroupStatus,
   CompactGroup, CompactionTokenDelta, CommandInfo, ImageData, FileReference,
 } from '../types/groups.js';
-import { sanitizeDisplayContent, extractTextContent } from './display-helpers.js';
+import { sanitizeDisplayContent, extractTextContent, toDate } from './display-helpers.js';
 
 export function transformChunksToConversation(
   chunks: Chunk[],
@@ -121,7 +121,7 @@ function createAIGroup(chunk: AIChunk, turnIndex: number): AIGroup {
   // Calculate timing from message timestamps
   const startTime = messages.length > 0 ? messages[0].timestamp : chunk.timestamp;
   const endTime = messages.length > 0 ? messages[messages.length - 1].timestamp : chunk.timestamp;
-  const durationMs = endTime.getTime() - startTime.getTime();
+  const durationMs = toDate(endTime).getTime() - toDate(startTime).getTime();
 
   // Calculate tokens from last assistant message usage (context window snapshot)
   const tokens = calculateTokens(messages);
@@ -139,7 +139,7 @@ function createAIGroup(chunk: AIChunk, turnIndex: number): AIGroup {
   const subagentCount = subagents.length;
 
   return {
-    id: `ai-${turnIndex}-${startTime.getTime()}`,
+    id: `ai-${turnIndex}-${toDate(startTime).getTime()}`,
     turnIndex,
     startTime,
     endTime,
@@ -170,7 +170,7 @@ function createAIGroup(chunk: AIChunk, turnIndex: number): AIGroup {
  */
 function createCompactGroup(chunk: CompactChunk): CompactGroup {
   const syntheticMessage: ParsedMessage = {
-    uuid: `compact-${chunk.timestamp.getTime()}`,
+    uuid: `compact-${toDate(chunk.timestamp).getTime()}`,
     parentUuid: null,
     type: 'summary',
     timestamp: chunk.timestamp,
@@ -183,7 +183,7 @@ function createCompactGroup(chunk: CompactChunk): CompactGroup {
   };
 
   return {
-    id: `compact-${chunk.timestamp.getTime()}`,
+    id: `compact-${toDate(chunk.timestamp).getTime()}`,
     timestamp: chunk.timestamp,
     summary: chunk.summary,
     message: syntheticMessage,
