@@ -1,17 +1,29 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { createServer } from '../../src/server/app.js';
+import { SessionPipeline } from '../../src/server/services/session-pipeline.js';
 import { FileWatcher } from '../../src/server/services/file-watcher.js';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-describe('FileWatcher decoration', () => {
+describe('SSE endpoint', () => {
   let app: FastifyInstance;
   let tempDir: string;
+  let baseUrl: string;
 
   beforeEach(async () => {
     tempDir = mkdtempSync(join(tmpdir(), 'sse-test-'));
+    const fw = new FileWatcher({ rootDir: tempDir });
+    app = await createServer({
+      logger: false,
+      claudeProjectsDir: tempDir,
+      fileWatcher: fw,
+      sessionPipeline: new SessionPipeline(),
+    });
+    // Listen on a random port for real HTTP testing
+    const address = await app.listen({ port: 0, host: '127.0.0.1' });
+    baseUrl = address;
   });
 
   afterEach(async () => {
@@ -19,21 +31,38 @@ describe('FileWatcher decoration', () => {
     rmSync(tempDir, { recursive: true, force: true });
   });
 
-  it('decorates fileWatcher on app when provided', async () => {
-    const fw = new FileWatcher({ rootDir: tempDir });
-    app = await createServer({
-      logger: false,
-      claudeProjectsDir: tempDir,
-      fileWatcher: fw,
+  it('responds with SSE headers on GET /api/events', async () => {
+    const controller = new AbortController();
+    const response = await fetch(`${baseUrl}/api/events`, {
+      signal: controller.signal,
     });
-    expect(app.fileWatcher).toBe(fw);
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-type')).toBe('text/event-stream');
+    expect(response.headers.get('cache-control')).toBe('no-cache');
+    expect(response.headers.get('connection')).toBe('keep-alive');
+
+    // Abort the connection so the test can finish
+    controller.abort();
   });
 
-  it('decorates fileWatcher as null when not provided', async () => {
-    app = await createServer({
-      logger: false,
-      claudeProjectsDir: tempDir,
+  it('sends an initial connected event', async () => {
+    const controller = new AbortController();
+    const response = await fetch(`${baseUrl}/api/events`, {
+      signal: controller.signal,
     });
-    expect(app.fileWatcher).toBeNull();
+
+    const reader = response.body!.getReader();
+    const decoder = new TextDecoder();
+    const { value } = await reader.read();
+    const text = decoder.decode(value);
+
+    expect(text).toMatch(/^event: connected\ndata: /);
+    const dataLine = text.split('\n')[1];
+    const payload = JSON.parse(dataLine.replace('data: ', ''));
+    expect(payload).toHaveProperty('timestamp');
+    expect(typeof payload.timestamp).toBe('number');
+
+    controller.abort();
   });
 });
