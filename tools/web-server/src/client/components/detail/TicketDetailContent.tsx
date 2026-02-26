@@ -2,7 +2,6 @@ import { useEffect } from 'react';
 import { useTicket, useTicketSessions } from '../../api/hooks.js';
 import { useDrawerStore } from '../../store/drawer-store.js';
 import { useDrawerSessionStore } from '../../store/drawer-session-store.js';
-import type { DrawerTab } from '../../store/drawer-session-store.js';
 import { StatusBadge } from './StatusBadge.js';
 import { DrawerTabs } from './DrawerTabs.js';
 import type { TabDef } from './DrawerTabs.js';

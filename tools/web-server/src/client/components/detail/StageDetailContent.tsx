@@ -3,7 +3,6 @@ import { Link } from 'react-router-dom';
 import { useStage, useStageSession, useStageSessionHistory } from '../../api/hooks.js';
 import { useDrawerStore } from '../../store/drawer-store.js';
 import { useDrawerSessionStore } from '../../store/drawer-session-store.js';
-import type { DrawerTab } from '../../store/drawer-session-store.js';
 import { StatusBadge } from './StatusBadge.js';
 import { DependencyList } from './DependencyList.js';
 import { PhaseSection } from './PhaseSection.js';
