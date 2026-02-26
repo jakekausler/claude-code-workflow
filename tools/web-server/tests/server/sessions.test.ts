@@ -369,6 +369,7 @@ describe('sessions API', () => {
       expect(body).toEqual({
         sessionId: 'sess-linked-123',
         stageId: SEED_IDS.STAGE_AUTH_API,
+        projectId: stageTmpDir.replace(/\//g, '-'),
       });
     });
   });
