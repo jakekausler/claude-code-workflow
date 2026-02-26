@@ -50,10 +50,12 @@ export function SessionDetail() {
   const { chunks, metrics } = session;
 
   // Detect model from first assistant message with a model field
-  const model = chunks
-    .filter((c): c is Extract<typeof c, { type: 'ai' }> => c.type === 'ai')
-    .flatMap((c) => c.messages)
-    .find((m) => m.model)?.model;
+  const model = useMemo(() => {
+    return chunks
+      .filter((c): c is Extract<typeof c, { type: 'ai' }> => c.type === 'ai')
+      .flatMap((c) => c.messages)
+      .find((m) => m.model)?.model;
+  }, [chunks]);
 
   // Enrichment pipeline: transform raw chunks into grouped ChatItems
   const conversation = useMemo(() => {
@@ -63,7 +65,7 @@ export function SessionDetail() {
   // Context tracking: compute per-turn context stats with phase boundaries
   const contextResult = useMemo(() => {
     return processSessionContextWithPhases(conversation.items);
-  }, [conversation]);
+  }, [conversation.items]);
 
   return (
     <div className="flex flex-col h-full">
@@ -90,11 +92,8 @@ export function SessionDetail() {
       <div className="flex flex-1 overflow-hidden">
         <div className="flex-1 flex flex-col min-w-0">
           <ChatHistory
-            chunks={chunks}
             items={conversation.items}
-            subagents={session.subagents}
             contextStats={contextResult.statsMap}
-            phases={contextResult.phases}
           />
         </div>
         <div className="w-80 flex-shrink-0 hidden lg:block">

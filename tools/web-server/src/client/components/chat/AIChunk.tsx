@@ -56,8 +56,8 @@ function buildStepSummary(steps: SemanticStep[]): string {
 export function AIChunk({ chunk, chunkIndex }: Props) {
   const { messages, timestamp } = chunk;
   const enhanced = isEnhanced(chunk);
-  const { expandedChunks, toggleChunk } = useSessionViewStore();
-  const isExpanded = expandedChunks.has(chunkIndex);
+  const { expandedGroups, toggleGroup } = useSessionViewStore();
+  const isExpanded = expandedGroups.has(String(chunkIndex));
 
   // Build tool execution lookup from chunk messages
   const toolExecutions = new Map<string, ToolExecution>();
@@ -142,7 +142,7 @@ export function AIChunk({ chunk, chunkIndex }: Props) {
       {/* Clickable header bar */}
       <button
         type="button"
-        onClick={() => toggleChunk(chunkIndex)}
+        onClick={() => toggleGroup(String(chunkIndex))}
         className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer select-none hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
       >
         {/* Left side: bot icon, model badge, step summary */}

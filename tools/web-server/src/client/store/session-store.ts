@@ -13,13 +13,13 @@ export const useSessionStore = create<SessionState>((set) => ({
 
 // Session view state for the session detail viewer
 interface SessionViewState {
-  expandedChunks: Set<number>;
+  expandedGroups: Set<string>;
   expandedTools: Set<string>;
   expandedSubagents: Set<string>;
   expandedSubagentTraces: Set<string>;
   isNearBottom: boolean;
 
-  toggleChunk: (index: number) => void;
+  toggleGroup: (groupId: string) => void;
   toggleTool: (toolCallId: string) => void;
   toggleSubagent: (agentId: string) => void;
   toggleSubagentTrace: (agentId: string) => void;
@@ -28,18 +28,18 @@ interface SessionViewState {
 }
 
 export const useSessionViewStore = create<SessionViewState>((set) => ({
-  expandedChunks: new Set(),
+  expandedGroups: new Set(),
   expandedTools: new Set(),
   expandedSubagents: new Set(),
   expandedSubagentTraces: new Set(),
   isNearBottom: true,
 
-  toggleChunk: (index) =>
+  toggleGroup: (groupId) =>
     set((state) => {
-      const next = new Set(state.expandedChunks);
-      if (next.has(index)) next.delete(index);
-      else next.add(index);
-      return { expandedChunks: next };
+      const next = new Set(state.expandedGroups);
+      if (next.has(groupId)) next.delete(groupId);
+      else next.add(groupId);
+      return { expandedGroups: next };
     }),
 
   toggleTool: (toolCallId) =>
@@ -70,7 +70,7 @@ export const useSessionViewStore = create<SessionViewState>((set) => ({
 
   resetView: () =>
     set({
-      expandedChunks: new Set(),
+      expandedGroups: new Set(),
       expandedTools: new Set(),
       expandedSubagents: new Set(),
       expandedSubagentTraces: new Set(),
