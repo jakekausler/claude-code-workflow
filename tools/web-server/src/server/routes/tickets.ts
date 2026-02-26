@@ -91,6 +91,7 @@ const ticketPlugin: FastifyPluginCallback = (app, _opts, done) => {
       refinement_type: parseRefinementType(s.refinement_type),
       worktree_branch: s.worktree_branch,
       session_active: s.session_active !== 0,
+      session_id: s.session_id ?? null,
       priority: s.priority,
       due_date: s.due_date,
       pr_url: s.pr_url,

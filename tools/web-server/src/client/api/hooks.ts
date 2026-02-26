@@ -109,6 +109,7 @@ export interface StageSummary {
   refinement_type: string[];
   worktree_branch: string;
   session_active: boolean;
+  session_id: string | null;
   priority: number;
   due_date: string | null;
   pr_url: string | null;
@@ -137,6 +138,7 @@ export interface StageListItem {
   refinement_type: string[];
   worktree_branch: string;
   session_active: boolean;
+  session_id: string | null;
   priority: number;
   due_date: string | null;
   pr_url: string | null;

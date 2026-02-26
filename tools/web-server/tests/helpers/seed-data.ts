@@ -129,6 +129,7 @@ export function seedDatabase(db: KanbanDatabase, repoPath = '/tmp/test-repo'): S
     session_active: 0,
     locked_at: null,
     locked_by: null,
+    session_id: null,
     file_path: `${repoPath}/epics/${SEED_IDS.EPIC_AUTH}/${SEED_IDS.TICKET_LOGIN}/${SEED_IDS.STAGE_LOGIN_FORM}.md`,
     last_synced: SEED_TIMESTAMP,
   });
@@ -150,6 +151,7 @@ export function seedDatabase(db: KanbanDatabase, repoPath = '/tmp/test-repo'): S
     session_active: 0,
     locked_at: null,
     locked_by: null,
+    session_id: 'test-session-uuid-001',
     file_path: `${repoPath}/epics/${SEED_IDS.EPIC_AUTH}/${SEED_IDS.TICKET_LOGIN}/${SEED_IDS.STAGE_AUTH_API}.md`,
     last_synced: SEED_TIMESTAMP,
   });
@@ -171,6 +173,7 @@ export function seedDatabase(db: KanbanDatabase, repoPath = '/tmp/test-repo'): S
     session_active: 0,
     locked_at: null,
     locked_by: null,
+    session_id: null,
     file_path: `${repoPath}/epics/${SEED_IDS.EPIC_AUTH}/${SEED_IDS.TICKET_LOGIN}/${SEED_IDS.STAGE_SESSION_MGMT}.md`,
     last_synced: SEED_TIMESTAMP,
   });
@@ -192,6 +195,7 @@ export function seedDatabase(db: KanbanDatabase, repoPath = '/tmp/test-repo'): S
     session_active: 0,
     locked_at: null,
     locked_by: null,
+    session_id: null,
     file_path: `${repoPath}/epics/${SEED_IDS.EPIC_AUTH}/${SEED_IDS.TICKET_REGISTRATION}/${SEED_IDS.STAGE_SIGNUP_FORM}.md`,
     last_synced: SEED_TIMESTAMP,
   });
