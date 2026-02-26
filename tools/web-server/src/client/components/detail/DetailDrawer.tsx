@@ -33,13 +33,13 @@ export function DetailDrawer({ title, subtitle, children }: DetailDrawerProps) {
     <>
       {/* Backdrop */}
       <div
-        className="fixed inset-0 z-40 bg-black/20 transition-opacity"
+        className="fixed inset-0 z-40 bg-black/20 transition-opacity hidden md:block"
         onMouseDown={closeAll}
         aria-hidden="true"
       />
       {/* Panel */}
       <div
-        className="fixed inset-y-0 right-0 z-50 flex w-full max-w-2xl flex-col border-l border-slate-200 bg-white shadow-xl"
+        className="fixed inset-0 z-50 flex flex-col bg-white shadow-xl md:inset-y-0 md:left-auto md:right-0 md:w-full md:max-w-2xl md:border-l md:border-slate-200"
         role="dialog"
         aria-modal="true"
         aria-label={title}
