@@ -21,12 +21,16 @@ import { createMRChainManager } from './mr-chain-manager.js';
 import { execFile } from 'node:child_process';
 import { createInsightsThresholdChecker } from './insights-threshold.js';
 import type { LearningsResult } from './insights-threshold.js';
+import { SessionRegistry } from './session-registry.js';
+import { createWsServer } from './ws-server.js';
+import type { WsServerHandle } from './ws-server.js';
 
 export interface Orchestrator {
   start(): Promise<void>;
   stop(): Promise<void>;
   isRunning(): boolean;
   getActiveWorkers(): ReadonlyMap<number, WorkerInfo>;
+  getRegistry(): SessionRegistry;
 }
 
 export interface OrchestratorDeps {
@@ -239,10 +243,10 @@ export function createOrchestrator(config: OrchestratorConfig, deps: Orchestrato
 
   // Create resolver runner (if not injected)
   const resolverRunner: ResolverRunner = deps.resolverRunner ?? (() => {
-    const registry = new ResolverRegistry();
-    registerBuiltinResolvers(registry);
+    const resolverRegistry = new ResolverRegistry();
+    registerBuiltinResolvers(resolverRegistry);
     return createResolverRunner(config.pipelineConfig, {
-      registry,
+      registry: resolverRegistry,
       exitGateRunner,
       logger,
     });
@@ -255,6 +259,14 @@ export function createOrchestrator(config: OrchestratorConfig, deps: Orchestrato
     writeFrontmatter,
     logger,
   });
+
+  // Session registry for tracking active sessions
+  const registry = new SessionRegistry();
+
+  // WebSocket server for real-time session broadcasting (optional — only when wsPort is set)
+  const wsServer: WsServerHandle | null = config.wsPort != null
+    ? createWsServer({ port: config.wsPort, registry })
+    : null;
 
   let running = false;
   let pendingSleep: { cancel: () => void } | undefined;
@@ -333,6 +345,7 @@ export function createOrchestrator(config: OrchestratorConfig, deps: Orchestrato
     await locker.releaseLock(workerInfo.stageFilePath);
     await worktreeManager.remove(workerInfo.worktreePath);
     await sessionLogger.close();
+    registry.end(stageId);
     activeWorkers.delete(workerInfo.worktreeIndex);
     notifyWorkerExit();
   }
@@ -347,6 +360,7 @@ export function createOrchestrator(config: OrchestratorConfig, deps: Orchestrato
     await locker.releaseLock(workerInfo.stageFilePath);
     await worktreeManager.remove(workerInfo.worktreePath);
     await sessionLogger.close();
+    registry.end(stageId);
     activeWorkers.delete(workerInfo.worktreeIndex);
     notifyWorkerExit();
   }
@@ -360,6 +374,12 @@ export function createOrchestrator(config: OrchestratorConfig, deps: Orchestrato
       // Start cron scheduler if configured
       if (cronScheduler) {
         cronScheduler.start();
+      }
+
+      // Start WebSocket server if configured
+      if (wsServer) {
+        const wsInfo = await wsServer.start();
+        logger.info('WebSocket server started', { port: wsInfo.port });
       }
 
       while (running) {
@@ -452,6 +472,15 @@ export function createOrchestrator(config: OrchestratorConfig, deps: Orchestrato
           activeWorkers.set(worktreeInfo.index, workerInfo);
           spawnedCount++;
 
+          // Register session in the registry for real-time tracking
+          registry.register({
+            stageId: stage.id,
+            sessionId: '',
+            processId: 0,
+            worktreePath: worktreeInfo.path,
+            spawnedAt: (deps.now ?? Date.now)(),
+          });
+
           const sessionPromise = sessionExecutor.spawn(
             {
               stageId: stage.id,
@@ -461,6 +490,9 @@ export function createOrchestrator(config: OrchestratorConfig, deps: Orchestrato
               worktreeIndex: worktreeInfo.index,
               model: config.model,
               workflowEnv: config.workflowEnv,
+              onSessionId: (sessionId: string) => {
+                registry.activate(stage.id, sessionId);
+              },
             },
             sessionLogger,
           );
@@ -507,6 +539,11 @@ export function createOrchestrator(config: OrchestratorConfig, deps: Orchestrato
         cronScheduler.stop();
       }
 
+      // Stop WebSocket server if running
+      if (wsServer) {
+        await wsServer.stop();
+      }
+
       if (pendingSleep) {
         pendingSleep.cancel();
         pendingSleep = undefined;
@@ -520,6 +557,10 @@ export function createOrchestrator(config: OrchestratorConfig, deps: Orchestrato
 
     getActiveWorkers(): ReadonlyMap<number, WorkerInfo> {
       return new Map(activeWorkers);
+    },
+
+    getRegistry(): SessionRegistry {
+      return registry;
     },
   };
 }

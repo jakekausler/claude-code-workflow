@@ -1446,4 +1446,148 @@ describe('createOrchestrator', () => {
       expect(checkFn).toHaveBeenCalledWith('/repo');
     });
   });
+
+  describe('session registry integration', () => {
+    it('getRegistry() returns a SessionRegistry instance', () => {
+      const { deps } = makeMockDeps();
+      const config = makeConfig({ once: true });
+      const orchestrator = createOrchestrator(config, deps);
+      const reg = orchestrator.getRegistry();
+      expect(reg).toBeDefined();
+      expect(typeof reg.register).toBe('function');
+      expect(typeof reg.activate).toBe('function');
+      expect(typeof reg.end).toBe('function');
+      expect(typeof reg.getAll).toBe('function');
+    });
+
+    it('registers session in registry when spawning', async () => {
+      const { deps, discovery, locker, deferSession, sessionExecutor } = makeMockDeps();
+      const stage = makeReadyStage();
+      const deferred = deferSession();
+
+      discovery.discover.mockResolvedValueOnce(makeDiscoveryResult([stage]));
+      locker.readStatus
+        .mockResolvedValueOnce('In Design')
+        .mockResolvedValueOnce('In Build');
+
+      const config = makeConfig({ once: true });
+      const orchestrator = createOrchestrator(config, deps);
+
+      const startPromise = orchestrator.start();
+
+      await vi.waitFor(() => {
+        expect(sessionExecutor.spawn).toHaveBeenCalledTimes(1);
+      });
+
+      // Registry should have the session registered
+      const reg = orchestrator.getRegistry();
+      const sessions = reg.getAll();
+      expect(sessions).toHaveLength(1);
+      expect(sessions[0].stageId).toBe('STAGE-001-001-001');
+      expect(sessions[0].status).toBe('starting');
+      expect(sessions[0].worktreePath).toBe('/repo/.worktrees/worktree-1');
+
+      deferred.resolve({ exitCode: 0, durationMs: 1000 });
+      await startPromise;
+    });
+
+    it('ends session in registry after normal completion', async () => {
+      const { deps, discovery, locker, deferSession, sessionExecutor } = makeMockDeps();
+      const stage = makeReadyStage();
+      const deferred = deferSession();
+
+      discovery.discover.mockResolvedValueOnce(makeDiscoveryResult([stage]));
+      locker.readStatus
+        .mockResolvedValueOnce('In Design')
+        .mockResolvedValueOnce('In Build');
+
+      const config = makeConfig({ once: true });
+      const orchestrator = createOrchestrator(config, deps);
+
+      const startPromise = orchestrator.start();
+
+      await vi.waitFor(() => {
+        expect(sessionExecutor.spawn).toHaveBeenCalledTimes(1);
+      });
+
+      deferred.resolve({ exitCode: 0, durationMs: 1000 });
+      await startPromise;
+
+      // After completion, session should be removed from registry
+      const reg = orchestrator.getRegistry();
+      expect(reg.getAll()).toHaveLength(0);
+      expect(reg.get('STAGE-001-001-001')).toBeUndefined();
+    });
+
+    it('ends session in registry after error', async () => {
+      const { deps, discovery, locker, deferSession, sessionExecutor } = makeMockDeps();
+      const stage = makeReadyStage();
+      const deferred = deferSession();
+
+      discovery.discover.mockResolvedValueOnce(makeDiscoveryResult([stage]));
+      locker.readStatus.mockResolvedValueOnce('In Design');
+
+      const config = makeConfig({ once: true });
+      const orchestrator = createOrchestrator(config, deps);
+
+      const startPromise = orchestrator.start();
+
+      await vi.waitFor(() => {
+        expect(sessionExecutor.spawn).toHaveBeenCalledTimes(1);
+      });
+
+      deferred.reject(new Error('spawn failed'));
+      await startPromise;
+
+      // After error, session should be removed from registry
+      const reg = orchestrator.getRegistry();
+      expect(reg.getAll()).toHaveLength(0);
+    });
+
+    it('passes onSessionId callback in spawn options', async () => {
+      const { deps, discovery, locker, deferSession, sessionExecutor } = makeMockDeps();
+      const stage = makeReadyStage();
+      const deferred = deferSession();
+
+      discovery.discover.mockResolvedValueOnce(makeDiscoveryResult([stage]));
+      locker.readStatus
+        .mockResolvedValueOnce('In Design')
+        .mockResolvedValueOnce('In Build');
+
+      const config = makeConfig({ once: true });
+      const orchestrator = createOrchestrator(config, deps);
+
+      const startPromise = orchestrator.start();
+
+      await vi.waitFor(() => {
+        expect(sessionExecutor.spawn).toHaveBeenCalledTimes(1);
+      });
+
+      // Verify onSessionId callback is passed in spawn options
+      const spawnCall = sessionExecutor.spawn.mock.calls[0][0];
+      expect(typeof spawnCall.onSessionId).toBe('function');
+
+      // Simulate the callback being invoked
+      spawnCall.onSessionId('session-abc-123');
+
+      // Registry should now show the session as active
+      const reg = orchestrator.getRegistry();
+      const entry = reg.get('STAGE-001-001-001');
+      expect(entry).toBeDefined();
+      expect(entry!.status).toBe('active');
+      expect(entry!.sessionId).toBe('session-abc-123');
+
+      deferred.resolve({ exitCode: 0, durationMs: 1000 });
+      await startPromise;
+    });
+
+    it('no WS server is created when wsPort is not set', () => {
+      const { deps } = makeMockDeps();
+      // wsPort is undefined by default
+      const config = makeConfig({ once: true });
+      // This should not throw or bind any port
+      const orchestrator = createOrchestrator(config, deps);
+      expect(orchestrator).toBeDefined();
+    });
+  });
 });
