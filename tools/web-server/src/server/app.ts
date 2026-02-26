@@ -23,6 +23,7 @@ declare module 'fastify' {
     claudeProjectsDir: string;
     orchestratorClient: OrchestratorClient | null;
     sessionPipeline: SessionPipeline | null;
+    fileWatcher: FileWatcher | null;
   }
 }
 
@@ -85,6 +86,9 @@ export async function createServer(
   // SessionPipeline decoration — JSONL session parsing + caching
   const sessionPipeline = options.sessionPipeline ?? null;
   app.decorate('sessionPipeline', sessionPipeline);
+
+  // FileWatcher decoration — available to route plugins (e.g. SSE) via app.fileWatcher
+  app.decorate('fileWatcher', options.fileWatcher ?? null);
 
   // FileWatcher — watches Claude project directories for JSONL changes
   if (options.fileWatcher) {
