@@ -59,7 +59,7 @@ export function ChatHistory({ chunks }: Props) {
       onScroll={handleScroll}
     >
       {chunks.map((chunk, i) => (
-        <ChunkRenderer key={`${chunk.type}-${i}`} chunk={chunk} />
+        <ChunkRenderer key={`${chunk.type}-${i}`} chunk={chunk} chunkIndex={i} />
       ))}
     </div>
   );
@@ -108,7 +108,7 @@ function VirtualizedList({
             }}
           >
             <div className="py-3">
-              <ChunkRenderer chunk={chunks[virtualItem.index]} />
+              <ChunkRenderer chunk={chunks[virtualItem.index]} chunkIndex={virtualItem.index} />
             </div>
           </div>
         ))}
@@ -117,12 +117,12 @@ function VirtualizedList({
   );
 }
 
-function ChunkRenderer({ chunk }: { chunk: Chunk }) {
+function ChunkRenderer({ chunk, chunkIndex }: { chunk: Chunk; chunkIndex: number }) {
   switch (chunk.type) {
     case 'user':
       return <UserChunk chunk={chunk} />;
     case 'ai':
-      return <AIChunk chunk={chunk} />;
+      return <AIChunk chunk={chunk} chunkIndex={chunkIndex} />;
     case 'system':
       return <SystemChunk chunk={chunk} />;
     case 'compact':

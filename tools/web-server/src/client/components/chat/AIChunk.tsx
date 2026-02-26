@@ -1,5 +1,5 @@
-import { Bot } from 'lucide-react';
-import { formatTimestamp, formatTokenCount } from '../../utils/session-formatters.js';
+import { Bot, ChevronRight } from 'lucide-react';
+import { formatTimestamp, formatTokenCount, formatDuration } from '../../utils/session-formatters.js';
 import { findLastOutput } from '../../utils/last-output-detector.js';
 import { TextItem } from './items/TextItem.js';
 import { ThinkingItem } from './items/ThinkingItem.js';
@@ -7,6 +7,7 @@ import { LinkedToolItem } from './items/LinkedToolItem.js';
 import { SubagentItem } from './items/SubagentItem.js';
 import { LastOutputDisplay } from './LastOutputDisplay.js';
 import { ContextBadge } from './context/ContextBadge.js';
+import { useSessionViewStore } from '../../store/session-store.js';
 import type {
   EnhancedAIChunk as EnhancedAIChunkType,
   AIChunk as AIChunkType,
@@ -18,15 +19,45 @@ import type {
 
 interface Props {
   chunk: AIChunkType;
+  chunkIndex: number;
 }
 
 function isEnhanced(chunk: AIChunkType): chunk is EnhancedAIChunkType {
   return 'semanticSteps' in chunk;
 }
 
-export function AIChunk({ chunk }: Props) {
+/**
+ * Build a short summary string from semantic steps, e.g. "2 tools, 1 thinking, 1 output"
+ */
+function buildStepSummary(steps: SemanticStep[]): string {
+  const counts: Record<string, number> = {};
+  for (const step of steps) {
+    // Skip tool_result since they are displayed as part of tool_call
+    if (step.type === 'tool_result') continue;
+    counts[step.type] = (counts[step.type] || 0) + 1;
+  }
+
+  const labels: Record<string, string> = {
+    tool_call: 'tool',
+    thinking: 'thinking',
+    output: 'output',
+    subagent: 'subagent',
+    interruption: 'interruption',
+  };
+
+  const parts: string[] = [];
+  for (const [type, count] of Object.entries(counts)) {
+    const label = labels[type] || type;
+    parts.push(`${count} ${label}${count !== 1 ? 's' : ''}`);
+  }
+  return parts.join(', ');
+}
+
+export function AIChunk({ chunk, chunkIndex }: Props) {
   const { messages, timestamp } = chunk;
   const enhanced = isEnhanced(chunk);
+  const { expandedChunks, toggleChunk } = useSessionViewStore();
+  const isExpanded = expandedChunks.has(chunkIndex);
 
   // Build tool execution lookup from chunk messages
   const toolExecutions = new Map<string, ToolExecution>();
@@ -67,7 +98,13 @@ export function AIChunk({ chunk }: Props) {
   }, 0);
   const model = messages.find((m) => m.model)?.model;
 
-  // Non-enhanced fallback: render raw text from messages
+  // Compute duration from first to last message timestamp
+  const duration =
+    messages.length >= 2
+      ? messages[messages.length - 1].timestamp.getTime() - messages[0].timestamp.getTime()
+      : undefined;
+
+  // Non-enhanced fallback: render raw text from messages (NOT collapsible)
   if (!enhanced) {
     return (
       <div className="flex gap-2 mb-4">
@@ -95,28 +132,60 @@ export function AIChunk({ chunk }: Props) {
     );
   }
 
-  // Enhanced: render semantic steps
+  // Enhanced: render semantic steps with collapse/expand
   const lastOutput = findLastOutput(chunk.semanticSteps);
+  const stepSummary = buildStepSummary(chunk.semanticSteps);
 
   return (
-    <div className="flex gap-2 mb-4">
-      <div className="flex-shrink-0 w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center">
-        <Bot className="w-4 h-4 text-emerald-600" />
-      </div>
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 mb-1">
-          {model && <span className="text-xs text-slate-400">{model}</span>}
+    <div className="mb-4">
+      {/* Clickable header bar */}
+      <button
+        type="button"
+        onClick={() => toggleChunk(chunkIndex)}
+        className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer select-none hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
+      >
+        {/* Left side: bot icon, model badge, step summary */}
+        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center">
+          <Bot className="w-4 h-4 text-emerald-600" />
+        </div>
+        <div className="flex items-center gap-2 min-w-0 flex-1">
+          {model && (
+            <span className="text-xs font-medium text-slate-500 bg-slate-100 dark:bg-slate-800 rounded px-1.5 py-0.5 flex-shrink-0">
+              {model}
+            </span>
+          )}
+          <span className="text-xs text-slate-400 truncate">
+            {stepSummary}
+          </span>
+        </div>
+
+        {/* Right side: context badge, tokens, duration, chevron */}
+        <div className="flex items-center gap-2 flex-shrink-0">
           <ContextBadge totalNewTokens={totalTokens} />
+          {totalTokens > 0 && (
+            <span className="text-xs text-slate-400">{formatTokenCount(totalTokens)}</span>
+          )}
+          {duration != null && duration > 0 && (
+            <span className="text-xs text-slate-400">{formatDuration(duration)}</span>
+          )}
+          <ChevronRight
+            className={`w-4 h-4 text-slate-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
+          />
         </div>
-        {chunk.semanticSteps.map((step, i) => (
-          <AIStepRenderer key={i} step={step} toolExecMap={toolExecutions} subagents={chunk.subagents} />
-        ))}
+      </button>
+
+      {/* Expanded: all semantic steps */}
+      {isExpanded && (
+        <div className="pl-10 mt-1">
+          {chunk.semanticSteps.map((step, i) => (
+            <AIStepRenderer key={i} step={step} toolExecMap={toolExecutions} subagents={chunk.subagents} />
+          ))}
+        </div>
+      )}
+
+      {/* LastOutputDisplay always visible */}
+      <div className="pl-10">
         <LastOutputDisplay lastOutput={lastOutput} />
-        <div className="flex items-center gap-3 mt-2 text-xs text-slate-400">
-          {model && <span>{model}</span>}
-          {totalTokens > 0 && <span>{formatTokenCount(totalTokens)} tokens</span>}
-          <span>{formatTimestamp(timestamp)}</span>
-        </div>
       </div>
     </div>
   );
