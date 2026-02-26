@@ -63,13 +63,14 @@ describe('Protocol Types', () => {
     });
 
     it('creates set_permission_mode control request', () => {
+      const request = { subtype: 'set_permission_mode' as const, mode: 'interactive' };
       const req: ControlRequest = {
         type: 'control_request',
         request_id: 'req-789',
-        request: { subtype: 'set_permission_mode', mode: 'interactive' },
+        request,
       };
       expect(req.request.subtype).toBe('set_permission_mode');
-      expect((req.request as { mode: string }).mode).toBe('interactive');
+      expect(request.mode).toBe('interactive');
     });
   });
 
@@ -486,30 +487,26 @@ describe('Protocol Types', () => {
   });
 
   describe('ProtocolHandler interface', () => {
-    it('defines handleControlRequest method', () => {
-      const handler: ProtocolHandler = {
+    function makeHandler(): ProtocolHandler {
+      return {
         handleControlRequest: async () => {},
         handleCancelRequest: () => {},
         handleResult: () => {},
       };
+    }
+
+    it('defines handleControlRequest method', () => {
+      const handler = makeHandler();
       expect(typeof handler.handleControlRequest).toBe('function');
     });
 
     it('defines handleCancelRequest method', () => {
-      const handler: ProtocolHandler = {
-        handleControlRequest: async () => {},
-        handleCancelRequest: () => {},
-        handleResult: () => {},
-      };
+      const handler = makeHandler();
       expect(typeof handler.handleCancelRequest).toBe('function');
     });
 
     it('defines handleResult method', () => {
-      const handler: ProtocolHandler = {
-        handleControlRequest: async () => {},
-        handleCancelRequest: () => {},
-        handleResult: () => {},
-      };
+      const handler = makeHandler();
       expect(typeof handler.handleResult).toBe('function');
     });
 
