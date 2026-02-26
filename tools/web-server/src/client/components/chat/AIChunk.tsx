@@ -28,18 +28,26 @@ export function AIChunk({ chunk }: Props) {
   if (enhanced) {
     for (const msg of messages) {
       for (const tc of msg.toolCalls) {
-        const matchingResult = messages
-          .flatMap((m) => m.toolResults)
-          .find((r) => r.toolUseId === tc.id);
+        const resultMsg = messages.find((m) =>
+          m.toolResults.some((r) => r.toolUseId === tc.id),
+        );
+        const matchingResult = resultMsg?.toolResults.find(
+          (r) => r.toolUseId === tc.id,
+        );
+        const startTime = msg.timestamp;
+        const endTime = resultMsg?.timestamp;
         toolExecutions.set(tc.id, {
           toolCallId: tc.id,
           toolName: tc.name,
           input: tc.input,
           result: matchingResult,
-          startTime: msg.timestamp,
-          endTime: undefined,
-          durationMs: undefined,
-          isOrphaned: false,
+          startTime,
+          endTime,
+          durationMs:
+            endTime && startTime
+              ? endTime.getTime() - startTime.getTime()
+              : undefined,
+          isOrphaned: !matchingResult,
         });
       }
     }
