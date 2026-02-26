@@ -133,6 +133,7 @@ export function createSessionExecutor(deps: Partial<SessionDeps> = {}): SessionE
           '--model', options.model,
           '--output-format', 'stream-json',
           '--input-format', 'stream-json',
+          '--verbose',
         ], {
           cwd: options.worktreePath,
           env: {
