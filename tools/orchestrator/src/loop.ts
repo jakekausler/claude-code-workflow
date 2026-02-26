@@ -263,9 +263,57 @@ export function createOrchestrator(config: OrchestratorConfig, deps: Orchestrato
   // Session registry for tracking active sessions
   const registry = new SessionRegistry();
 
+  // Get shared approval service and message queue from session executor
+  const approvalService = sessionExecutor.getApprovalService();
+  const messageQueue = sessionExecutor.getMessageQueue();
+
+  // Create callbacks for inbound WS messages
+  const onSendMessage = (stageId: string, message: string) => {
+    const peer = sessionExecutor.getPeer(stageId);
+    if (peer) {
+      peer.sendUserMessage(message);
+    } else {
+      // Queue message if peer not yet available
+      messageQueue.enqueue(stageId, message);
+    }
+  };
+
+  const onApproveTool = (stageId: string, requestId: string, decision: 'allow' | 'deny', reason?: string) => {
+    try {
+      approvalService.resolveApproval(requestId, decision, reason);
+    } catch (err) {
+      logger.warn('Failed to resolve approval', { stageId, requestId, error: (err as Error).message });
+    }
+  };
+
+  const onAnswerQuestion = (stageId: string, requestId: string, answers: Record<string, string>) => {
+    try {
+      approvalService.resolveQuestion(requestId, answers);
+    } catch (err) {
+      logger.warn('Failed to resolve question', { stageId, requestId, error: (err as Error).message });
+    }
+  };
+
+  const onInterrupt = (stageId: string) => {
+    const peer = sessionExecutor.getPeer(stageId);
+    if (peer) {
+      peer.interrupt();
+    } else {
+      logger.warn('No peer found for stage', { stageId });
+    }
+  };
+
   // WebSocket server for real-time session broadcasting (optional — only when wsPort is set)
   const wsServer: WsServerHandle | null = config.wsPort != null
-    ? createWsServer({ port: config.wsPort, registry })
+    ? createWsServer({
+        port: config.wsPort,
+        registry,
+        approvalService,
+        onSendMessage,
+        onApproveTool,
+        onAnswerQuestion,
+        onInterrupt,
+      })
     : null;
 
   let running = false;

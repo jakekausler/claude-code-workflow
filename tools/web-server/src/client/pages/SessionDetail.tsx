@@ -151,9 +151,14 @@ export function SessionDetail() {
           />
           <MessageInput
             stageId={sessionId || ''}
-            disabled={!session.isOngoing}
+            disabled={!session.isOngoing || !sessionId}
             queuedMessage={queuedMessage}
           />
+          {!sessionId && (
+            <div className="px-4 py-2 bg-yellow-50 border-t border-yellow-200 text-sm text-yellow-700">
+              Stage context not available. Navigate from a stage view to interact with this session.
+            </div>
+          )}
         </div>
         <div className="w-80 flex-shrink-0 hidden lg:block">
           <SessionContextPanel metrics={metrics} chunks={chunks} model={model} />

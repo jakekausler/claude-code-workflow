@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { MessageSquare, Check } from 'lucide-react';
 import { useAnswerQuestion } from '../../api/interaction-hooks.js';
-import { useInteractionStore, type QuestionDef, type QuestionOption } from '../../store/interaction-store.js';
+import { useInteractionStore, type QuestionDef } from '../../store/interaction-store.js';
 
 export interface QuestionAnswerFormProps {
   stageId: string;
