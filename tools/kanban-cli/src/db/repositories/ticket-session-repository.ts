@@ -19,7 +19,7 @@ export class TicketSessionRepository {
   }
 
   /** Add a new session for a ticket. */
-  addSession(ticketId: string, sessionId: string, type: string): void {
+  addSession(ticketId: string, sessionId: string, sessionType: string): void {
     const now = new Date().toISOString();
     this.db
       .raw()
@@ -27,6 +27,6 @@ export class TicketSessionRepository {
         `INSERT INTO ticket_sessions (ticket_id, session_id, session_type, started_at)
          VALUES (?, ?, ?, ?)`
       )
-      .run(ticketId, sessionId, type, now);
+      .run(ticketId, sessionId, sessionType, now);
   }
 }

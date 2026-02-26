@@ -42,4 +42,27 @@ describe('TicketSessionRepository', () => {
   it('returns empty array for unknown ticket', () => {
     expect(repo.getSessionsByTicketId('TICKET-UNKNOWN')).toEqual([]);
   });
+
+  it('getSessionsByTicketId returns sessions ordered by started_at desc', () => {
+    db.raw().prepare(
+      `INSERT INTO ticket_sessions (ticket_id, session_id, session_type, started_at)
+       VALUES ('TICKET-1', 'sess-old', 'convert', '2026-01-01T00:00:00Z')`
+    ).run();
+    db.raw().prepare(
+      `INSERT INTO ticket_sessions (ticket_id, session_id, session_type, started_at)
+       VALUES ('TICKET-1', 'sess-new', 'convert', '2026-01-02T00:00:00Z')`
+    ).run();
+
+    const sessions = repo.getSessionsByTicketId('TICKET-1');
+    expect(sessions).toHaveLength(2);
+    expect(sessions[0].session_id).toBe('sess-new');
+    expect(sessions[1].session_id).toBe('sess-old');
+  });
+
+  it('enforces unique (ticket_id, session_id) constraint', () => {
+    repo.addSession('TICKET-1', 'sess-dup', 'convert');
+    expect(() => {
+      repo.addSession('TICKET-1', 'sess-dup', 'convert');
+    }).toThrow(/UNIQUE constraint failed/);
+  });
 });
