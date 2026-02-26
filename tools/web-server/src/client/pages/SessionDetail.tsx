@@ -3,6 +3,7 @@ import { useEffect, useMemo, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Loader2, AlertCircle, ArrowLeft } from 'lucide-react';
 import { ChatHistory } from '../components/chat/ChatHistory.js';
+import { ContextAccordion } from '../components/chat/context/ContextAccordion.js';
 import { SessionContextPanel } from '../components/chat/context/SessionContextPanel.js';
 import { useSessionDetail } from '../api/hooks.js';
 import { useSSE } from '../api/use-sse.js';
@@ -119,8 +120,13 @@ export function SessionDetail() {
       </div>
 
       {/* Main content: chat + context panel */}
-      <div className="flex flex-1 overflow-hidden">
-        <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex flex-col lg:flex-row flex-1 overflow-hidden">
+        {/* Mobile/tablet: collapsible context accordion */}
+        <div className="border-b border-slate-200 lg:hidden">
+          <ContextAccordion metrics={metrics} chunks={chunks} model={model} />
+        </div>
+
+        <div className="flex-1 flex flex-col min-h-0 min-w-0">
           <ChatHistory
             items={conversation?.items ?? []}
             contextStats={contextResult?.statsMap}

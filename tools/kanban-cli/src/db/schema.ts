@@ -109,6 +109,34 @@ CREATE TABLE IF NOT EXISTS mr_comment_tracking (
   repo_id INTEGER REFERENCES repos(id)
 )`;
 
+export const CREATE_STAGE_SESSIONS_TABLE = `
+CREATE TABLE IF NOT EXISTS stage_sessions (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  stage_id    TEXT NOT NULL REFERENCES stages(id),
+  session_id  TEXT NOT NULL,
+  phase       TEXT NOT NULL,
+  started_at  TEXT NOT NULL,
+  ended_at    TEXT,
+  is_current  INTEGER DEFAULT 0,
+  UNIQUE(stage_id, session_id)
+)`;
+
+export const CREATE_TICKET_SESSIONS_TABLE = `
+CREATE TABLE IF NOT EXISTS ticket_sessions (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  ticket_id   TEXT NOT NULL REFERENCES tickets(id),
+  session_id  TEXT NOT NULL,
+  session_type TEXT NOT NULL DEFAULT 'convert',
+  started_at  TEXT NOT NULL,
+  ended_at    TEXT,
+  UNIQUE(ticket_id, session_id)
+)`;
+
+export const CREATE_STAGE_SESSIONS_STAGE_INDEX = `CREATE INDEX IF NOT EXISTS idx_stage_sessions_stage_id ON stage_sessions(stage_id)`;
+export const CREATE_TICKET_SESSIONS_TICKET_INDEX = `CREATE INDEX IF NOT EXISTS idx_ticket_sessions_ticket_id ON ticket_sessions(ticket_id)`;
+export const CREATE_STAGE_SESSIONS_SESSION_INDEX = `CREATE INDEX IF NOT EXISTS idx_stage_sessions_session_id ON stage_sessions(session_id)`;
+export const CREATE_TICKET_SESSIONS_SESSION_INDEX = `CREATE INDEX IF NOT EXISTS idx_ticket_sessions_session_id ON ticket_sessions(session_id)`;
+
 export const CREATE_EPICS_JIRA_KEY_INDEX = `CREATE INDEX IF NOT EXISTS idx_epics_jira_key ON epics(jira_key, repo_id)`;
 export const CREATE_TICKETS_JIRA_KEY_INDEX = `CREATE INDEX IF NOT EXISTS idx_tickets_jira_key ON tickets(jira_key, repo_id)`;
 export const CREATE_PARENT_TRACKING_CHILD_INDEX = `CREATE INDEX IF NOT EXISTS idx_parent_tracking_child ON parent_branch_tracking(child_stage_id)`;
@@ -133,6 +161,12 @@ export const ALTER_TABLE_MIGRATIONS = [
   'ALTER TABLE dependencies ADD COLUMN target_repo_name TEXT',
   CREATE_REPOS_NAME_UNIQUE_INDEX,
   'ALTER TABLE stages ADD COLUMN session_id TEXT DEFAULT NULL',
+  // Migrate existing stages.session_id values into the stage_sessions junction table.
+  // Uses INSERT OR IGNORE so it is idempotent — safe to run on every database open.
+  `INSERT OR IGNORE INTO stage_sessions (stage_id, session_id, phase, started_at, is_current)
+   SELECT id, session_id, COALESCE(kanban_column, 'unknown'), last_synced, 1
+   FROM stages
+   WHERE session_id IS NOT NULL`,
 ] as const;
 
 export const ALL_CREATE_STATEMENTS = [
@@ -149,4 +183,10 @@ export const ALL_CREATE_STATEMENTS = [
   CREATE_PARENT_TRACKING_CHILD_INDEX,
   CREATE_PARENT_TRACKING_PARENT_INDEX,
   CREATE_STAGES_SESSION_ID_INDEX,
+  CREATE_STAGE_SESSIONS_TABLE,
+  CREATE_TICKET_SESSIONS_TABLE,
+  CREATE_STAGE_SESSIONS_STAGE_INDEX,
+  CREATE_TICKET_SESSIONS_TICKET_INDEX,
+  CREATE_STAGE_SESSIONS_SESSION_INDEX,
+  CREATE_TICKET_SESSIONS_SESSION_INDEX,
 ] as const;
