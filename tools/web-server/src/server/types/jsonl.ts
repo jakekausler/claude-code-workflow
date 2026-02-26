@@ -290,6 +290,13 @@ export interface Process {
     memberName: string;
     memberColor: string;
   };
+  mainSessionImpact?: MainSessionImpact;
+}
+
+export interface MainSessionImpact {
+  callTokens: number;
+  resultTokens: number;
+  totalTokens: number;
 }
 
 // ─── 11. Session metrics ─────────────────────────────────────────────────────
