@@ -10,6 +10,18 @@ import type {
 
 type PendingEntry = (PendingApproval | PendingQuestion) & { type: 'approval' | 'question' };
 
+export interface ApprovalServiceEvents {
+  'approval-requested': (entry: PendingApproval & { type: 'approval' }) => void;
+  'question-requested': (entry: PendingQuestion & { type: 'question' }) => void;
+  'approval-cancelled': (requestId: string) => void;
+  'result': (msg: ResultMessage) => void;
+}
+
+export declare interface ApprovalService {
+  on<K extends keyof ApprovalServiceEvents>(event: K, listener: ApprovalServiceEvents[K]): this;
+  emit<K extends keyof ApprovalServiceEvents>(event: K, ...args: Parameters<ApprovalServiceEvents[K]>): boolean;
+}
+
 /**
  * Manages pending tool approval requests and AskUserQuestion prompts.
  *
@@ -87,6 +99,7 @@ export class ApprovalService extends EventEmitter implements ProtocolHandler {
   ): PermissionResult {
     const entry = this.pending.get(requestId);
     if (!entry) throw new Error('Unknown approval request');
+    if (entry.type !== 'approval') throw new Error('Request is not a tool approval');
     this.pending.delete(requestId);
 
     return decision === 'allow'
@@ -100,11 +113,13 @@ export class ApprovalService extends EventEmitter implements ProtocolHandler {
   ): PermissionResult {
     const entry = this.pending.get(requestId);
     if (!entry) throw new Error('Unknown approval request');
+    if (entry.type !== 'question') throw new Error('Request is not a question');
     this.pending.delete(requestId);
 
+    const originalInput = entry.input != null && typeof entry.input === 'object' ? entry.input : {};
     return {
       behavior: 'allow',
-      updatedInput: { ...(entry.input as object), answers },
+      updatedInput: { ...originalInput, answers },
     };
   }
 
@@ -119,6 +134,7 @@ export class ApprovalService extends EventEmitter implements ProtocolHandler {
   }
 
   clearForStage(stageId: string): void {
+    // Safe to delete during Map iteration per ES6 spec (visited entries won't be revisited)
     for (const [id, entry] of this.pending) {
       if (entry.stageId === stageId) this.pending.delete(id);
     }

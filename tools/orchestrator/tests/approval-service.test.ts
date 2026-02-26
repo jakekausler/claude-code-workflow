@@ -121,7 +121,7 @@ describe('ApprovalService', () => {
 
   // ── resolveApproval ─────────────────────────────────────────────────
 
-  it('resolveApproval with "allow" decision returns allow PermissionResult', () => {
+  it('resolveApproval with "allow" decision returns allow PermissionResult', async () => {
     const service = new ApprovalService();
     service.setCurrentStageId('stage-1');
 
@@ -131,15 +131,14 @@ describe('ApprovalService', () => {
       input: { path: '/tmp/test' },
     };
 
-    const p = service.handleControlRequest('req-allow', request);
-    expect(p).toBeDefined();
+    await service.handleControlRequest('req-allow', request);
 
     const result = service.resolveApproval('req-allow', 'allow');
 
     expect(result).toEqual({ behavior: 'allow' });
   });
 
-  it('resolveApproval with "deny" decision returns deny PermissionResult', () => {
+  it('resolveApproval with "deny" decision returns deny PermissionResult', async () => {
     const service = new ApprovalService();
     service.setCurrentStageId('stage-1');
 
@@ -149,8 +148,7 @@ describe('ApprovalService', () => {
       input: { path: '/etc/passwd' },
     };
 
-    const p = service.handleControlRequest('req-deny', request);
-    expect(p).toBeDefined();
+    await service.handleControlRequest('req-deny', request);
 
     const result = service.resolveApproval('req-deny', 'deny', 'Access to /etc/passwd denied');
 
@@ -237,6 +235,28 @@ describe('ApprovalService', () => {
     expect(() => {
       service.resolveQuestion('unknown-question', { answer: 'yes' });
     }).toThrow('Unknown approval request');
+  });
+
+  it('throws when resolveApproval is called on a question entry', async () => {
+    const service = new ApprovalService();
+    service.setCurrentStageId('STAGE-A');
+    await service.handleControlRequest('req-q', {
+      subtype: 'can_use_tool',
+      tool_name: 'AskUserQuestion',
+      input: { questions: [] },
+    });
+    expect(() => service.resolveApproval('req-q', 'allow')).toThrow('Request is not a tool approval');
+  });
+
+  it('throws when resolveQuestion is called on an approval entry', async () => {
+    const service = new ApprovalService();
+    service.setCurrentStageId('STAGE-A');
+    await service.handleControlRequest('req-a', {
+      subtype: 'can_use_tool',
+      tool_name: 'Bash',
+      input: {},
+    });
+    expect(() => service.resolveQuestion('req-a', { q: 'a' })).toThrow('Request is not a question');
   });
 
   // ── handleCancelRequest ─────────────────────────────────────────────
