@@ -2,7 +2,7 @@ import type { SemanticStep } from '../types/session.js';
 import type { AIGroupLastOutput } from '../types/groups.js';
 
 // Keep legacy types for backward compatibility
-export type LastOutputType = 'text' | 'tool_result' | 'interruption' | 'ongoing' | 'plan_exit';
+export type LastOutputType = 'text' | 'tool_result' | 'ongoing' | 'plan_exit';
 
 export interface LastOutput {
   type: LastOutputType;
@@ -15,12 +15,11 @@ export interface LastOutput {
  * Find the last visible output for an AI group.
  *
  * Priority:
- * 1. Any interruption step (reverse scan)
- * 2. If isOngoing (and no interruption)
- * 3. Last tool_call with toolName === 'ExitPlanMode' AND no later output/tool_result
- * 4. Last output step with content
- * 5. Last tool_result step
- * 6. null
+ * 1. If isOngoing
+ * 2. Last tool_call with toolName === 'ExitPlanMode' AND no later output/tool_result
+ * 3. Last output step with content
+ * 4. Last tool_result step
+ * 5. null
  */
 export function findLastOutput(
   steps: SemanticStep[],
@@ -29,23 +28,12 @@ export function findLastOutput(
 ): AIGroupLastOutput | null {
   const timestamp = now ?? new Date();
 
-  // 1. Check for interruption
-  for (let i = steps.length - 1; i >= 0; i--) {
-    if (steps[i].type === 'interruption') {
-      return {
-        type: 'interruption',
-        interruptionMessage: steps[i].content,
-        timestamp: timestamp,
-      };
-    }
-  }
-
-  // 2. Ongoing
+  // 1. Ongoing
   if (isOngoing) {
     return { type: 'ongoing', timestamp: timestamp };
   }
 
-  // 3. Plan exit: last ExitPlanMode tool_call with no later output or tool_result
+  // 2. Plan exit: last ExitPlanMode tool_call with no later output or tool_result
   for (let i = steps.length - 1; i >= 0; i--) {
     const step = steps[i];
     if (step.type === 'tool_call' && step.toolName === 'ExitPlanMode') {
@@ -72,14 +60,14 @@ export function findLastOutput(
     }
   }
 
-  // 4. Last output step
+  // 3. Last output step
   for (let i = steps.length - 1; i >= 0; i--) {
     if (steps[i].type === 'output' && steps[i].content) {
       return { type: 'text', text: steps[i].content, timestamp: timestamp };
     }
   }
 
-  // 5. Last tool_result
+  // 4. Last tool_result
   for (let i = steps.length - 1; i >= 0; i--) {
     if (steps[i].type === 'tool_result') {
       return {

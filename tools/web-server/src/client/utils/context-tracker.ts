@@ -533,12 +533,6 @@ function findLastOutputStepIndex(
     }
   }
 
-  if (lastOutput.type === 'interruption') {
-    for (let i = steps.length - 1; i >= 0; i--) {
-      if (steps[i].type === 'interruption') return i;
-    }
-  }
-
   if (lastOutput.type === 'plan_exit') {
     for (let i = steps.length - 1; i >= 0; i--) {
       if (steps[i].type === 'tool_call' && steps[i].toolName === 'ExitPlanMode') return i;

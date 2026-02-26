@@ -7,9 +7,13 @@ import type {
   ToolExecution,
 } from '../types/jsonl.js';
 
+/** Regex to detect teammate messages: <teammate-message teammate_id="..." */
+const TEAMMATE_MESSAGE_REGEX = /^<teammate-message\s+teammate_id="/;
+
 /**
  * Classify a ParsedMessage into one of four categories:
- * - 'hardNoise': filtered out entirely (system entries, synthetic messages, reminders, etc.)
+ * - 'hardNoise': filtered out entirely (system entries, synthetic messages, reminders,
+ *    interruption messages, empty stdout/stderr, etc.)
  * - 'system': system command output (local-command-stdout)
  * - 'user': real user input
  * - 'ai': assistant messages and tool results (isMeta user messages)
@@ -30,39 +34,92 @@ export function classifyMessage(msg: ParsedMessage): MessageCategory {
     return 'hardNoise';
   }
 
-  // TODO: Also check TextContent blocks within array content for noise markers.
-  // Currently only string content is checked. In practice, noise markers always appear
-  // in string content, but array content could theoretically contain them.
-
-  // 3-4. String content checks for noise markers
+  // 3. String content checks for noise markers
   if (typeof msg.content === 'string') {
+    const trimmedContent = msg.content.trim();
+
+    // Hard noise tags (startsWith for precision)
     if (
-      msg.content.includes('<local-command-caveat>') ||
-      msg.content.includes('<system-reminder>')
+      trimmedContent.startsWith('<local-command-caveat>') ||
+      trimmedContent.startsWith('<system-reminder>')
     ) {
       return 'hardNoise';
     }
-    // Interruption messages pass through as 'ai' so they stay in the AI buffer.
-    // extractSemanticSteps() detects them and produces 'interruption' steps.
-    if (msg.content.includes('[Request interrupted by user')) {
-      return 'ai';
+
+    // Interruption messages → hardNoise (filtered out entirely)
+    if (trimmedContent.startsWith('[Request interrupted by user')) {
+      return 'hardNoise';
     }
 
-    // 5. System command output
-    if (msg.type === 'user' && msg.content.includes('<local-command-stdout>')) {
+    // Empty stdout/stderr → hardNoise
+    if (
+      trimmedContent === '<local-command-stdout></local-command-stdout>' ||
+      trimmedContent === '<local-command-stderr></local-command-stderr>'
+    ) {
+      return 'hardNoise';
+    }
+
+    // System command output
+    if (msg.type === 'user' && trimmedContent.startsWith('<local-command-stdout>')) {
       return 'system';
     }
   }
 
-  // 6. Real user input — must contain text or image blocks
+  // 4. Array content checks for noise markers
+  if (Array.isArray(msg.content)) {
+    const blocks = msg.content as Array<{ type: string; text?: string }>;
+
+    // Single text block with interruption → hardNoise
+    if (
+      blocks.length === 1 &&
+      blocks[0].type === 'text' &&
+      typeof blocks[0].text === 'string' &&
+      blocks[0].text.startsWith('[Request interrupted by user')
+    ) {
+      return 'hardNoise';
+    }
+
+    // Check text blocks for noise tags
+    for (const block of blocks) {
+      if (block.type === 'text' && typeof block.text === 'string') {
+        const trimmedText = block.text.trim();
+        if (
+          trimmedText.startsWith('<local-command-caveat>') ||
+          trimmedText.startsWith('<system-reminder>')
+        ) {
+          return 'hardNoise';
+        }
+      }
+    }
+  }
+
+  // 5. Real user input — must contain text or image blocks
   //    Tool result messages are type="user" but only have tool_result blocks;
   //    they should stay in the AI buffer, not start a new user chunk.
+  //    Teammate messages are excluded — they're injected into the AI buffer.
   if (msg.type === 'user' && !msg.isMeta) {
     if (typeof msg.content === 'string') {
+      // Teammate messages → ai (they are responses injected into conversation)
+      if (TEAMMATE_MESSAGE_REGEX.test(msg.content.trim())) {
+        return 'ai';
+      }
       return 'user';
     }
     if (Array.isArray(msg.content)) {
-      const hasUserContent = (msg.content as Array<{ type: string }>).some(
+      const blocks = msg.content as Array<{ type: string; text?: string }>;
+
+      // Check for teammate message in text blocks
+      const isTeammate = blocks.some(
+        (block) =>
+          block.type === 'text' &&
+          typeof block.text === 'string' &&
+          TEAMMATE_MESSAGE_REGEX.test(block.text.trim()),
+      );
+      if (isTeammate) {
+        return 'ai';
+      }
+
+      const hasUserContent = blocks.some(
         (block) => block.type === 'text' || block.type === 'image',
       );
       if (hasUserContent) {
@@ -74,7 +131,7 @@ export function classifyMessage(msg: ParsedMessage): MessageCategory {
     return 'user';
   }
 
-  // 7. Everything else → ai
+  // 6. Everything else → ai
   return 'ai';
 }
 
@@ -156,11 +213,6 @@ export function extractSemanticSteps(
 
     // String content in an AI chunk
     if (typeof msg.content === 'string') {
-      // Detect interruption messages and produce an 'interruption' step
-      if (msg.content.includes('[Request interrupted by user')) {
-        steps.push({ type: 'interruption', content: msg.content.trim() });
-        continue;
-      }
       if (msg.content.trim()) {
         steps.push({ type: 'output', content: msg.content });
       }
