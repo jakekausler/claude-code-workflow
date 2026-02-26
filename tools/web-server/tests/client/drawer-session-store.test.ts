@@ -8,6 +8,8 @@ describe('drawer-session-store', () => {
 
   it('defaults to details tab', () => {
     const state = useDrawerSessionStore.getState();
+    expect(state.activeStageSession).toBeNull();
+    expect(state.activeTicketSession).toBeNull();
     expect(state.stageActiveTab).toBe('details');
     expect(state.ticketActiveTab).toBe('details');
   });
