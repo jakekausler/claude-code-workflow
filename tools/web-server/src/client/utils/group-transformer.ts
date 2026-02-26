@@ -7,7 +7,7 @@ import type {
   SystemGroup, AIGroup, AIGroupTokens, AIGroupStatus,
   CompactGroup, CompactionTokenDelta, CommandInfo, ImageData, FileReference,
 } from '../types/groups.js';
-import { sanitizeDisplayContent, extractTextContent, toDate } from './display-helpers.js';
+import { sanitizeDisplayContent, extractTextContent, toDate, isCommandContent } from './display-helpers.js';
 
 export function transformChunksToConversation(
   chunks: Chunk[],
@@ -62,7 +62,8 @@ function createUserGroup(chunk: UserChunk, index: number): UserGroup {
   const rawContent = extractTextContent(msg.content);
   const sanitized = sanitizeDisplayContent(rawContent);
 
-  const commands = extractCommands(sanitized);
+  const isCommand = isCommandContent(rawContent);
+  const commands = isCommand ? [] : extractCommands(sanitized);
   const fileReferences = extractFileReferences(sanitized);
   const images = extractImages(msg.content);
 
@@ -276,7 +277,7 @@ function isEnhancedAIChunk(chunk: AIChunk): chunk is EnhancedAIChunk {
 
 function extractCommands(text: string): CommandInfo[] {
   const commands: CommandInfo[] = [];
-  const regex = /\/([a-z][a-z-]{0,50})(?:\s+(\S[^\n]{0,1000}))?/gim;
+  const regex = /^\/([a-z][a-z_-]{0,50})(?:\s+(.*))?$/gim;
   let match: RegExpExecArray | null;
   while ((match = regex.exec(text)) !== null) {
     commands.push({

@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { toDate, truncateText, sanitizeDisplayContent, formatToolInput, formatToolResult } from '../../src/client/utils/display-helpers.js';
+import {
+  toDate, truncateText, sanitizeDisplayContent, formatToolInput, formatToolResult,
+  isCommandContent, isCommandOutputContent, extractSlashInfo,
+} from '../../src/client/utils/display-helpers.js';
 
 describe('toDate', () => {
   it('passes through Date objects', () => {
@@ -39,6 +42,71 @@ describe('truncateText', () => {
   });
 });
 
+describe('isCommandContent', () => {
+  it('detects command-name tag', () => {
+    expect(isCommandContent('<command-name>/clear</command-name>')).toBe(true);
+  });
+
+  it('detects command-message tag', () => {
+    expect(isCommandContent('<command-message>clear</command-message>')).toBe(true);
+  });
+
+  it('rejects regular text', () => {
+    expect(isCommandContent('Hello world')).toBe(false);
+  });
+
+  it('rejects text with command tags not at start', () => {
+    expect(isCommandContent('text <command-name>/clear</command-name>')).toBe(false);
+  });
+});
+
+describe('isCommandOutputContent', () => {
+  it('detects stdout', () => {
+    expect(isCommandOutputContent('<local-command-stdout>output</local-command-stdout>')).toBe(true);
+  });
+
+  it('detects stderr', () => {
+    expect(isCommandOutputContent('<local-command-stderr>error</local-command-stderr>')).toBe(true);
+  });
+
+  it('rejects regular text', () => {
+    expect(isCommandOutputContent('Hello world')).toBe(false);
+  });
+});
+
+describe('extractSlashInfo', () => {
+  it('extracts command name', () => {
+    const result = extractSlashInfo('<command-name>/clear</command-name>');
+    expect(result).toEqual({ name: 'clear' });
+  });
+
+  it('extracts command name with message and args', () => {
+    const result = extractSlashInfo(
+      '<command-name>/model</command-name><command-message>model</command-message><command-args>sonnet</command-args>',
+    );
+    expect(result).toEqual({ name: 'model', message: 'model', args: 'sonnet' });
+  });
+
+  it('returns null for non-command content', () => {
+    expect(extractSlashInfo('Hello world')).toBeNull();
+  });
+
+  it('handles empty/default args tag (e.g., <> inside args)', () => {
+    const result = extractSlashInfo(
+      '<command-name>/clear</command-name><command-message>clear</command-message><command-args><></command-args>',
+    );
+    // The regex [^<]* does not match <> content, so args is undefined
+    expect(result).toEqual({ name: 'clear', message: 'clear' });
+  });
+
+  it('extracts non-empty args', () => {
+    const result = extractSlashInfo(
+      '<command-name>/model</command-name><command-message>model</command-message><command-args>sonnet</command-args>',
+    );
+    expect(result).toEqual({ name: 'model', message: 'model', args: 'sonnet' });
+  });
+});
+
 describe('sanitizeDisplayContent', () => {
   it('strips local-command-caveat', () => {
     const input = 'before<local-command-caveat>noise</local-command-caveat>after';
@@ -50,11 +118,6 @@ describe('sanitizeDisplayContent', () => {
     expect(sanitizeDisplayContent(input)).toBe('beforeafter');
   });
 
-  it('converts command-name to slash', () => {
-    const input = '<command-name>commit</command-name>';
-    expect(sanitizeDisplayContent(input)).toBe('/commit');
-  });
-
   it('handles multiline noise', () => {
     const input = 'text\n<system-reminder>\nlong\nnoise\n</system-reminder>\nmore';
     expect(sanitizeDisplayContent(input)).toBe('text\n\nmore');
@@ -63,6 +126,36 @@ describe('sanitizeDisplayContent', () => {
   it('trims result', () => {
     const input = '  <system-reminder>x</system-reminder>  text  ';
     expect(sanitizeDisplayContent(input)).toBe('text');
+  });
+
+  it('extracts /clear from command content', () => {
+    const input = '<command-name>/clear</command-name><command-message>clear</command-message><command-args><></command-args>';
+    expect(sanitizeDisplayContent(input)).toBe('/clear');
+  });
+
+  it('extracts /model sonnet from command+args', () => {
+    const input = '<command-name>/model</command-name><command-args>sonnet</command-args>';
+    expect(sanitizeDisplayContent(input)).toBe('/model sonnet');
+  });
+
+  it('strips command tags from mixed content', () => {
+    const input = 'Hello <command-message>noise</command-message> world <command-args>stuff</command-args>';
+    expect(sanitizeDisplayContent(input)).toBe('Hello  world');
+  });
+
+  it('extracts stdout from command output', () => {
+    const input = '<local-command-stdout>output text</local-command-stdout>';
+    expect(sanitizeDisplayContent(input)).toBe('output text');
+  });
+
+  it('extracts stderr from command output', () => {
+    const input = '<local-command-stderr>error text</local-command-stderr>';
+    expect(sanitizeDisplayContent(input)).toBe('error text');
+  });
+
+  it('strips command-name tags from non-command mixed content', () => {
+    const input = 'Check this <command-name>/foo</command-name> out';
+    expect(sanitizeDisplayContent(input)).toBe('Check this  out');
   });
 });
 

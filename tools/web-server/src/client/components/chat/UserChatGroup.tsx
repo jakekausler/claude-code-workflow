@@ -1,23 +1,132 @@
-import { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { User } from 'lucide-react';
-import ReactMarkdown from 'react-markdown';
+import ReactMarkdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { formatTimestampLong } from '../../utils/session-formatters.js';
 import type { UserGroup } from '../../types/groups.js';
 
 const COLLAPSE_THRESHOLD = 500;
+const PATH_PATTERN = /@[^\s,)}\]]+/g;
 
 interface Props {
   userGroup: UserGroup;
 }
 
+/**
+ * Walks a text string, finds @path references, and wraps them in styled spans.
+ * Uses the fileReferences from the group to validate which paths to highlight.
+ */
+function highlightTextNode(
+  text: string,
+  knownPaths: Set<string>,
+): React.ReactNode {
+  const parts: React.ReactNode[] = [];
+  let lastIndex = 0;
+  const pattern = new RegExp(PATH_PATTERN.source, 'g');
+  let match: RegExpExecArray | null;
+
+  while ((match = pattern.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push(text.slice(lastIndex, match.index));
+    }
+
+    const fullMatch = match[0];
+    // Extract path (without @) and check if it's a known file reference
+    const pathPart = fullMatch.slice(1);
+    const isKnown = knownPaths.has(pathPart);
+
+    if (isKnown) {
+      parts.push(
+        <span
+          key={match.index}
+          className="inline rounded px-1 py-0.5 font-mono text-xs"
+          style={{
+            backgroundColor: 'rgba(255, 255, 255, 0.15)',
+            border: '1px solid rgba(255, 255, 255, 0.25)',
+          }}
+        >
+          {fullMatch}
+        </span>,
+      );
+    } else {
+      parts.push(fullMatch);
+    }
+
+    lastIndex = match.index + fullMatch.length;
+  }
+
+  if (lastIndex < text.length) {
+    parts.push(text.slice(lastIndex));
+  }
+
+  if (parts.length === 0) return text;
+  if (parts.length === 1) return parts[0];
+  return <>{parts}</>;
+}
+
+/**
+ * Recursively walks React children tree and highlights @path references in text nodes.
+ */
+function highlightPaths(
+  children: React.ReactNode,
+  knownPaths: Set<string>,
+): React.ReactNode {
+  return React.Children.map(children, (child): React.ReactNode => {
+    if (typeof child === 'string') {
+      return highlightTextNode(child, knownPaths);
+    }
+
+    if (React.isValidElement<{ children?: React.ReactNode }>(child) && child.props.children) {
+      return React.cloneElement(
+        child,
+        undefined,
+        highlightPaths(child.props.children, knownPaths),
+      );
+    }
+
+    return child;
+  });
+}
+
+/**
+ * Creates custom markdown components that apply @path highlighting.
+ */
+function createMarkdownComponents(knownPaths: Set<string>): Components {
+  const hl = (children: React.ReactNode): React.ReactNode =>
+    highlightPaths(children, knownPaths);
+
+  return {
+    p: ({ children }) => <p className="my-1">{hl(children)}</p>,
+    li: ({ children }) => <li>{hl(children)}</li>,
+    h1: ({ children }) => <h1>{hl(children)}</h1>,
+    h2: ({ children }) => <h2>{hl(children)}</h2>,
+    h3: ({ children }) => <h3>{hl(children)}</h3>,
+    td: ({ children }) => <td>{hl(children)}</td>,
+    th: ({ children }) => <th>{hl(children)}</th>,
+    blockquote: ({ children }) => (
+      <blockquote className="border-l-2 border-blue-400 pl-2 my-1">{hl(children)}</blockquote>
+    ),
+  };
+}
+
 export function UserChatGroup({ userGroup }: Props) {
   const [expanded, setExpanded] = useState(false);
   const { content, timestamp } = userGroup;
-  const text = content.text ?? '';
+  const text = content.rawText ?? content.text ?? '';
   const imageCount = content.images.length;
   const isLong = text.length > COLLAPSE_THRESHOLD;
   const displayText = isLong && !expanded ? text.slice(0, COLLAPSE_THRESHOLD) + '\u2026' : text;
+
+  // Build set of known paths from extracted file references
+  const knownPaths = useMemo(
+    () => new Set(content.fileReferences.map((ref) => ref.path)),
+    [content.fileReferences],
+  );
+
+  const markdownComponents = useMemo(
+    () => createMarkdownComponents(knownPaths),
+    [knownPaths],
+  );
 
   return (
     <div className="flex justify-end mb-4">
@@ -37,18 +146,11 @@ export function UserChatGroup({ userGroup }: Props) {
               [{imageCount} image{imageCount > 1 ? 's' : ''}]
             </span>
           )}
-          <div className="prose prose-sm prose-invert max-w-none text-sm [&_p]:my-1 [&_pre]:bg-blue-700 [&_code]:bg-blue-700 [&_code]:text-blue-100">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{displayText}</ReactMarkdown>
+          <div className="prose prose-sm prose-invert max-w-none text-sm [&_pre]:bg-blue-700 [&_code]:bg-blue-700 [&_code]:text-blue-100">
+            <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+              {displayText}
+            </ReactMarkdown>
           </div>
-          {content.fileReferences.length > 0 && (
-            <div className="flex flex-wrap gap-1 mt-1">
-              {content.fileReferences.map((ref, i) => (
-                <span key={i} className="text-xs bg-blue-500/50 text-blue-100 rounded px-1.5 py-0.5 font-mono">
-                  @{ref.path}
-                </span>
-              ))}
-            </div>
-          )}
           {isLong && (
             <button
               onClick={() => setExpanded(!expanded)}

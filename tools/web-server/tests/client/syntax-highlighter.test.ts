@@ -129,8 +129,8 @@ describe('syntax-highlighter', () => {
       expect(inferLanguage('/home/user/project/src/main.rs')).toBe('rust');
     });
 
-    it('returns empty string for unknown extensions', () => {
-      expect(inferLanguage('file.xyz')).toBe('');
+    it('returns text for unknown extensions', () => {
+      expect(inferLanguage('file.xyz')).toBe('text');
     });
 
     it('returns empty string for no extension', () => {

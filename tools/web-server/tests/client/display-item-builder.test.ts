@@ -149,31 +149,30 @@ describe('buildDisplayItems', () => {
     }
   });
 
-  it('items are sorted chronologically by timestamp', () => {
-    const t1 = new Date('2025-01-01T00:00:00Z');
-    const t2 = new Date('2025-01-01T00:01:00Z');
-    const t3 = new Date('2025-01-01T00:02:00Z');
-
+  it('items preserve step order (no re-sorting)', () => {
     // Create messages that produce teammate messages with different timestamps
     const messages = [
       makeMsg({
         type: 'user',
         isMeta: false,
-        timestamp: t3,
+        timestamp: new Date('2025-01-01T00:02:00Z'),
         content: '<teammate-message teammate-id="tm1">Hello</teammate-message>',
       }),
     ];
     const steps: SemanticStep[] = [
       makeStep({ type: 'thinking', content: 'hmm' }),
+      makeStep({ type: 'output', content: 'response' }),
     ];
 
     const { items } = buildDisplayItems(steps, null, [], messages);
-    // Should be sorted by timestamp
-    for (let i = 1; i < items.length; i++) {
-      const prevTs = getItemTimestamp(items[i - 1]);
-      const currTs = getItemTimestamp(items[i]);
-      expect(prevTs.getTime()).toBeLessThanOrEqual(currTs.getTime());
-    }
+    // Items from steps should appear in step order, followed by appended items
+    // (teammate messages, slash commands)
+    expect(items.length).toBeGreaterThanOrEqual(2);
+    expect(items[0].type).toBe('thinking');
+    expect(items[1].type).toBe('output');
+    // Teammate message is appended after step items
+    const tmItems = items.filter((i) => i.type === 'teammate_message');
+    expect(tmItems).toHaveLength(1);
   });
 });
 

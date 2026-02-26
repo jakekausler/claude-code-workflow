@@ -226,13 +226,73 @@ describe('transformChunksToConversation', () => {
     }
   });
 
-  it('user content sanitization: converts command-name tags', () => {
-    const content = '<command-name>commit</command-name>';
+  it('user content sanitization: converts command-name tags to slash format', () => {
+    const content = '<command-name>/commit</command-name>';
     const chunks: Chunk[] = [makeUserChunk(content)];
     const result = transformChunksToConversation(chunks, false);
     const group = result.items[0].group;
     if ('content' in group) {
       expect(group.content.rawText).toBe('/commit');
+    }
+  });
+
+  it('command message: does not extract commands from sanitized text', () => {
+    const content = '<command-name>/clear</command-name><command-message>clear</command-message><command-args><></command-args>';
+    const chunks: Chunk[] = [makeUserChunk(content)];
+    const result = transformChunksToConversation(chunks, false);
+    const group = result.items[0].group;
+    if ('content' in group) {
+      expect(group.content.commands).toHaveLength(0);
+      expect(group.content.rawText).toBe('/clear');
+    }
+  });
+
+  it('regular message with /path does not extract path as command', () => {
+    const content = 'Check the file at /plans/stage-1/overview.md for details';
+    const chunks: Chunk[] = [makeUserChunk(content)];
+    const result = transformChunksToConversation(chunks, false);
+    const group = result.items[0].group;
+    if ('content' in group) {
+      expect(group.content.commands).toHaveLength(0);
+      expect(group.content.rawText).toContain('/plans/stage-1/overview.md');
+      // displayText should also be unmangled since no commands were extracted
+      expect(group.content.text).toContain('/plans/stage-1/overview.md');
+    }
+  });
+
+  it('extracts /commit at start of line as a command', () => {
+    const content = '/commit -m "fix bug"';
+    const chunks: Chunk[] = [makeUserChunk(content)];
+    const result = transformChunksToConversation(chunks, false);
+    const group = result.items[0].group;
+    if ('content' in group) {
+      expect(group.content.commands).toHaveLength(1);
+      expect(group.content.commands[0].name).toBe('commit');
+      expect(group.content.commands[0].args).toBe('-m "fix bug"');
+    }
+  });
+
+  it('does not extract mid-text /plans/stage- as command from @file reference', () => {
+    const content = '@docs/plans/stage-9f-session-detail-display-handoff.md\n\nRead the referenced files and implement the changes.';
+    const chunks: Chunk[] = [makeUserChunk(content)];
+    const result = transformChunksToConversation(chunks, false);
+    const group = result.items[0].group;
+    if ('content' in group) {
+      expect(group.content.commands).toHaveLength(0);
+      expect(group.content.rawText).toContain('@docs/plans/stage-9f-session-detail-display-handoff.md');
+      expect(group.content.rawText).toContain('Read the referenced files');
+    }
+  });
+
+  it('extracts command on second line of multi-line text', () => {
+    const content = 'Some context here\n/review this PR';
+    const chunks: Chunk[] = [makeUserChunk(content)];
+    const result = transformChunksToConversation(chunks, false);
+    const group = result.items[0].group;
+    if ('content' in group) {
+      expect(group.content.commands).toHaveLength(1);
+      expect(group.content.commands[0].name).toBe('review');
+      expect(group.content.commands[0].args).toBe('this PR');
     }
   });
 

@@ -56,8 +56,23 @@ export function classifyMessage(msg: ParsedMessage): MessageCategory {
     }
   }
 
-  // 6. Real user input (not meta / tool result)
+  // 6. Real user input — must contain text or image blocks
+  //    Tool result messages are type="user" but only have tool_result blocks;
+  //    they should stay in the AI buffer, not start a new user chunk.
   if (msg.type === 'user' && !msg.isMeta) {
+    if (typeof msg.content === 'string') {
+      return 'user';
+    }
+    if (Array.isArray(msg.content)) {
+      const hasUserContent = (msg.content as Array<{ type: string }>).some(
+        (block) => block.type === 'text' || block.type === 'image',
+      );
+      if (hasUserContent) {
+        return 'user';
+      }
+      // tool_result-only content → treat as part of AI turn
+      return 'ai';
+    }
     return 'user';
   }
 
@@ -135,6 +150,12 @@ export function extractSemanticSteps(
   const execMap = new Map(toolExecutions.map((e) => [e.toolCallId, e]));
 
   for (const msg of chunk.messages) {
+    // Skip isMeta messages with sourceToolUseID — these are tool results/instructions
+    // consumed by the tool-linking-engine, not standalone conversation output
+    if (msg.isMeta && msg.sourceToolUseID) {
+      continue;
+    }
+
     // String content in an AI chunk — treat as output
     if (typeof msg.content === 'string') {
       if (msg.content.trim()) {

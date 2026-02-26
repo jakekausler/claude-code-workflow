@@ -7,6 +7,20 @@ import { linkToolCallsToResults, estimateTokens } from './tool-linking-engine.js
 import { extractTextContent, toDate } from './display-helpers.js';
 
 /**
+ * Extract text from message content that may be a string or ContentBlock array.
+ */
+function extractMsgText(content: string | unknown[]): string {
+  if (typeof content === 'string') return content;
+  if (Array.isArray(content)) {
+    return (content as Array<{ type: string; text?: string }>)
+      .filter((b) => b.type === 'text' && typeof b.text === 'string')
+      .map((b) => b.text!)
+      .join('\n');
+  }
+  return '';
+}
+
+/**
  * Build display items for a main session AI group.
  * Skips the lastOutput step (rendered separately), skips Task calls that have subagents.
  *
@@ -103,13 +117,6 @@ export function buildDisplayItems(
     items.push({ type: 'slash', slash });
   }
 
-  // Sort all items chronologically by timestamp
-  items.sort((a, b) => {
-    const tsA = getDisplayItemTimestamp(a);
-    const tsB = getDisplayItemTimestamp(b);
-    return tsA.getTime() - tsB.getTime();
-  });
-
   return { items, linkedTools };
 }
 
@@ -147,11 +154,12 @@ export function buildDisplayItemsFromMessages(
     }
 
     // Skill instructions from isMeta messages
-    if (msg.isMeta && msg.sourceToolUseID && typeof msg.content === 'string') {
-      if (msg.content.startsWith('Base directory for this skill:')) {
+    if (msg.isMeta && msg.sourceToolUseID) {
+      const textContent = extractMsgText(msg.content);
+      if (textContent.startsWith('Base directory for this skill:')) {
         skillInstructionsMap.set(msg.sourceToolUseID, {
-          text: msg.content,
-          tokenCount: estimateTokens(msg.content),
+          text: textContent,
+          tokenCount: estimateTokens(textContent),
         });
       }
     }
@@ -418,10 +426,13 @@ export function extractSlashCommands(
     // Look for follow-up isMeta messages that provide instructions
     const slash = { ...precedingSlash };
     for (const msg of messages) {
-      if (msg.isMeta && typeof msg.content === 'string' && msg.content.startsWith('Base directory')) {
-        slash.instructions = msg.content;
-        slash.instructionsTokenCount = estimateTokens(msg.content);
-        break;
+      if (msg.isMeta) {
+        const textContent = extractMsgText(msg.content);
+        if (textContent.startsWith('Base directory')) {
+          slash.instructions = textContent;
+          slash.instructionsTokenCount = estimateTokens(textContent);
+          break;
+        }
       }
     }
     results.push(slash);
@@ -446,10 +457,11 @@ export function extractSlashCommands(
 
       // Look for isMeta messages with instructions for this slash
       for (const followUp of messages) {
-        if (followUp.isMeta && followUp.sourceToolUseID && typeof followUp.content === 'string') {
-          if (followUp.content.startsWith('Base directory')) {
-            slash.instructions = followUp.content;
-            slash.instructionsTokenCount = estimateTokens(followUp.content);
+        if (followUp.isMeta && followUp.sourceToolUseID) {
+          const textContent = extractMsgText(followUp.content);
+          if (textContent.startsWith('Base directory')) {
+            slash.instructions = textContent;
+            slash.instructionsTokenCount = estimateTokens(textContent);
             break;
           }
         }

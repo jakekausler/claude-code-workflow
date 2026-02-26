@@ -50,11 +50,19 @@ export function linkToolCallsToResults(
   // Build skill instructions lookup from isMeta messages with sourceToolUseID
   const skillInstructionsMap = new Map<string, { text: string; tokenCount: number }>();
   for (const msg of messages) {
-    if (msg.isMeta && msg.sourceToolUseID && typeof msg.content === 'string') {
-      if (msg.content.startsWith('Base directory for this skill:')) {
+    if (msg.isMeta && msg.sourceToolUseID) {
+      const textContent = typeof msg.content === 'string'
+        ? msg.content
+        : Array.isArray(msg.content)
+          ? (msg.content as Array<{ type: string; text?: string }>)
+              .filter((b) => b.type === 'text' && b.text)
+              .map((b) => b.text)
+              .join('\n')
+          : '';
+      if (textContent.startsWith('Base directory for this skill:')) {
         skillInstructionsMap.set(msg.sourceToolUseID, {
-          text: msg.content,
-          tokenCount: estimateTokens(msg.content),
+          text: textContent,
+          tokenCount: estimateTokens(textContent),
         });
       }
     }

@@ -19,6 +19,7 @@ import {
   formatTokensCompact,
 } from '../../../utils/session-formatters.js';
 import { getToolRenderer } from '../../tools/index.js';
+import { CodeBlockViewer } from '../../tools/CodeBlockViewer.js';
 import { useSessionViewStore } from '../../../store/session-store.js';
 import type { LinkedToolItemData } from '../../../types/groups.js';
 import type { ToolExecution } from '../../../types/session.js';
@@ -173,9 +174,11 @@ export function LinkedToolItemDisplay({ tool }: Props) {
                   )}
                 </span>
               </div>
-              <pre className="text-xs font-mono text-slate-600 whitespace-pre-wrap overflow-x-auto max-h-48 overflow-y-auto">
-                {skillInstructions}
-              </pre>
+              <CodeBlockViewer
+                fileName={`${(tool.input?.skill as string) || 'unknown'} skill`}
+                content={skillInstructions}
+                language="markdown"
+              />
             </div>
           )}
         </div>

@@ -141,6 +141,42 @@ describe('ChunkBuilder', () => {
       } as unknown as ParsedMessage;
       expect(classifyMessage(msg)).toBe('hardNoise');
     });
+
+    it('classifies non-isMeta user message with only tool_result blocks as "ai"', () => {
+      const msg = {
+        type: 'user',
+        isMeta: false,
+        content: [{ type: 'tool_result', tool_use_id: 'toolu_1', content: 'result text' }],
+        toolCalls: [],
+        toolResults: [],
+      } as unknown as ParsedMessage;
+      expect(classifyMessage(msg)).toBe('ai');
+    });
+
+    it('classifies non-isMeta user message with text blocks as "user"', () => {
+      const msg = {
+        type: 'user',
+        isMeta: false,
+        content: [{ type: 'text', text: 'Hello from the user' }],
+        toolCalls: [],
+        toolResults: [],
+      } as unknown as ParsedMessage;
+      expect(classifyMessage(msg)).toBe('user');
+    });
+
+    it('classifies non-isMeta user message with both text and tool_result blocks as "user"', () => {
+      const msg = {
+        type: 'user',
+        isMeta: false,
+        content: [
+          { type: 'tool_result', tool_use_id: 'toolu_1', content: 'result' },
+          { type: 'text', text: 'And some user text' },
+        ],
+        toolCalls: [],
+        toolResults: [],
+      } as unknown as ParsedMessage;
+      expect(classifyMessage(msg)).toBe('user');
+    });
   });
 
   describe('buildChunks', () => {
@@ -266,6 +302,64 @@ describe('ChunkBuilder', () => {
       expect(chunks[0].type).toBe('user');
       expect(chunks[1].type).toBe('system');
       expect(chunks[2].type).toBe('ai');
+    });
+
+    it('groups assistant and non-isMeta tool_result messages into one AI chunk', () => {
+      const now = new Date();
+      const messages: ParsedMessage[] = [
+        {
+          uuid: 'u1',
+          type: 'user',
+          isMeta: false,
+          content: 'Do something',
+          timestamp: now,
+          isSidechain: false,
+          toolCalls: [],
+          toolResults: [],
+        },
+        {
+          uuid: 'a1',
+          type: 'assistant',
+          isMeta: false,
+          content: [
+            { type: 'text', text: 'Let me run a tool.' },
+            { type: 'tool_use', id: 'toolu_1', name: 'Bash', input: { command: 'ls' } },
+          ],
+          timestamp: now,
+          isSidechain: false,
+          toolCalls: [{ id: 'toolu_1', name: 'Bash', input: { command: 'ls' }, isTask: false }],
+          toolResults: [],
+        },
+        {
+          uuid: 'tr1',
+          type: 'user',
+          isMeta: false,
+          content: [
+            { type: 'tool_result', tool_use_id: 'toolu_1', content: 'file1.txt\nfile2.txt' },
+          ],
+          timestamp: now,
+          isSidechain: false,
+          toolCalls: [],
+          toolResults: [{ toolUseId: 'toolu_1', content: 'file1.txt\nfile2.txt', isError: false }],
+        },
+        {
+          uuid: 'a2',
+          type: 'assistant',
+          isMeta: false,
+          content: [{ type: 'text', text: 'Here are the files.' }],
+          timestamp: now,
+          isSidechain: false,
+          toolCalls: [],
+          toolResults: [],
+        },
+      ] as ParsedMessage[];
+      const chunks = buildChunks(messages);
+      // Should be: 1 UserChunk + 1 AIChunk (all three AI-category messages merged)
+      expect(chunks).toHaveLength(2);
+      expect(chunks[0].type).toBe('user');
+      expect(chunks[1].type).toBe('ai');
+      const aiChunk = chunks[1] as { type: 'ai'; messages: ParsedMessage[] };
+      expect(aiChunk.messages).toHaveLength(3);
     });
 
     it('handles malformed fixture gracefully', async () => {
