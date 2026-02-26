@@ -1,5 +1,6 @@
 import { useLocation, Link } from 'react-router-dom';
-import { ChevronRight } from 'lucide-react';
+import { ChevronRight, Menu } from 'lucide-react';
+import { useSidebarStore } from '../../store/sidebar-store.js';
 
 /**
  * Known route segment labels. Dynamic segments (IDs) are left as-is since
@@ -35,9 +36,17 @@ function buildBreadcrumbs(pathname: string): { label: string; to: string }[] {
 export function Header() {
   const location = useLocation();
   const crumbs = buildBreadcrumbs(location.pathname);
+  const toggleSidebar = useSidebarStore((s) => s.toggle);
 
   return (
-    <header className="border-b border-slate-200 bg-white px-6 py-3">
+    <header className="flex items-center gap-3 border-b border-slate-200 bg-white px-4 py-3 md:px-6">
+      <button
+        onClick={toggleSidebar}
+        className="rounded p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-700 md:hidden"
+        aria-label="Toggle sidebar"
+      >
+        <Menu size={20} />
+      </button>
       <nav aria-label="Breadcrumb" className="flex items-center gap-1 text-sm text-slate-600">
         {crumbs.map((crumb, i) => (
           <span key={crumb.to} className="flex items-center gap-1">
