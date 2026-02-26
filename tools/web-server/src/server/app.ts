@@ -164,6 +164,11 @@ export async function createServer(
   await app.register(repoRoutes);
   await app.register(eventRoutes);
 
+  // Interaction routes — requires orchestratorClient
+  if (orchestratorClient) {
+    await app.register(interactionRoutes, { orchestratorClient });
+  }
+
   // --- Static serving / dev proxy ---
   if (!isDev) {
     // Production: serve built client assets
