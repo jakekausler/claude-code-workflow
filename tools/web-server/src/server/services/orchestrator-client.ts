@@ -58,6 +58,7 @@ export class OrchestratorClient extends EventEmitter {
   private url: string;
   private shouldConnect = false;
   private reconnectDelay: number;
+  private _connected = false;
 
   constructor(url: string, options?: OrchestratorClientOptions) {
     super();
@@ -80,6 +81,11 @@ export class OrchestratorClient extends EventEmitter {
       this.ws.close();
       this.ws = null;
     }
+    this._connected = false;
+  }
+
+  isConnected(): boolean {
+    return this._connected;
   }
 
   getSession(stageId: string): SessionInfo | undefined {
@@ -131,9 +137,13 @@ export class OrchestratorClient extends EventEmitter {
     if (!this.shouldConnect) return;
     try {
       this.ws = new WebSocket(this.url);
-      this.ws.on('open', () => this.emit('connected'));
+      this.ws.on('open', () => {
+        this._connected = true;
+        this.emit('connected');
+      });
       this.ws.on('message', (data) => this.handleMessage(data.toString()));
       this.ws.on('close', () => {
+        this._connected = false;
         this.ws = null;
         this.scheduleReconnect();
       });

@@ -22,6 +22,7 @@ interface SessionStatusResponse {
 /** Shape of the REST response envelope. */
 interface SessionsEnvelope {
   sessions: SessionStatusResponse[];
+  connected?: boolean;
 }
 
 /** Shape of a session-status SSE event (may omit optional fields). */
@@ -91,7 +92,10 @@ export function useSessionMap(): void {
       setOrchestratorConnected(false);
       return;
     }
-    if (data?.sessions) {
+    if (data) {
+      const connected = data.connected !== false;
+      setOrchestratorConnected(connected);
+
       const map = new Map<string, SessionMapEntry>();
       for (const s of data.sessions) {
         if (s.status !== 'ended') {
@@ -104,7 +108,6 @@ export function useSessionMap(): void {
         }
       }
       setSessionMap(map);
-      setOrchestratorConnected(true);
     }
   }, [data, isError, setSessionMap, setOrchestratorConnected]);
 

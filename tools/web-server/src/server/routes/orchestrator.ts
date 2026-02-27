@@ -45,6 +45,10 @@ const orchestratorPlugin: FastifyPluginCallback = (app, _opts, done) => {
       return reply.status(503).send({ error: 'Orchestrator not connected' });
     }
 
+    if (!client.isConnected()) {
+      return reply.send({ sessions: [], connected: false });
+    }
+
     const allSessions = client.getAllSessions();
     const sessions: SessionStatusResponse[] = allSessions.map((session) => {
       let waitingType: SessionStatusResponse['waitingType'] = null;
@@ -64,7 +68,7 @@ const orchestratorPlugin: FastifyPluginCallback = (app, _opts, done) => {
       };
     });
 
-    return reply.send({ sessions });
+    return reply.send({ sessions, connected: true });
   });
 
   done();

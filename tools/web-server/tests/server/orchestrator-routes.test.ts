@@ -12,6 +12,7 @@ function createMockOrchestratorClient() {
     approveTool: vi.fn(),
     answerQuestion: vi.fn(),
     interruptSession: vi.fn(),
+    isConnected: vi.fn().mockReturnValue(true),
     on: vi.fn(),
   };
 }
@@ -43,7 +44,7 @@ describe('Orchestrator routes', () => {
 
       expect(res.statusCode).toBe(200);
       const body = JSON.parse(res.body);
-      expect(body).toEqual({ sessions: [] });
+      expect(body).toEqual({ sessions: [], connected: true });
     });
 
     it('returns sessions with computed waitingType from pending approvals', async () => {
