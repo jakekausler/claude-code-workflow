@@ -21,18 +21,20 @@ const sessionsPlugin: FastifyPluginCallback = (app, _opts, done) => {
   app.get('/api/sessions/:projectId', async (request, reply) => {
     const { projectId } = request.params as { projectId: string };
     const decoded = decodeURIComponent(projectId);
-    const projectDir = resolve(app.claudeProjectsDir, decoded);
+    const userId = await app.deploymentContext.getUserId(request);
+    const claudeProjectsDir = join(app.deploymentContext.getClaudeRoot(userId), 'projects');
+    const projectDir = resolve(claudeProjectsDir, decoded);
 
     // Path traversal guard
-    if (!projectDir.startsWith(resolve(app.claudeProjectsDir))) {
+    if (!projectDir.startsWith(resolve(claudeProjectsDir))) {
       return reply.status(400).send({ error: 'Invalid project ID' });
     }
 
-    const fs = app.deploymentContext.getFileAccess();
+    const fileAccess = app.deploymentContext.getFileAccess();
 
     let files: string[];
     try {
-      files = await fs.readdir(projectDir);
+      files = await fileAccess.readdir(projectDir);
     } catch {
       // Directory does not exist — return empty list, not 404
       return reply.send([]);
@@ -43,7 +45,7 @@ const sessionsPlugin: FastifyPluginCallback = (app, _opts, done) => {
     const sessions = await Promise.all(
       jsonlFiles.map(async (f) => {
         const filePath = join(projectDir, f);
-        const st = await fs.stat(filePath);
+        const st = await fileAccess.stat(filePath);
         return {
           sessionId: f.replace(/\.jsonl$/, ''),
           filePath,
@@ -75,10 +77,12 @@ const sessionsPlugin: FastifyPluginCallback = (app, _opts, done) => {
       }
 
       const decoded = decodeURIComponent(projectId);
-      const projectDir = resolve(app.claudeProjectsDir, decoded);
+      const userId = await app.deploymentContext.getUserId(request);
+      const claudeProjectsDir = join(app.deploymentContext.getClaudeRoot(userId), 'projects');
+      const projectDir = resolve(claudeProjectsDir, decoded);
 
       // Path traversal guard
-      if (!projectDir.startsWith(resolve(app.claudeProjectsDir))) {
+      if (!projectDir.startsWith(resolve(claudeProjectsDir))) {
         return reply.status(403).send({ error: 'Access denied' });
       }
 
@@ -112,9 +116,11 @@ const sessionsPlugin: FastifyPluginCallback = (app, _opts, done) => {
       }
 
       const decoded = decodeURIComponent(projectId);
-      const projectDir = resolve(app.claudeProjectsDir, decoded);
+      const userId = await app.deploymentContext.getUserId(request);
+      const claudeProjectsDir = join(app.deploymentContext.getClaudeRoot(userId), 'projects');
+      const projectDir = resolve(claudeProjectsDir, decoded);
 
-      if (!projectDir.startsWith(resolve(app.claudeProjectsDir))) {
+      if (!projectDir.startsWith(resolve(claudeProjectsDir))) {
         return reply.status(403).send({ error: 'Access denied' });
       }
 
@@ -148,9 +154,11 @@ const sessionsPlugin: FastifyPluginCallback = (app, _opts, done) => {
       }
 
       const decoded = decodeURIComponent(projectId);
-      const projectDir = resolve(app.claudeProjectsDir, decoded);
+      const userId = await app.deploymentContext.getUserId(request);
+      const claudeProjectsDir = join(app.deploymentContext.getClaudeRoot(userId), 'projects');
+      const projectDir = resolve(claudeProjectsDir, decoded);
 
-      if (!projectDir.startsWith(resolve(app.claudeProjectsDir))) {
+      if (!projectDir.startsWith(resolve(claudeProjectsDir))) {
         return reply.status(403).send({ error: 'Access denied' });
       }
 

@@ -8,6 +8,21 @@ import { SessionPipeline } from '../../src/server/services/session-pipeline.js';
 import { DataService } from '../../src/server/services/data-service.js';
 import { KanbanDatabase } from '../../../kanban-cli/dist/db/database.js';
 import { seedDatabase, SEED_IDS } from '../helpers/seed-data.js';
+import { LocalDeploymentContext } from '../../src/server/deployment/local/local-deployment-context.js';
+
+/**
+ * Test deployment context that returns a custom claude root directory,
+ * so that routes deriving `join(getClaudeRoot(userId), 'projects')` resolve
+ * to the test temp directory's `projects/` subdirectory.
+ */
+class TestDeploymentContext extends LocalDeploymentContext {
+  constructor(private readonly claudeRoot: string) {
+    super();
+  }
+  override getClaudeRoot(_userId: string): string {
+    return this.claudeRoot;
+  }
+}
 
 /**
  * Minimal JSONL fixture: two user/assistant turns.
@@ -95,8 +110,9 @@ describe('sessions API', () => {
   beforeEach(async () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'kanban-sessions-test-'));
 
-    // Create mock session files
-    const projectDir = path.join(tmpDir, 'test-project');
+    // Create mock session files under projects/ subdirectory
+    // (routes derive claudeProjectsDir as join(getClaudeRoot(userId), 'projects'))
+    const projectDir = path.join(tmpDir, 'projects', 'test-project');
     fs.mkdirSync(projectDir, { recursive: true });
     fs.writeFileSync(
       path.join(projectDir, 'session-abc123.jsonl'),
@@ -111,7 +127,7 @@ describe('sessions API', () => {
     app = await createServer({
       logger: false,
       isDev: true,
-      claudeProjectsDir: tmpDir,
+      deploymentContext: new TestDeploymentContext(tmpDir),
       sessionPipeline: new SessionPipeline(),
     });
   });
@@ -325,7 +341,7 @@ describe('sessions API', () => {
         logger: false,
         isDev: true,
         dataService: stageDataService,
-        claudeProjectsDir: tmpDir,
+        deploymentContext: new TestDeploymentContext(tmpDir),
       });
     });
 
@@ -383,7 +399,7 @@ describe('sessions API', () => {
       noPipelineApp = await createServer({
         logger: false,
         isDev: true,
-        claudeProjectsDir: tmpDir,
+        deploymentContext: new TestDeploymentContext(tmpDir),
       });
     });
 

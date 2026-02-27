@@ -5,6 +5,21 @@ import { tmpdir } from 'os';
 import type { FastifyInstance } from 'fastify';
 import { SessionPipeline } from '../../../src/server/services/session-pipeline.js';
 import { createServer } from '../../../src/server/app.js';
+import { LocalDeploymentContext } from '../../../src/server/deployment/local/local-deployment-context.js';
+
+/**
+ * Test deployment context that returns a custom claude root directory,
+ * so that routes deriving `join(getClaudeRoot(userId), 'projects')` resolve
+ * to the test temp directory's `projects/` subdirectory.
+ */
+class TestDeploymentContext extends LocalDeploymentContext {
+  constructor(private readonly claudeRoot: string) {
+    super();
+  }
+  override getClaudeRoot(_userId: string): string {
+    return this.claudeRoot;
+  }
+}
 
 // ─── JSONL Fixtures ───────────────────────────────────────────────────────────
 
@@ -159,10 +174,11 @@ describe('Session Integration', () => {
 
   beforeAll(() => {
     // Directory layout:
-    //   tmpDir/test-project/test-session-001.jsonl   (main session)
-    //   tmpDir/test-project/agent-sub1.jsonl          (legacy-structure subagent)
+    //   tmpDir/projects/test-project/test-session-001.jsonl   (main session)
+    //   tmpDir/projects/test-project/agent-sub1.jsonl          (legacy-structure subagent)
+    // Routes derive claudeProjectsDir as join(getClaudeRoot(userId), 'projects')
     tmpDir = mkdtempSync(join(tmpdir(), 'session-integration-'));
-    projectDir = join(tmpDir, 'test-project');
+    projectDir = join(tmpDir, 'projects', 'test-project');
     mkdirSync(projectDir, { recursive: true });
 
     writeFileSync(
@@ -240,7 +256,7 @@ describe('Session Integration', () => {
         logger: false,
         isDev: true,
         sessionPipeline: pipeline,
-        claudeProjectsDir: tmpDir,
+        deploymentContext: new TestDeploymentContext(tmpDir),
       });
       await app.ready();
     });
