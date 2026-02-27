@@ -45,12 +45,16 @@ export async function resolveSubagents(
   }
 
   // 4. Collect result-based links: toolUseResult.agentId on parent tool result messages
+  // The tool_use_id linking back to the Task tool_use block is in the tool_result
+  // content block (msg.toolResults[0]?.toolUseId), NOT in msg.sourceToolUseID which
+  // is not set on tool_result messages.
   const resultLinks = new Map<string, string>(); // agentId -> taskCallId
   for (const msg of parentMessages) {
-    if (msg.toolUseResult && msg.sourceToolUseID) {
+    if (msg.toolUseResult) {
       const agentId = msg.toolUseResult.agentId;
-      if (typeof agentId === 'string') {
-        resultLinks.set(agentId, msg.sourceToolUseID);
+      const toolUseId = msg.toolResults?.[0]?.toolUseId;
+      if (typeof agentId === 'string' && toolUseId) {
+        resultLinks.set(agentId, toolUseId);
       }
     }
   }
@@ -305,24 +309,21 @@ export function detectOngoing(messages: ParsedMessage[]): boolean {
  *
  * Returns null if the file cannot be parsed, is empty, or is a
  * filtered agent (warmup, compact).  This is a lightweight alternative
- * to the full `resolveSubagents` pipeline — it skips parallel detection
- * but does extract `parentTaskId` from the first user message's
- * `sourceToolUseID` so the client can link the Process to the correct
- * AI chunk during SSE merge.
+ * to the full `resolveSubagents` pipeline — it skips parallel detection.
+ *
+ * The caller can supply `parentTaskId` (the Task tool_use block ID from
+ * the parent session) to link this Process to the correct AI chunk.
+ * If not provided, the Process will have no parentTaskId and will fall
+ * back to timing-based linking on the client.
  */
 export async function buildProcessFromFile(
   filePath: string,
   agentId: string,
+  parentTaskId?: string,
 ): Promise<Process | null> {
   try {
     const { messages } = await parseSessionFile(filePath);
     if (isFilteredAgent(messages, agentId)) return null;
-
-    // Extract parentTaskId from the subagent's first user message.
-    // The first user message in a subagent file is the Task tool's
-    // instruction, and its sourceToolUseID is the Task tool_use block ID.
-    const firstUserMsg = messages.find((m) => m.type === 'user');
-    const parentTaskId = firstUserMsg?.sourceToolUseID;
 
     return buildProcess(
       { agentId, filePath, messages },
@@ -331,4 +332,28 @@ export async function buildProcessFromFile(
   } catch {
     return null;
   }
+}
+
+/**
+ * Scan a parent session's messages to find the Task tool_use_id that
+ * spawned a given subagent (identified by agentId).
+ *
+ * When a Task tool completes, Claude Code writes a tool_result user message
+ * with `toolUseResult.agentId` set to the subagent's agent ID and a
+ * `tool_result` content block whose `tool_use_id` references the original
+ * Task tool_use block.  This function finds that link.
+ *
+ * Returns the tool_use_id (parentTaskId) or undefined if not found.
+ */
+export function resolveParentTaskId(
+  parentMessages: ParsedMessage[],
+  agentId: string,
+): string | undefined {
+  for (const msg of parentMessages) {
+    if (msg.toolUseResult && msg.toolUseResult.agentId === agentId) {
+      const toolUseId = msg.toolResults?.[0]?.toolUseId;
+      if (toolUseId) return toolUseId;
+    }
+  }
+  return undefined;
 }

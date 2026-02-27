@@ -17,7 +17,7 @@ import { graphRoutes } from './routes/graph.js';
 import { sessionRoutes } from './routes/sessions.js';
 import { repoRoutes } from './routes/repos.js';
 import { eventRoutes, broadcastEvent } from './routes/events.js';
-import { buildProcessFromFile, calculateAgentMetrics, detectOngoing } from './services/subagent-resolver.js';
+import { buildProcessFromFile, calculateAgentMetrics, detectOngoing, resolveParentTaskId } from './services/subagent-resolver.js';
 import { parseSessionFile } from './services/session-parser.js';
 import type { Process } from './types/jsonl.js';
 
@@ -112,6 +112,9 @@ export async function createServer(
     }
     const subagentCache = new Map<string, CachedSubagent>();
 
+    // Cache agentId -> parentTaskId so we only scan the main session once per agent.
+    const parentTaskIdCache = new Map<string, string>();
+
     // Invalidate cache + incremental parse on file changes
     fw.on('file-change', (event: FileChangeEvent) => {
       // Debounce SSE broadcast per session to coalesce rapid changes
@@ -163,6 +166,23 @@ export async function createServer(
               const agentIdMatch = agentFilename.match(/^agent-(.+)\.jsonl$/);
               const agentId = agentIdMatch ? agentIdMatch[1] : event.sessionId;
 
+              // Resolve parentTaskId from the main session's messages.
+              // This links the subagent to the Task tool_use block that spawned it.
+              // Cached per agentId so we only scan the main session once per agent.
+              let parentTaskId = parentTaskIdCache.get(agentId);
+              if (!parentTaskId) {
+                try {
+                  const mainSessionPath = join(fullProjectDir, `${event.sessionId}.jsonl`);
+                  const { messages: parentMessages } = await parseSessionFile(mainSessionPath);
+                  parentTaskId = resolveParentTaskId(parentMessages, agentId);
+                  if (parentTaskId) {
+                    parentTaskIdCache.set(agentId, parentTaskId);
+                  }
+                } catch {
+                  // Main session parse failed — proceed without parentTaskId
+                }
+              }
+
               let subagentProcess: Process | null = null;
               try {
                 if (cached) {
@@ -183,6 +203,8 @@ export async function createServer(
                   const endTime = allMessages[allMessages.length - 1]?.timestamp ?? cached.process.endTime;
                   subagentProcess = {
                     ...cached.process,
+                    // Ensure parentTaskId is set (may have been resolved after initial cache)
+                    parentTaskId: cached.process.parentTaskId ?? parentTaskId,
                     messages: allMessages,
                     endTime,
                     durationMs: endTime.getTime() - cached.process.startTime.getTime(),
@@ -193,8 +215,8 @@ export async function createServer(
                   subagentCache.set(event.filePath, { process: subagentProcess, offset: newOffset });
                 } else {
                   // First time seeing this file — full parse via buildProcessFromFile
-                  // which handles filtering (warmup, compact, empty) and extracts parentTaskId.
-                  subagentProcess = await buildProcessFromFile(event.filePath, agentId);
+                  // which handles filtering (warmup, compact, empty).
+                  subagentProcess = await buildProcessFromFile(event.filePath, agentId, parentTaskId);
                   if (subagentProcess) {
                     subagentCache.set(event.filePath, { process: subagentProcess, offset: event.currentSize });
                   }
