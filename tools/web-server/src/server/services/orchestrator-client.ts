@@ -11,22 +11,38 @@ export interface SessionInfo {
   lastActivity: number;
 }
 
-interface WsMessage {
-  type: 'init' | 'session_registered' | 'session_status' | 'session_ended' | 'approval_requested' | 'question_requested' | 'approval_cancelled' | 'message_queued' | 'message_sent';
-  data: SessionInfo | SessionInfo[] | unknown;
-}
-
 // Discriminated union for inbound messages from orchestrator ws-server
 type InboundWsMessage =
   | { type: 'init'; data: SessionInfo[] }
   | { type: 'session_registered'; data: SessionInfo }
   | { type: 'session_status'; data: SessionInfo }
   | { type: 'session_ended'; data: SessionInfo }
-  | { type: 'approval_requested'; data: unknown }
-  | { type: 'question_requested'; data: unknown }
-  | { type: 'approval_cancelled'; data: unknown }
+  | { type: 'approval_requested'; data: PendingApprovalItem }
+  | { type: 'question_requested'; data: PendingQuestionItem }
+  | { type: 'approval_cancelled'; data: { requestId: string } }
   | { type: 'message_queued'; data: unknown }
   | { type: 'message_sent'; data: unknown };
+
+export interface PendingApprovalItem {
+  type: 'approval';
+  requestId: string;
+  stageId: string;
+  toolName: string;
+  input: unknown;
+  createdAt: number;
+}
+
+export interface PendingQuestionItem {
+  type: 'question';
+  requestId: string;
+  stageId: string;
+  questions: unknown[];
+  /** Raw input data from the AskUserQuestion tool call */
+  input: unknown;
+  createdAt: number;
+}
+
+export type PendingItem = PendingApprovalItem | PendingQuestionItem;
 
 export interface OrchestratorClientOptions {
   /** Delay in ms before attempting reconnection (default: 3000) */
@@ -36,6 +52,8 @@ export interface OrchestratorClientOptions {
 export class OrchestratorClient extends EventEmitter {
   private ws: WebSocket | null = null;
   private sessions = new Map<string, SessionInfo>();
+  private pendingApprovals = new Map<string, PendingApprovalItem[]>();
+  private pendingQuestions = new Map<string, PendingQuestionItem[]>();
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private url: string;
   private shouldConnect = false;
@@ -85,21 +103,22 @@ export class OrchestratorClient extends EventEmitter {
 
   approveTool(stageId: string, requestId: string, decision: 'allow' | 'deny', reason?: string): void {
     this.send({ type: 'approve_tool', stageId, requestId, decision, reason });
+    this.removePendingApproval(stageId, requestId);
   }
 
   answerQuestion(stageId: string, requestId: string, answers: Record<string, string>): void {
     this.send({ type: 'answer_question', stageId, requestId, answers });
+    this.removePendingQuestion(stageId, requestId);
   }
 
   interruptSession(stageId: string): void {
     this.send({ type: 'interrupt', stageId });
   }
 
-  getPendingForStage(_stageId: string): unknown[] {
-    // TODO: Implement by maintaining pending state from WS events.
-    // Currently returns empty array; the /api/sessions/:stageId/pending
-    // endpoint will always return { pending: [] } until this is wired.
-    return [];
+  getPendingForStage(stageId: string): PendingItem[] {
+    const approvals = this.pendingApprovals.get(stageId) ?? [];
+    const questions = this.pendingQuestions.get(stageId) ?? [];
+    return [...approvals, ...questions];
   }
 
   private send(data: unknown): void {
@@ -131,12 +150,70 @@ export class OrchestratorClient extends EventEmitter {
     this.reconnectTimer = setTimeout(() => this.tryConnect(), this.reconnectDelay);
   }
 
+  private trackApproval(item: PendingApprovalItem): void {
+    const list = this.pendingApprovals.get(item.stageId) ?? [];
+    if (list.some(a => a.requestId === item.requestId)) return;
+    list.push(item);
+    this.pendingApprovals.set(item.stageId, list);
+  }
+
+  private trackQuestion(item: PendingQuestionItem): void {
+    const list = this.pendingQuestions.get(item.stageId) ?? [];
+    if (list.some(q => q.requestId === item.requestId)) return;
+    list.push(item);
+    this.pendingQuestions.set(item.stageId, list);
+  }
+
+  private removePendingApproval(stageId: string, requestId: string): void {
+    const list = this.pendingApprovals.get(stageId);
+    if (!list) return;
+    const filtered = list.filter((a) => a.requestId !== requestId);
+    if (filtered.length === 0) {
+      this.pendingApprovals.delete(stageId);
+    } else {
+      this.pendingApprovals.set(stageId, filtered);
+    }
+  }
+
+  private removePendingQuestion(stageId: string, requestId: string): void {
+    const list = this.pendingQuestions.get(stageId);
+    if (!list) return;
+    const filtered = list.filter((q) => q.requestId !== requestId);
+    if (filtered.length === 0) {
+      this.pendingQuestions.delete(stageId);
+    } else {
+      this.pendingQuestions.set(stageId, filtered);
+    }
+  }
+
+  /**
+   * Remove a pending approval by requestId across all stages.
+   * Used for approval_cancelled events which don't include stageId.
+   */
+  private removePendingApprovalByRequestId(requestId: string): void {
+    for (const [stageId, list] of this.pendingApprovals) {
+      const filtered = list.filter((a) => a.requestId !== requestId);
+      if (filtered.length === 0) {
+        this.pendingApprovals.delete(stageId);
+      } else if (filtered.length !== list.length) {
+        this.pendingApprovals.set(stageId, filtered);
+      }
+    }
+  }
+
+  private clearPendingForStage(stageId: string): void {
+    this.pendingApprovals.delete(stageId);
+    this.pendingQuestions.delete(stageId);
+  }
+
   private handleMessage(raw: string): void {
     try {
       const msg = JSON.parse(raw) as InboundWsMessage;
       switch (msg.type) {
         case 'init':
           this.sessions.clear();
+          this.pendingApprovals.clear();
+          this.pendingQuestions.clear();
           for (const entry of msg.data) {
             this.sessions.set(entry.stageId, entry);
           }
@@ -152,15 +229,19 @@ export class OrchestratorClient extends EventEmitter {
           break;
         case 'session_ended':
           this.sessions.delete(msg.data.stageId);
+          this.clearPendingForStage(msg.data.stageId);
           this.emit('session-ended', msg.data);
           break;
         case 'approval_requested':
+          this.trackApproval(msg.data);
           this.emit('approval-requested', msg.data);
           break;
         case 'question_requested':
+          this.trackQuestion(msg.data);
           this.emit('question-requested', msg.data);
           break;
         case 'approval_cancelled':
+          this.removePendingApprovalByRequestId(msg.data.requestId);
           this.emit('approval-cancelled', msg.data);
           break;
         case 'message_queued':
