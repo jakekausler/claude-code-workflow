@@ -123,14 +123,24 @@ export async function createServer(
 
         void (async () => {
           try {
-            // Subagent files fall back to full refresh (incremental subagent
-            // parsing would require cross-file context we don't maintain yet)
-            if (event.isSubagent || !sessionPipeline) {
-              sessionPipeline?.invalidateSession(fullProjectDir, event.sessionId);
+            // No pipeline available — can't parse anything
+            if (!sessionPipeline) {
               broadcastEvent('session-update', {
                 projectId: event.projectId,
                 sessionId: event.sessionId,
                 type: 'full-refresh',
+              });
+              return;
+            }
+
+            // Subagent file changes: invalidate cache for next page load
+            // but do NOT broadcast full-refresh (which triggers a GET from every client)
+            if (event.isSubagent) {
+              sessionPipeline.invalidateSession(fullProjectDir, event.sessionId);
+              broadcastEvent('session-update', {
+                projectId: event.projectId,
+                sessionId: event.sessionId,
+                type: 'subagent-update',
               });
               return;
             }

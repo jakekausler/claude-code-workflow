@@ -5,7 +5,7 @@ import type { Chunk, SessionMetrics, Process } from '../types/session.js';
 export interface SSESessionUpdate {
   projectId: string;
   sessionId: string;
-  type: 'incremental' | 'full-refresh';
+  type: 'incremental' | 'full-refresh' | 'subagent-update';
   /** Only present when type === 'incremental' */
   newChunks?: Chunk[];
   metrics?: SessionMetrics;

@@ -46,7 +46,10 @@ export function SessionDetail() {
           queryKey: ['session', projectId, sessionId],
         });
       }
-      // Unknown event types are silently ignored (safe no-op)
+      // 'subagent-update' events are intentionally ignored — subagent file
+      // changes only affect subagent display data, and the server-side cache
+      // is already invalidated for the next full page load.
+      // Other unknown event types are silently ignored (safe no-op)
     },
     [queryClient, projectId, sessionId],
   );
