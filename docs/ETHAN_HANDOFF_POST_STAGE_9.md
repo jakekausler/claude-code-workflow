@@ -218,39 +218,196 @@ claude-code-workflow/
 └── IMPLEMENTATION_PLAN.md   # Stage 8-14 breakdown
 ```
 
-### Data Flow
+### Architecture Diagram (Including 10B/10C/10D)
 
+```mermaid
+graph TB
+    subgraph External["External Services"]
+        Jira["Jira<br/>(tickets, epics, comments)"]
+        GitHub["GitHub / GitLab<br/>(PRs, MRs, issues)"]
+        Slack["Slack<br/>(webhook notifications)"]
+    end
+
+    subgraph KanbanCLI["kanban-cli (Core Data Layer)"]
+        CLI["CLI Commands<br/>sync, board, next, graph, validate"]
+        SQLite["SQLite DB<br/>repos, epics, tickets, stages,<br/>dependencies, sessions"]
+        Parser["Frontmatter Parser<br/>Zod schemas for YAML"]
+        Sync["Sync Engine<br/>filesystem → DB"]
+        EpicFiles["Epic/Ticket/Stage Files<br/>YAML frontmatter + markdown"]
+    end
+
+    subgraph MCPServer["MCP Server"]
+        MCP["MCP Protocol Server<br/>Exposes kanban-cli as tools"]
+        MCPTools["Tools: Jira, Confluence,<br/>Slack, PR, Enrich"]
+    end
+
+    subgraph Orchestrator["Orchestrator (Stage Lifecycle)"]
+        Loop["Orchestration Loop<br/>Cron-based stage picker"]
+        Session["Session Manager<br/>Spawns Claude processes"]
+        ProtocolPeer["ProtocolPeer ⓑ<br/>stdin/stdout stream-JSON"]
+        ApprovalSvc["ApprovalService ⓑ<br/>Tool approval queue"]
+        MsgQueue["MessageQueue ⓑ<br/>Follow-up message buffer"]
+        WSServer["WebSocket Server ⓑ<br/>Browser relay"]
+        SessionRegistry["Session Registry ⓒ<br/>Active session tracking"]
+        Worktree["Worktree Manager<br/>Git worktree lifecycle"]
+        MRChain["MR Chain Manager<br/>Dependency chains"]
+        ExitGates["Exit Gates<br/>Phase completion checks"]
+    end
+
+    subgraph WebServer["Web Server (Fastify Backend)"]
+        subgraph Deployment["DeploymentContext ⓓ"]
+            DeployCtx["DeploymentContext Interface ⓓ"]
+            FSProvider["FileSystemProvider ⓓ<br/>DirectFS (local) / Scoped (hosted)"]
+            AuthProvider["AuthProvider ⓓ<br/>Noop (local) / OAuth+JWT (hosted)"]
+            EventBcast["EventBroadcaster ⓓ<br/>BroadcastAll (local) / UserScoped (hosted)"]
+        end
+        Routes["REST API Routes<br/>board, epics, tickets, stages,<br/>sessions, events, interaction ⓑ,<br/>orchestrator ⓒ"]
+        OrcClient["OrchestratorClient<br/>WebSocket → Orchestrator"]
+        SessionPipe["SessionPipeline<br/>JSONL → chunks + context + pricing"]
+        FileWatcher["FileWatcher<br/>~/.claude/projects → SSE"]
+        DataService["DataService<br/>kanban-cli integration"]
+    end
+
+    subgraph Browser["React SPA (Browser)"]
+        Dashboard["Dashboard<br/>Stats + Activity Feed ⓒ"]
+        Board["Kanban Board<br/>Epic/Ticket/Stage pipelines"]
+        BoardCards["BoardCards<br/>SessionStatusIndicator ⓒ"]
+        Drawers["Detail Drawers<br/>Stage/Ticket/Epic + Session tabs"]
+        SessionViewer["Session Viewer<br/>Chunks, tools, subagent trees"]
+        InteractionUI["Interaction Overlay ⓑ<br/>ApprovalDialog, MessageInput,<br/>QuestionAnswerForm"]
+        LiveSection["LiveSessionSection ⓒ<br/>In-drawer session status"]
+        Stores["Zustand Stores<br/>board, session, drawer,<br/>interaction ⓑ, settings"]
+        SSEClient["SSE Client<br/>useSSE + useSessionMap ⓒ"]
+    end
+
+    subgraph Claude["Claude Sessions"]
+        ClaudeProc["Claude Process<br/>--input-format stream-json<br/>--output-format stream-json"]
+        Agents["Agents (16)<br/>planner, tester, debugger, etc."]
+        Skills["Skills (11)<br/>phase-design, phase-build, etc."]
+        JSONL["Session JSONL Files<br/>~/.claude/projects/*/"]
+    end
+
+    %% Data flow
+    Jira -->|"API sync"| KanbanCLI
+    GitHub -->|"PR/MR API"| Orchestrator
+    Slack <--|"Webhook"| Orchestrator
+
+    EpicFiles <-->|"read/write"| Sync
+    Sync --> SQLite
+    CLI --> SQLite
+
+    MCP --> CLI
+    MCPTools --> Jira
+    MCPTools --> Slack
+
+    Loop -->|"picks stages"| SQLite
+    Loop -->|"spawns"| Session
+    Session -->|"stdin/stdout ⓑ"| ProtocolPeer
+    ProtocolPeer <-->|"stream-JSON ⓑ"| ClaudeProc
+    ApprovalSvc -->|"queues approvals ⓑ"| WSServer
+    MsgQueue -->|"buffers messages ⓑ"| Session
+    Session -->|"registers ⓒ"| SessionRegistry
+    SessionRegistry -->|"status events ⓒ"| WSServer
+    Worktree -->|"creates branches"| Session
+    ExitGates -->|"phase checks"| Loop
+
+    OrcClient <-->|"WebSocket"| WSServer
+    Routes --> DataService
+    DataService --> CLI
+    Routes -->|"interaction ⓑ"| OrcClient
+    Routes -->|"session map ⓒ"| OrcClient
+    FileWatcher -->|"JSONL changes"| EventBcast
+    SessionPipe -->|"reads via ⓓ"| FSProvider
+    EventBcast -->|"SSE"| SSEClient
+    Routes -->|"auth check ⓓ"| AuthProvider
+
+    SSEClient --> Dashboard
+    SSEClient --> BoardCards
+    SSEClient --> LiveSection
+    Board --> BoardCards
+    BoardCards --> Drawers
+    Drawers --> SessionViewer
+    Drawers --> LiveSection
+    Drawers --> InteractionUI
+    InteractionUI -->|"POST /api/sessions/:id/* ⓑ"| Routes
+
+    ClaudeProc --> Agents
+    ClaudeProc --> Skills
+    ClaudeProc -->|"writes"| JSONL
+    JSONL -->|"watched by"| FileWatcher
+
+    %% Styling
+    classDef stageB fill:#e8f4f8,stroke:#2196F3
+    classDef stageC fill:#f3e8f4,stroke:#9C27B0
+    classDef stageD fill:#e8f4e8,stroke:#4CAF50
+
+    class ProtocolPeer,ApprovalSvc,MsgQueue,WSServer,InteractionUI stageB
+    class SessionRegistry,BoardCards,LiveSection,Dashboard stageC
+    class DeployCtx,FSProvider,AuthProvider,EventBcast stageD
 ```
-                  ┌──────────────┐
-                  │   Jira/GH/GL │  External issue sources
-                  └──────┬───────┘
-                         │ sync
-                  ┌──────▼───────┐
-                  │  kanban-cli  │  SQLite DB + frontmatter files
-                  └──────┬───────┘
-                    ┌────┴────┐
-              ┌─────▼──┐  ┌──▼────────┐
-              │  MCP    │  │ web-server│  Fastify + React
-              │ server  │  └──┬────┬──┘
-              └────┬────┘     │    │
-                   │      SSE │    │ WebSocket
-              ┌────▼────┐     │    │
-              │orchestr- │◄───┘    │
-              │  ator    │◄────────┘
-              └────┬────┘
-                   │ spawns
-              ┌────▼────┐
-              │ Claude   │  Sessions with agents + skills
-              │ sessions │
-              └──────────┘
-```
+
+**Legend**: ⓑ = Stage 10B (bidirectional interaction), ⓒ = Stage 10C (live session status), ⓓ = Stage 10D (deployment abstraction)
+
+### Architecture Notes
+
+#### Data Flow: Two Paths
+
+The system has two distinct data paths:
+
+1. **Display Path** (read-only, SSE-driven): Claude writes to JSONL files → FileWatcher detects changes → SessionPipeline parses JSONL into chunks/context/pricing → SSE broadcasts to browser → React re-renders session viewer. This is the Stage 9 path and works now (with some lag).
+
+2. **Interaction Path** (bidirectional, WebSocket-driven): Browser sends user input → REST endpoint → OrchestratorClient → WebSocket → Orchestrator WSServer → ApprovalService/MessageQueue → ProtocolPeer → Claude stdin (stream-JSON). Claude responds via stdout → ProtocolPeer → session events. This is the Stage 10B path and is written but untested.
+
+#### Orchestrator Lifecycle
+
+The orchestrator runs a cron loop (`loop.ts`) that:
+1. Queries kanban-cli for the next workable stage (`next` command)
+2. Creates a git worktree for the stage (`worktree.ts`)
+3. Spawns a Claude process with `--input-format=stream-json --output-format=stream-json` (`session.ts`)
+4. Communicates via ProtocolPeer over stdin/stdout (`protocol-peer.ts`) [10B]
+5. Registers the session in SessionRegistry and broadcasts status via WS (`session-registry.ts`) [10C]
+6. Checks exit gates to determine when a phase is complete (`exit-gates.ts`)
+7. Transitions the stage to the next phase (Design → Build → Refinement → Finalize)
+8. Creates MRs and handles MR comment polling at the end (`mr-chain-manager.ts`, `mr-comment-poller.ts`)
+
+#### Deployment Abstraction (10D)
+
+All I/O is abstracted behind interfaces so the same codebase works in local and hosted modes:
+
+| Interface | Local Implementation | Hosted Implementation (future) |
+|-----------|---------------------|-------------------------------|
+| `FileSystemProvider` | `DirectFileSystemProvider` — pass-through to Node fs | `ScopedFileSystemProvider` — restricts to user's home dir |
+| `AuthProvider` | `NoopAuthProvider` — allows everything | GitHub OAuth + JWT with refresh token rotation |
+| `EventBroadcaster` | `BroadcastAllSSE` — sends to all clients | `UserScopedSSE` — per-user channels |
+| `DeploymentContext` | `LocalDeploymentContext` — wires the above | `HostedDeploymentContext` — PostgreSQL + Docker |
+
+#### Real-Time Communication Stack
+
+| Channel | Direction | Purpose |
+|---------|-----------|---------|
+| **SSE** (Server-Sent Events) | Server → Browser | Session JSONL updates, board changes, session status [10C] |
+| **WebSocket** (Orchestrator ↔ Web Server) | Bidirectional | Session lifecycle events, approval requests, user messages [10B] |
+| **stream-JSON** (stdin/stdout) | Orchestrator ↔ Claude | Tool approvals, user messages, control requests [10B] |
+| **REST** | Browser → Server | CRUD operations, interaction endpoints [10B] |
+
+#### State Management
+
+| Store | Scope | What It Holds |
+|-------|-------|--------------|
+| `board-store` | Global | Board data, filters, selected pipeline |
+| `session-store` | Global | Current session data, chunks, context |
+| `drawer-store` | Global | Open drawer state, selected entity |
+| `drawer-session-store` | Per-drawer | Session within a drawer (multi-session history) |
+| `interaction-store` | Global | Pending approvals and questions [10B] |
+| `settings-store` | Global | User preferences (theme, display options) |
+| `sidebar-store` | Global | Sidebar open/collapsed state |
 
 ### Key Technologies
 - **Backend**: Node.js, TypeScript, Fastify, WebSocket, Commander.js
 - **Frontend**: React 19, Vite, TailwindCSS, Zustand, TanStack React Query, React Router
 - **Database**: better-sqlite3 (local), PostgreSQL planned (hosted)
 - **Testing**: Vitest (888+ tests in kanban-cli, 46+ in web-server)
-- **Real-time**: SSE (server → client), WebSocket (orchestrator ↔ web-server)
+- **Real-time**: SSE (server → client), WebSocket (orchestrator ↔ web-server), stream-JSON (orchestrator ↔ Claude)
 - **Integrations**: Jira, Confluence, Slack, GitHub/GitLab APIs
 
 ### npm Scripts (per tool)
