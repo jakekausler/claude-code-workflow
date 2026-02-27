@@ -96,4 +96,29 @@ describe('BroadcastAllSSE', () => {
     expect(writeCall).toBeDefined();
     expect(writeCall[0]).toBe('event: my-event\ndata: {"key":"value"}\n\n');
   });
+
+  it('removes client on socket close', () => {
+    const reply = createMockReply();
+    broadcaster.addClient(reply);
+    // Find and invoke the close handler
+    const closeCall = reply.raw.on.mock.calls.find(
+      (call: any[]) => call[0] === 'close'
+    );
+    expect(closeCall).toBeDefined();
+    closeCall[1](); // invoke the close handler
+    // Client should be removed — broadcast should not write
+    reply.raw.write.mockClear();
+    broadcaster.broadcast('test', { data: 1 });
+    expect(reply.raw.write).not.toHaveBeenCalled();
+  });
+
+  it('sanitizes newlines in event names', () => {
+    const reply = createMockReply();
+    broadcaster.addClient(reply);
+    broadcaster.broadcast('bad\nevent\r', { data: 1 });
+    const writeCall = reply.raw.write.mock.calls.find(
+      (call: any[]) => typeof call[0] === 'string' && call[0].includes('event:')
+    );
+    expect(writeCall[0]).toBe('event: badevent\ndata: {"data":1}\n\n');
+  });
 });

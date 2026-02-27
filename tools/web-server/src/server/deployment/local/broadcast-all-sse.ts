@@ -21,16 +21,21 @@ export class BroadcastAllSSE implements EventBroadcaster {
   }
 
   broadcast(event: string, data: unknown, _scope?: { userId?: string }): void {
-    const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+    const safeEvent = event.replace(/[\n\r]/g, '');
+    const payload = `event: ${safeEvent}\ndata: ${JSON.stringify(data)}\n\n`;
+    const dead: FastifyReply[] = [];
     for (const client of this.clients) {
       try {
         const ok = client.raw.write(payload);
         if (!ok) {
-          this.clients.delete(client);
+          dead.push(client);
         }
       } catch {
-        this.clients.delete(client);
+        dead.push(client);
       }
+    }
+    for (const client of dead) {
+      this.clients.delete(client);
     }
   }
 }
