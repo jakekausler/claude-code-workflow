@@ -8,7 +8,7 @@ import type {
   EnhancedAIChunk,
   Process,
 } from '../types/jsonl.js';
-import { parseSessionFile } from './session-parser.js';
+import { parseSessionFile, deduplicateByRequestId } from './session-parser.js';
 import { buildToolExecutions } from './tool-execution-builder.js';
 import { buildChunks, extractSemanticSteps } from './chunk-builder.js';
 import { resolveSubagents } from './subagent-resolver.js';
@@ -36,7 +36,8 @@ export class SessionPipeline {
     if (cached) return cached;
 
     const filePath = join(projectDir, `${sessionId}.jsonl`);
-    const { messages } = await parseSessionFile(filePath);
+    let { messages } = await parseSessionFile(filePath);
+    messages = deduplicateByRequestId(messages);
     const toolExecutions = buildToolExecutions(messages);
     const chunks = buildChunks(messages);
 

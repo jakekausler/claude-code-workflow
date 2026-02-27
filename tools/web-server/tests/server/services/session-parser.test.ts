@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { join } from 'path';
-import { parseJsonlLine, parseSessionFile } from '../../../src/server/services/session-parser.js';
+import { parseJsonlLine, parseSessionFile, deduplicateByRequestId } from '../../../src/server/services/session-parser.js';
+import type { ParsedMessage } from '../../../src/server/types/jsonl.js';
 
 const fixturesDir = join(import.meta.dirname, '../../fixtures');
 
@@ -392,6 +393,154 @@ describe('SessionParser', () => {
       expect(parseJsonlLine('')).toBeNull();
       expect(parseJsonlLine('  ')).toBeNull();
       expect(parseJsonlLine('\t')).toBeNull();
+    });
+
+    it('captures requestId from assistant entries', () => {
+      const line = JSON.stringify({
+        type: 'assistant',
+        uuid: 'a1',
+        parentUuid: 'u1',
+        isSidechain: false,
+        userType: 'external',
+        cwd: '/project',
+        sessionId: 's1',
+        version: '2.1.56',
+        gitBranch: 'main',
+        message: {
+          model: 'claude-sonnet-4-6',
+          id: 'msg_01',
+          type: 'message',
+          role: 'assistant',
+          content: [{ type: 'text', text: 'Hello!' }],
+          stop_reason: 'end_turn',
+          stop_sequence: null,
+          usage: { input_tokens: 100, output_tokens: 20 },
+        },
+        requestId: 'req_abc123',
+        timestamp: '2026-02-25T10:00:01.000Z',
+      });
+
+      const msg = parseJsonlLine(line);
+      expect(msg).not.toBeNull();
+      expect(msg!.requestId).toBe('req_abc123');
+    });
+
+    it('returns undefined requestId for user entries', () => {
+      const line = JSON.stringify({
+        type: 'user',
+        uuid: 'u1',
+        parentUuid: null,
+        isSidechain: false,
+        userType: 'external',
+        cwd: '/project',
+        sessionId: 's1',
+        version: '2.1.56',
+        gitBranch: 'main',
+        message: { role: 'user', content: 'Hello' },
+        timestamp: '2026-02-25T10:00:00.000Z',
+      });
+
+      const msg = parseJsonlLine(line);
+      expect(msg).not.toBeNull();
+      expect(msg!.requestId).toBeUndefined();
+    });
+  });
+
+  // ─── deduplicateByRequestId ─────────────────────────────────────────────────
+
+  describe('deduplicateByRequestId', () => {
+    function makeParsedMessage(overrides: Partial<ParsedMessage> & { uuid: string }): ParsedMessage {
+      return {
+        parentUuid: null,
+        type: 'assistant',
+        timestamp: new Date('2026-02-25T10:00:00.000Z'),
+        content: [],
+        isSidechain: false,
+        isMeta: false,
+        toolCalls: [],
+        toolResults: [],
+        ...overrides,
+      };
+    }
+
+    it('keeps only the last entry per requestId', () => {
+      const messages: ParsedMessage[] = [
+        makeParsedMessage({ uuid: 'a1', requestId: 'req_1', content: [{ type: 'text', text: 'partial' }] }),
+        makeParsedMessage({ uuid: 'a2', requestId: 'req_1', content: [{ type: 'text', text: 'partial more' }] }),
+        makeParsedMessage({ uuid: 'a3', requestId: 'req_1', content: [{ type: 'text', text: 'complete' }] }),
+      ];
+
+      const result = deduplicateByRequestId(messages);
+      expect(result).toHaveLength(1);
+      expect(result[0].uuid).toBe('a3');
+    });
+
+    it('keeps messages without requestId', () => {
+      const messages: ParsedMessage[] = [
+        makeParsedMessage({ uuid: 'u1', type: 'user', content: 'Hello' }),
+        makeParsedMessage({ uuid: 'a1', requestId: 'req_1', content: [{ type: 'text', text: 'response' }] }),
+        makeParsedMessage({ uuid: 'u2', type: 'user', content: 'Follow up' }),
+      ];
+
+      const result = deduplicateByRequestId(messages);
+      expect(result).toHaveLength(3);
+      expect(result.map(m => m.uuid)).toEqual(['u1', 'a1', 'u2']);
+    });
+
+    it('preserves order of remaining messages', () => {
+      const messages: ParsedMessage[] = [
+        makeParsedMessage({ uuid: 'u1', type: 'user', content: 'Q1' }),
+        makeParsedMessage({ uuid: 'a1-stream1', requestId: 'req_1', content: [{ type: 'text', text: 'partial' }] }),
+        makeParsedMessage({ uuid: 'a1-stream2', requestId: 'req_1', content: [{ type: 'text', text: 'complete' }] }),
+        makeParsedMessage({ uuid: 'u2', type: 'user', content: 'Q2' }),
+        makeParsedMessage({ uuid: 'a2-stream1', requestId: 'req_2', content: [{ type: 'text', text: 'partial' }] }),
+        makeParsedMessage({ uuid: 'a2-stream2', requestId: 'req_2', content: [{ type: 'text', text: 'complete' }] }),
+      ];
+
+      const result = deduplicateByRequestId(messages);
+      expect(result).toHaveLength(4);
+      expect(result.map(m => m.uuid)).toEqual(['u1', 'a1-stream2', 'u2', 'a2-stream2']);
+    });
+
+    it('handles a mix of streaming and non-streaming entries', () => {
+      const messages: ParsedMessage[] = [
+        makeParsedMessage({ uuid: 'u1', type: 'user', content: 'Hello' }),
+        makeParsedMessage({ uuid: 'a1-s1', requestId: 'req_1', content: [{ type: 'text', text: 'chunk1' }] }),
+        makeParsedMessage({ uuid: 'a1-s2', requestId: 'req_1', content: [{ type: 'text', text: 'chunk1 chunk2' }] }),
+        makeParsedMessage({ uuid: 'a1-s3', requestId: 'req_1', content: [{ type: 'text', text: 'chunk1 chunk2 chunk3' }] }),
+        makeParsedMessage({ uuid: 'tr1', type: 'user', isMeta: true, content: 'tool result' }),
+        makeParsedMessage({ uuid: 'a2', requestId: 'req_2', content: [{ type: 'text', text: 'single response' }] }),
+        makeParsedMessage({ uuid: 'sys1', type: 'system', isMeta: true, content: '' }),
+      ];
+
+      const result = deduplicateByRequestId(messages);
+      expect(result).toHaveLength(5);
+      expect(result.map(m => m.uuid)).toEqual(['u1', 'a1-s3', 'tr1', 'a2', 'sys1']);
+    });
+
+    it('returns empty array for empty input', () => {
+      expect(deduplicateByRequestId([])).toEqual([]);
+    });
+
+    it('handles all messages without requestId (no-op)', () => {
+      const messages: ParsedMessage[] = [
+        makeParsedMessage({ uuid: 'u1', type: 'user', content: 'Hello' }),
+        makeParsedMessage({ uuid: 'u2', type: 'user', content: 'World' }),
+      ];
+
+      const result = deduplicateByRequestId(messages);
+      expect(result).toHaveLength(2);
+      expect(result.map(m => m.uuid)).toEqual(['u1', 'u2']);
+    });
+
+    it('handles single streaming entry per requestId (keeps it)', () => {
+      const messages: ParsedMessage[] = [
+        makeParsedMessage({ uuid: 'a1', requestId: 'req_1', content: [{ type: 'text', text: 'only entry' }] }),
+      ];
+
+      const result = deduplicateByRequestId(messages);
+      expect(result).toHaveLength(1);
+      expect(result[0].uuid).toBe('a1');
     });
   });
 

@@ -183,6 +183,7 @@ export interface ParsedMessage {
   sourceToolAssistantUUID?: string;
   toolUseResult?: Record<string, unknown>;
   isCompactSummary?: boolean;
+  requestId?: string;
 }
 
 export interface ToolCall {

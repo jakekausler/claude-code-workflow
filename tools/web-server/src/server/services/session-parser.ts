@@ -112,6 +112,7 @@ export function parseJsonlLine(line: string): ParsedMessage | null {
   const sourceToolUseID = raw.sourceToolUseID as string | undefined;
   const sourceToolAssistantUUID = raw.sourceToolAssistantUUID as string | undefined;
   const toolUseResult = raw.toolUseResult as Record<string, unknown> | undefined;
+  const requestId = raw.requestId as string | undefined;
 
   // Determine isMeta
   let isMeta = (raw.isMeta as boolean) ?? false;
@@ -227,7 +228,33 @@ export function parseJsonlLine(line: string): ParsedMessage | null {
     sourceToolAssistantUUID,
     toolUseResult,
     isCompactSummary,
+    requestId,
   };
+}
+
+/**
+ * Deduplicate messages by requestId, keeping only the last occurrence.
+ *
+ * Claude Code writes multiple JSONL entries per API response during streaming.
+ * Each successive entry with the same requestId is a superset of the previous
+ * (contains the full content so far). This mirrors devtools' deduplication
+ * strategy: keep only the final (most complete) entry for each requestId.
+ *
+ * Messages without a requestId are always kept.
+ */
+export function deduplicateByRequestId(messages: ParsedMessage[]): ParsedMessage[] {
+  const lastIndexByRequestId = new Map<string, number>();
+  for (let i = 0; i < messages.length; i++) {
+    const rid = messages[i].requestId;
+    if (rid) {
+      lastIndexByRequestId.set(rid, i);
+    }
+  }
+
+  return messages.filter((msg, i) => {
+    if (!msg.requestId) return true;
+    return lastIndexByRequestId.get(msg.requestId) === i;
+  });
 }
 
 function extractToolCalls(content: ContentBlock[]): ToolCall[] {
