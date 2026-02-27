@@ -239,8 +239,9 @@ function linkSubagentsToChunks(chunks: Chunk[], subagents: Process[]): void {
       }
     }
 
-    // Primary linking: match by parentTaskId
+    // Primary linking: match by parentTaskId (skip already-linked to prevent duplicates)
     for (const subagent of subagents) {
+      if (linkedSubagentIds.has(subagent.id)) continue;
       if (subagent.parentTaskId && chunkTaskIds.has(subagent.parentTaskId)) {
         enhanced.subagents.push(subagent);
         linkedSubagentIds.add(subagent.id);

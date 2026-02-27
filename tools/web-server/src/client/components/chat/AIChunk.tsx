@@ -223,8 +223,10 @@ function AIStepRenderer({
       return null;
 
     case 'subagent': {
+      // step.subagentId is the tool_use block ID; process.id is the agent filename ID.
+      // Match via parentTaskId (the link between them) or direct id match.
       const matchedProcess = step.subagentId
-        ? subagents.find((p) => p.id === step.subagentId)
+        ? subagents.find((p) => p.id === step.subagentId || p.parentTaskId === step.subagentId)
         : undefined;
       if (matchedProcess) {
         return <SubagentItem process={matchedProcess} />;

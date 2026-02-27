@@ -107,6 +107,21 @@ function rehydrateProcessDates(process: Process): Process {
   return { ...process, startTime, endTime, messages };
 }
 
+// ─── Process deduplication ───────────────────────────────────────────────────
+
+/**
+ * Deduplicate Process arrays by id, keeping the last occurrence (most recent data).
+ * This prevents key collisions when boundary-merging AI chunks that both contain
+ * the same subagent (e.g., incremental updates re-resolving an existing agent).
+ */
+function deduplicateProcesses(processes: Process[]): Process[] {
+  const seen = new Map<string, Process>();
+  for (const p of processes) {
+    seen.set(p.id, p); // later entries overwrite earlier — keeps freshest data
+  }
+  return Array.from(seen.values());
+}
+
 // ─── Boundary chunk merging ───────────────────────────────────────────────────
 
 /**
@@ -140,10 +155,10 @@ function mergeBoundaryChunks(
         ],
       }),
       ...((existingEnhanced.subagents || newEnhanced.subagents) && {
-        subagents: [
+        subagents: deduplicateProcesses([
           ...(existingEnhanced.subagents ?? []),
           ...(newEnhanced.subagents ?? []),
-        ],
+        ]),
       }),
     };
 
@@ -207,6 +222,15 @@ export function mergeSubagentUpdate<T extends MergeableSession>(
   if (!process) return existing;
 
   const rehydrated = rehydrateProcessDates(process);
+
+  console.log('[SSE-DEBUG] mergeSubagentUpdate:', {
+    processId: rehydrated.id,
+    numMessages: rehydrated.messages?.length ?? 0,
+    existingChunkSubagents: existing.chunks
+      .filter(c => c.type === 'ai' && 'subagents' in c)
+      .map(c => (c as any).subagents?.map((s: any) => ({ id: s.id, numMsgs: s.messages?.length })))
+      .flat(),
+  });
 
   // 1. Update chunk-level subagents — find the AI chunk containing this subagent
   let chunksChanged = false;

@@ -56,6 +56,11 @@ export function buildDisplayItems(
 
   const items: AIGroupDisplayItem[] = [];
 
+  // Track which process IDs have been added to prevent duplicate subagent display items.
+  // Duplicates can occur when boundary-merging AI chunks or when multiple semantic steps
+  // reference the same subagent.
+  const addedProcessIds = new Set<string>();
+
   for (let i = 0; i < steps.length; i++) {
     const step = steps[i];
 
@@ -99,7 +104,8 @@ export function buildDisplayItems(
         const process = processes.find(
           (p) => p.id === step.subagentId || p.parentTaskId === step.subagentId,
         );
-        if (process) {
+        if (process && !addedProcessIds.has(process.id)) {
+          addedProcessIds.add(process.id);
           items.push({ type: 'subagent', subagent: process });
         }
         break;
@@ -297,9 +303,13 @@ export function buildDisplayItemsFromMessages(
     items.push({ type: 'tool', tool: linked });
   }
 
-  // Add subagent display items
+  // Add subagent display items (deduplicate by id to prevent key collisions)
+  const seenProcessIds = new Set<string>();
   for (const proc of processes) {
-    items.push({ type: 'subagent', subagent: proc });
+    if (!seenProcessIds.has(proc.id)) {
+      seenProcessIds.add(proc.id);
+      items.push({ type: 'subagent', subagent: proc });
+    }
   }
 
   // Assign phase numbers to compact boundaries
