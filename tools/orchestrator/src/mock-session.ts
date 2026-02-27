@@ -2,6 +2,8 @@ import type { SessionExecutor, SpawnOptions, SessionResult, ActiveSession, Sessi
 import type { LockerDeps } from './locking.js';
 import type { PipelineConfig } from 'kanban-cli';
 import { DONE_TARGET, COMPLETE_STATUS } from 'kanban-cli';
+import { ApprovalService } from './approval-service.js';
+import { MessageQueue } from './message-queue.js';
 
 /**
  * Injectable dependencies for the mock session executor.
@@ -75,6 +77,22 @@ export function createMockSessionExecutor(deps: MockSessionDeps): SessionExecuto
 
     killAll(): void {
       // no-op
+    },
+
+    getPeer(_stageId: string) {
+      return undefined;
+    },
+
+    getApprovalService() {
+      return new ApprovalService();
+    },
+
+    getMessageQueue() {
+      return new MessageQueue();
+    },
+
+    buildSpawnArgs(_opts: { model: string; resumeSessionId?: string }) {
+      return [];
     },
   };
 }

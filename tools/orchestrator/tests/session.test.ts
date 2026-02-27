@@ -192,7 +192,7 @@ describe('createSessionExecutor', () => {
 
       expect(deps.spawnProcess).toHaveBeenCalledWith(
         'claude',
-        ['-p', '--model', 'sonnet', '--output-format', 'stream-json', '--input-format', 'stream-json', '--verbose'],
+        ['-p', '--model', 'sonnet', '--output-format', 'stream-json', '--input-format', 'stream-json', '--permission-prompt-tool=stdio', '--verbose'],
         expect.objectContaining({
           cwd: options.worktreePath,
           stdio: ['pipe', 'pipe', 'pipe'],
@@ -265,7 +265,9 @@ describe('createSessionExecutor', () => {
       expect(mock.stdinWrite).toHaveBeenCalledTimes(1);
       const writtenPrompt = mock.stdinWrite.mock.calls[0][0] as string;
       expect(writtenPrompt).toContain('STAGE-001-001-001');
-      expect(mock.stdinEnd).toHaveBeenCalledTimes(1);
+      expect(writtenPrompt).toMatch(/\n$/);
+      // stdin.end() is NOT called — ProtocolPeer needs stdin open for bidirectional communication
+      expect(mock.stdinEnd).not.toHaveBeenCalled();
     });
 
     it('pipes stdout to session logger', async () => {

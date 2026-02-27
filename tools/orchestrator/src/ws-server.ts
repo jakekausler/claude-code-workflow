@@ -1,14 +1,27 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import type { SessionRegistry, SessionEntry } from './session-registry.js';
+import type { ApprovalService } from './approval-service.js';
 
 export interface WsMessage {
-  type: 'init' | 'session_registered' | 'session_status' | 'session_ended';
-  data: SessionEntry | SessionEntry[];
+  type: 'init' | 'session_registered' | 'session_status' | 'session_ended' | 'approval_requested' | 'question_requested' | 'approval_cancelled';
+  data: SessionEntry | SessionEntry[] | unknown;
 }
+
+// Discriminated union for inbound messages from web server clients
+export type InboundWsMessage =
+  | { type: 'send_message'; stageId: string; message: string }
+  | { type: 'approve_tool'; stageId: string; requestId: string; decision: 'allow' | 'deny'; reason?: string }
+  | { type: 'answer_question'; stageId: string; requestId: string; answers: Record<string, string> }
+  | { type: 'interrupt'; stageId: string };
 
 export interface WsServerOptions {
   port: number;
   registry: SessionRegistry;
+  approvalService?: ApprovalService;
+  onSendMessage?: (stageId: string, message: string) => void;
+  onApproveTool?: (stageId: string, requestId: string, decision: 'allow' | 'deny', reason?: string) => void;
+  onAnswerQuestion?: (stageId: string, requestId: string, answers: Record<string, string>) => void;
+  onInterrupt?: (stageId: string) => void;
 }
 
 export interface WsServerHandle {
@@ -17,7 +30,7 @@ export interface WsServerHandle {
 }
 
 export function createWsServer(options: WsServerOptions): WsServerHandle {
-  const { port, registry } = options;
+  const { port, registry, approvalService, onSendMessage, onApproveTool, onAnswerQuestion, onInterrupt } = options;
   let wss: WebSocketServer | null = null;
 
   function broadcast(msg: WsMessage): void {
@@ -38,6 +51,12 @@ export function createWsServer(options: WsServerOptions): WsServerHandle {
       broadcast({ type: 'session_status', data: entry }),
     ended: (entry: SessionEntry) =>
       broadcast({ type: 'session_ended', data: entry }),
+    approvalRequested: (entry: unknown) =>
+      broadcast({ type: 'approval_requested', data: entry }),
+    questionRequested: (entry: unknown) =>
+      broadcast({ type: 'question_requested', data: entry }),
+    approvalCancelled: (requestId: string) =>
+      broadcast({ type: 'approval_cancelled', data: { requestId } }),
   };
 
   async function start(): Promise<{ port: number }> {
@@ -54,12 +73,43 @@ export function createWsServer(options: WsServerOptions): WsServerHandle {
         data: registry.getAll(),
       };
       ws.send(JSON.stringify(initMsg));
+
+      // Handle inbound messages from web server clients
+      ws.on('message', (raw) => {
+        try {
+          const msg = JSON.parse(raw.toString()) as InboundWsMessage;
+          switch (msg.type) {
+            case 'send_message':
+              onSendMessage?.(msg.stageId, msg.message);
+              break;
+            case 'approve_tool':
+              onApproveTool?.(msg.stageId, msg.requestId, msg.decision, msg.reason);
+              break;
+            case 'answer_question':
+              onAnswerQuestion?.(msg.stageId, msg.requestId, msg.answers);
+              break;
+            case 'interrupt':
+              onInterrupt?.(msg.stageId);
+              break;
+          }
+        } catch {
+          // Silently ignore malformed messages from the web server client.
+          // This prevents a single bad message from breaking the message handler.
+        }
+      });
     });
 
     // Forward registry events as broadcasts
     registry.on('session-registered', listeners.registered);
     registry.on('session-status', listeners.status);
     registry.on('session-ended', listeners.ended);
+
+    // Forward ApprovalService events as broadcasts
+    if (approvalService) {
+      approvalService.on('approval-requested', listeners.approvalRequested);
+      approvalService.on('question-requested', listeners.questionRequested);
+      approvalService.on('approval-cancelled', listeners.approvalCancelled);
+    }
 
     const addr = wss.address();
     const actualPort = typeof addr === 'object' && addr !== null ? addr.port : port;
@@ -71,6 +121,12 @@ export function createWsServer(options: WsServerOptions): WsServerHandle {
     registry.removeListener('session-registered', listeners.registered);
     registry.removeListener('session-status', listeners.status);
     registry.removeListener('session-ended', listeners.ended);
+
+    if (approvalService) {
+      approvalService.removeListener('approval-requested', listeners.approvalRequested);
+      approvalService.removeListener('question-requested', listeners.questionRequested);
+      approvalService.removeListener('approval-cancelled', listeners.approvalCancelled);
+    }
 
     if (!wss) return;
     // Close all connected clients

@@ -17,6 +17,7 @@ import { graphRoutes } from './routes/graph.js';
 import { sessionRoutes } from './routes/sessions.js';
 import { repoRoutes } from './routes/repos.js';
 import { eventRoutes, broadcastEvent } from './routes/events.js';
+import { interactionRoutes } from './routes/interaction.js';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -146,6 +147,26 @@ export async function createServer(
         stageId: entry.stageId,
       });
     });
+
+    oc.on('approval-requested', (data) => {
+      broadcastEvent('approval-requested', data);
+    });
+
+    oc.on('question-requested', (data) => {
+      broadcastEvent('question-requested', data);
+    });
+
+    oc.on('approval-cancelled', (data) => {
+      broadcastEvent('approval-cancelled', data);
+    });
+
+    oc.on('message-queued', (data) => {
+      broadcastEvent('message-queued', data);
+    });
+
+    oc.on('message-sent', (data) => {
+      broadcastEvent('message-sent', data);
+    });
   }
 
   // --- API routes ---
@@ -162,6 +183,11 @@ export async function createServer(
   await app.register(sessionRoutes);
   await app.register(repoRoutes);
   await app.register(eventRoutes);
+
+  // Interaction routes — requires orchestratorClient
+  if (orchestratorClient) {
+    await app.register(interactionRoutes, { orchestratorClient });
+  }
 
   // --- Static serving / dev proxy ---
   if (!isDev) {

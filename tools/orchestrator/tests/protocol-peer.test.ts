@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { PassThrough } from 'node:stream';
 import { ProtocolPeer } from '../src/protocol-peer.js';
 import type { ProtocolHandler, CanUseToolRequest, HookCallbackRequest } from '../src/protocol-types.js';
@@ -12,14 +12,21 @@ function createMockHandler(): ProtocolHandler {
 }
 
 describe('ProtocolPeer', () => {
+  let stdin: PassThrough;
+  let stdout: PassThrough;
+  let handler: ReturnType<typeof createMockHandler>;
+  let peer: ProtocolPeer;
+
+  beforeEach(() => {
+    stdin = new PassThrough();
+    stdout = new PassThrough();
+    handler = createMockHandler();
+    peer = new ProtocolPeer(stdin, stdout, handler);
+  });
+
   describe('sendUserMessage', () => {
     it('writes correct JSON line to stdin with newline terminator', async () => {
-      const stdin = new PassThrough();
-      const stdout = new PassThrough();
-      const handler = createMockHandler();
-
       const stdinSpy = vi.spyOn(stdin, 'write');
-      const peer = new ProtocolPeer(stdin, stdout, handler);
 
       await peer.sendUserMessage('Hello, Claude!');
 
@@ -38,12 +45,7 @@ describe('ProtocolPeer', () => {
 
   describe('sendApprovalResponse', () => {
     it('sends allow response with correct structure', async () => {
-      const stdin = new PassThrough();
-      const stdout = new PassThrough();
-      const handler = createMockHandler();
-
       const stdinSpy = vi.spyOn(stdin, 'write');
-      const peer = new ProtocolPeer(stdin, stdout, handler);
 
       await peer.sendApprovalResponse('req-123', { behavior: 'allow' });
 
@@ -60,12 +62,7 @@ describe('ProtocolPeer', () => {
     });
 
     it('sends deny response with message', async () => {
-      const stdin = new PassThrough();
-      const stdout = new PassThrough();
-      const handler = createMockHandler();
-
       const stdinSpy = vi.spyOn(stdin, 'write');
-      const peer = new ProtocolPeer(stdin, stdout, handler);
 
       await peer.sendApprovalResponse('req-456', {
         behavior: 'deny',
@@ -83,12 +80,7 @@ describe('ProtocolPeer', () => {
     });
 
     it('sends allow response with updatedInput', async () => {
-      const stdin = new PassThrough();
-      const stdout = new PassThrough();
-      const handler = createMockHandler();
-
       const stdinSpy = vi.spyOn(stdin, 'write');
-      const peer = new ProtocolPeer(stdin, stdout, handler);
 
       const updatedInput = { modified: true };
       await peer.sendApprovalResponse('req-789', {
@@ -109,12 +101,7 @@ describe('ProtocolPeer', () => {
 
   describe('interrupt', () => {
     it('sends interrupt control request with uuid request_id', async () => {
-      const stdin = new PassThrough();
-      const stdout = new PassThrough();
-      const handler = createMockHandler();
-
       const stdinSpy = vi.spyOn(stdin, 'write');
-      const peer = new ProtocolPeer(stdin, stdout, handler);
 
       await peer.interrupt();
 
@@ -135,12 +122,7 @@ describe('ProtocolPeer', () => {
 
   describe('initialize', () => {
     it('sends initialize control request without hooks', async () => {
-      const stdin = new PassThrough();
-      const stdout = new PassThrough();
-      const handler = createMockHandler();
-
       const stdinSpy = vi.spyOn(stdin, 'write');
-      const peer = new ProtocolPeer(stdin, stdout, handler);
 
       await peer.initialize();
 
@@ -155,12 +137,7 @@ describe('ProtocolPeer', () => {
     });
 
     it('sends initialize control request with hooks', async () => {
-      const stdin = new PassThrough();
-      const stdout = new PassThrough();
-      const handler = createMockHandler();
-
       const stdinSpy = vi.spyOn(stdin, 'write');
-      const peer = new ProtocolPeer(stdin, stdout, handler);
 
       const hooks = { custom: 'hook' };
       await peer.initialize(hooks);
@@ -178,12 +155,7 @@ describe('ProtocolPeer', () => {
 
   describe('setPermissionMode', () => {
     it('sends set_permission_mode control request', async () => {
-      const stdin = new PassThrough();
-      const stdout = new PassThrough();
-      const handler = createMockHandler();
-
       const stdinSpy = vi.spyOn(stdin, 'write');
-      const peer = new ProtocolPeer(stdin, stdout, handler);
 
       await peer.setPermissionMode('tool-approval');
 
@@ -201,12 +173,6 @@ describe('ProtocolPeer', () => {
 
   describe('read loop - inbound messages', () => {
     it('dispatches can_use_tool request to handleControlRequest', async () => {
-      const stdin = new PassThrough();
-      const stdout = new PassThrough();
-      const handler = createMockHandler();
-
-      const peer = new ProtocolPeer(stdin, stdout, handler);
-
       const request: CanUseToolRequest = {
         type: 'control_request',
         request_id: 'req-tool-123',
@@ -219,7 +185,8 @@ describe('ProtocolPeer', () => {
 
       stdout.write(JSON.stringify(request) + '\n');
 
-      // Give readline async iteration time to process
+      // readline's async iterator processes lines asynchronously;
+      // a short delay ensures the handler has been called before assertions
       await new Promise((r) => setTimeout(r, 50));
 
       expect(handler.handleControlRequest).toHaveBeenCalledOnce();
@@ -229,12 +196,6 @@ describe('ProtocolPeer', () => {
     });
 
     it('dispatches hook_callback request to handleControlRequest', async () => {
-      const stdin = new PassThrough();
-      const stdout = new PassThrough();
-      const handler = createMockHandler();
-
-      const peer = new ProtocolPeer(stdin, stdout, handler);
-
       const request: HookCallbackRequest = {
         type: 'control_request',
         request_id: 'req-hook-456',
@@ -256,12 +217,6 @@ describe('ProtocolPeer', () => {
     });
 
     it('dispatches control_cancel_request to handleCancelRequest', async () => {
-      const stdin = new PassThrough();
-      const stdout = new PassThrough();
-      const handler = createMockHandler();
-
-      const peer = new ProtocolPeer(stdin, stdout, handler);
-
       const cancelMsg = {
         type: 'control_cancel_request',
         request_id: 'req-cancel-789',
@@ -278,12 +233,6 @@ describe('ProtocolPeer', () => {
     });
 
     it('dispatches result message to handleResult', async () => {
-      const stdin = new PassThrough();
-      const stdout = new PassThrough();
-      const handler = createMockHandler();
-
-      const peer = new ProtocolPeer(stdin, stdout, handler);
-
       const resultMsg = {
         type: 'result',
         result: { success: true, data: 'finished' },
@@ -300,12 +249,6 @@ describe('ProtocolPeer', () => {
     });
 
     it('ignores non-JSON lines gracefully', async () => {
-      const stdin = new PassThrough();
-      const stdout = new PassThrough();
-      const handler = createMockHandler();
-
-      const peer = new ProtocolPeer(stdin, stdout, handler);
-
       // Write some non-JSON lines
       stdout.write('This is not JSON\n');
       stdout.write('Another garbage line\n');
@@ -322,12 +265,6 @@ describe('ProtocolPeer', () => {
     });
 
     it('ignores JSON lines without recognized type', async () => {
-      const stdin = new PassThrough();
-      const stdout = new PassThrough();
-      const handler = createMockHandler();
-
-      const peer = new ProtocolPeer(stdin, stdout, handler);
-
       // Write valid JSON but with unrecognized type (assistant, system, etc)
       stdout.write(JSON.stringify({ type: 'assistant', content: 'Hello' }) + '\n');
       stdout.write(JSON.stringify({ type: 'system', content: 'Processing' }) + '\n');
@@ -344,12 +281,6 @@ describe('ProtocolPeer', () => {
     });
 
     it('ignores JSON lines without type field', async () => {
-      const stdin = new PassThrough();
-      const stdout = new PassThrough();
-      const handler = createMockHandler();
-
-      const peer = new ProtocolPeer(stdin, stdout, handler);
-
       // Write valid JSON but without type field
       stdout.write(JSON.stringify({ message: 'no type here' }) + '\n');
       stdout.write(JSON.stringify({ data: 123 }) + '\n');
@@ -364,12 +295,6 @@ describe('ProtocolPeer', () => {
     });
 
     it('skips control_request with missing request_id', async () => {
-      const stdin = new PassThrough();
-      const stdout = new PassThrough();
-      const handler = createMockHandler();
-
-      const peer = new ProtocolPeer(stdin, stdout, handler);
-
       // control_request without request_id
       stdout.write(
         JSON.stringify({
@@ -386,12 +311,6 @@ describe('ProtocolPeer', () => {
     });
 
     it('skips control_cancel_request with missing request_id', async () => {
-      const stdin = new PassThrough();
-      const stdout = new PassThrough();
-      const handler = createMockHandler();
-
-      const peer = new ProtocolPeer(stdin, stdout, handler);
-
       // control_cancel_request without request_id
       stdout.write(JSON.stringify({ type: 'control_cancel_request' }) + '\n');
 
@@ -403,12 +322,6 @@ describe('ProtocolPeer', () => {
     });
 
     it('skips control_request with missing request field', async () => {
-      const stdin = new PassThrough();
-      const stdout = new PassThrough();
-      const handler = createMockHandler();
-
-      const peer = new ProtocolPeer(stdin, stdout, handler);
-
       // control_request without request field
       stdout.write(JSON.stringify({ type: 'control_request', request_id: 'req-123' }) + '\n');
 
@@ -422,12 +335,6 @@ describe('ProtocolPeer', () => {
 
   describe('destroy', () => {
     it('stops read loop and prevents further message dispatch', async () => {
-      const stdin = new PassThrough();
-      const stdout = new PassThrough();
-      const handler = createMockHandler();
-
-      const peer = new ProtocolPeer(stdin, stdout, handler);
-
       // Send a message before destroy
       const msg1 = { type: 'result', result: 'first' };
       stdout.write(JSON.stringify(msg1) + '\n');
@@ -455,12 +362,7 @@ describe('ProtocolPeer', () => {
 
   describe('multiple operations', () => {
     it('sends multiple messages in sequence', async () => {
-      const stdin = new PassThrough();
-      const stdout = new PassThrough();
-      const handler = createMockHandler();
-
       const stdinSpy = vi.spyOn(stdin, 'write');
-      const peer = new ProtocolPeer(stdin, stdout, handler);
 
       await peer.sendUserMessage('Message 1');
       await peer.interrupt();
@@ -480,12 +382,7 @@ describe('ProtocolPeer', () => {
     });
 
     it('handles mixed inbound and outbound operations', async () => {
-      const stdin = new PassThrough();
-      const stdout = new PassThrough();
-      const handler = createMockHandler();
-
       const stdinSpy = vi.spyOn(stdin, 'write');
-      const peer = new ProtocolPeer(stdin, stdout, handler);
 
       // Send message
       await peer.sendUserMessage('Hello');

@@ -12,9 +12,21 @@ export interface SessionInfo {
 }
 
 interface WsMessage {
-  type: 'init' | 'session_registered' | 'session_status' | 'session_ended';
-  data: SessionInfo | SessionInfo[];
+  type: 'init' | 'session_registered' | 'session_status' | 'session_ended' | 'approval_requested' | 'question_requested' | 'approval_cancelled' | 'message_queued' | 'message_sent';
+  data: SessionInfo | SessionInfo[] | unknown;
 }
+
+// Discriminated union for inbound messages from orchestrator ws-server
+type InboundWsMessage =
+  | { type: 'init'; data: SessionInfo[] }
+  | { type: 'session_registered'; data: SessionInfo }
+  | { type: 'session_status'; data: SessionInfo }
+  | { type: 'session_ended'; data: SessionInfo }
+  | { type: 'approval_requested'; data: unknown }
+  | { type: 'question_requested'; data: unknown }
+  | { type: 'approval_cancelled'; data: unknown }
+  | { type: 'message_queued'; data: unknown }
+  | { type: 'message_sent'; data: unknown };
 
 export interface OrchestratorClientOptions {
   /** Delay in ms before attempting reconnection (default: 3000) */
@@ -67,6 +79,35 @@ export class OrchestratorClient extends EventEmitter {
     return Array.from(this.sessions.values());
   }
 
+  sendMessage(stageId: string, message: string): void {
+    this.send({ type: 'send_message', stageId, message });
+  }
+
+  approveTool(stageId: string, requestId: string, decision: 'allow' | 'deny', reason?: string): void {
+    this.send({ type: 'approve_tool', stageId, requestId, decision, reason });
+  }
+
+  answerQuestion(stageId: string, requestId: string, answers: Record<string, string>): void {
+    this.send({ type: 'answer_question', stageId, requestId, answers });
+  }
+
+  interruptSession(stageId: string): void {
+    this.send({ type: 'interrupt', stageId });
+  }
+
+  getPendingForStage(_stageId: string): unknown[] {
+    // TODO: Implement by maintaining pending state from WS events.
+    // Currently returns empty array; the /api/sessions/:stageId/pending
+    // endpoint will always return { pending: [] } until this is wired.
+    return [];
+  }
+
+  private send(data: unknown): void {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify(data));
+    }
+  }
+
   private tryConnect(): void {
     if (!this.shouldConnect) return;
     try {
@@ -92,36 +133,48 @@ export class OrchestratorClient extends EventEmitter {
 
   private handleMessage(raw: string): void {
     try {
-      const msg = JSON.parse(raw) as WsMessage;
+      const msg = JSON.parse(raw) as InboundWsMessage;
       switch (msg.type) {
         case 'init':
           this.sessions.clear();
-          for (const entry of msg.data as SessionInfo[]) {
+          for (const entry of msg.data) {
             this.sessions.set(entry.stageId, entry);
           }
           this.emit('init', this.getAllSessions());
           break;
         case 'session_registered':
-          this.sessions.set(
-            (msg.data as SessionInfo).stageId,
-            msg.data as SessionInfo,
-          );
+          this.sessions.set(msg.data.stageId, msg.data);
           this.emit('session-registered', msg.data);
           break;
         case 'session_status':
-          this.sessions.set(
-            (msg.data as SessionInfo).stageId,
-            msg.data as SessionInfo,
-          );
+          this.sessions.set(msg.data.stageId, msg.data);
           this.emit('session-status', msg.data);
           break;
         case 'session_ended':
-          this.sessions.delete((msg.data as SessionInfo).stageId);
+          this.sessions.delete(msg.data.stageId);
           this.emit('session-ended', msg.data);
+          break;
+        case 'approval_requested':
+          this.emit('approval-requested', msg.data);
+          break;
+        case 'question_requested':
+          this.emit('question-requested', msg.data);
+          break;
+        case 'approval_cancelled':
+          this.emit('approval-cancelled', msg.data);
+          break;
+        case 'message_queued':
+          // TODO: Forward-looking stub - will be wired when orchestrator emits message_queued events
+          this.emit('message-queued', msg.data);
+          break;
+        case 'message_sent':
+          // TODO: Forward-looking stub - will be wired when orchestrator emits message_sent events
+          this.emit('message-sent', msg.data);
           break;
       }
     } catch {
-      /* ignore malformed messages */
+      // Silently ignore malformed messages from the orchestrator ws-server.
+      // This prevents a single bad message from breaking the message handler.
     }
   }
 }

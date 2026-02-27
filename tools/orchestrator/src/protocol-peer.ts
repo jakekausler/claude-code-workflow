@@ -1,7 +1,7 @@
 import { createInterface } from 'node:readline';
 import { randomUUID } from 'node:crypto';
 import type { Writable, Readable } from 'node:stream';
-import type { ProtocolHandler, PermissionResult } from './protocol-types.js';
+import type { ProtocolHandler, PermissionResult, InboundControlRequest, ResultMessage } from './protocol-types.js';
 
 /**
  * Wraps Claude Code's stdin/stdout for bidirectional stream-JSON communication.
@@ -22,14 +22,14 @@ export class ProtocolPeer {
   // ── Outbound methods ──────────────────────────────────────────
 
   async sendUserMessage(content: string): Promise<void> {
-    await this.sendJson({
+    this.sendJson({
       type: 'user',
       message: { role: 'user', content },
     });
   }
 
   async sendApprovalResponse(requestId: string, response: PermissionResult): Promise<void> {
-    await this.sendJson({
+    this.sendJson({
       type: 'control_response',
       response: {
         subtype: 'success',
@@ -40,7 +40,7 @@ export class ProtocolPeer {
   }
 
   async interrupt(): Promise<void> {
-    await this.sendJson({
+    this.sendJson({
       type: 'control_request',
       request_id: randomUUID(),
       request: { subtype: 'interrupt' },
@@ -48,7 +48,8 @@ export class ProtocolPeer {
   }
 
   async initialize(hooks?: unknown): Promise<void> {
-    await this.sendJson({
+    // Note: JSON.stringify omits undefined values, so hooks is excluded when not provided
+    this.sendJson({
       type: 'control_request',
       request_id: randomUUID(),
       request: { subtype: 'initialize', hooks },
@@ -56,7 +57,7 @@ export class ProtocolPeer {
   }
 
   async setPermissionMode(mode: string): Promise<void> {
-    await this.sendJson({
+    this.sendJson({
       type: 'control_request',
       request_id: randomUUID(),
       request: { subtype: 'set_permission_mode', mode },
@@ -67,9 +68,14 @@ export class ProtocolPeer {
     this.abortController.abort();
   }
 
+  /** Wait for the read loop to fully terminate (useful for graceful shutdown). */
+  async waitForClose(): Promise<void> {
+    await this.readLoopPromise;
+  }
+
   // ── Internal ──────────────────────────────────────────────────
 
-  private async sendJson(message: unknown): Promise<void> {
+  private sendJson(message: unknown): void {
     const json = JSON.stringify(message);
     this.stdin.write(json + '\n');
   }
@@ -97,7 +103,7 @@ export class ProtocolPeer {
             const requestId = msg.request_id as string;
             const request = msg.request as Record<string, unknown>;
             if (requestId && request) {
-              await handler.handleControlRequest(requestId, request as any);
+              await handler.handleControlRequest(requestId, request as InboundControlRequest['request']);
             }
             break;
           }
@@ -109,7 +115,7 @@ export class ProtocolPeer {
             break;
           }
           case 'result': {
-            handler.handleResult(msg as any);
+            handler.handleResult(msg as ResultMessage);
             break;
           }
           // All other message types (assistant, system, etc.) are streaming

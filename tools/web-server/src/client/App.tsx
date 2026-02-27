@@ -9,12 +9,13 @@ import { TicketDetail } from './pages/TicketDetail.js';
 import { StageDetail } from './pages/StageDetail.js';
 import { SessionDetail } from './pages/SessionDetail.js';
 import { DependencyGraph } from './pages/DependencyGraph.js';
+import { useInteractionSSE } from './api/interaction-hooks.js';
+import { InteractionOverlay } from './components/interaction/InteractionOverlay.js';
 
-export function App() {
-  const [queryClient] = useState(() => new QueryClient());
-
+function AppContent() {
   return (
-    <QueryClientProvider client={queryClient}>
+    <>
+      <InteractionOverlay />
       <BrowserRouter>
         <Layout>
           <Routes>
@@ -37,6 +38,19 @@ export function App() {
           </Routes>
         </Layout>
       </BrowserRouter>
+    </>
+  );
+}
+
+export function App() {
+  const [queryClient] = useState(() => new QueryClient());
+
+  // Mount the interaction SSE listener at the app root level
+  useInteractionSSE();
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      <AppContent />
     </QueryClientProvider>
   );
 }

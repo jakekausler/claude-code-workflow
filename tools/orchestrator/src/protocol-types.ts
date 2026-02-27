@@ -11,7 +11,7 @@ export interface ControlRequest {
   type: 'control_request';
   request_id: string;
   request:
-    | { subtype: 'initialize'; hooks?: unknown }
+    | { subtype: 'initialize'; hooks?: unknown } // TODO: type when protocol schema stabilizes
     | { subtype: 'interrupt' }
     | { subtype: 'set_permission_mode'; mode: string };
 }
@@ -77,9 +77,10 @@ export type InboundMessage =
 
 // ─── Permission result ────────────────────────────────────────────
 
+/** Result sent back to Claude in response to a tool approval request. */
 export type PermissionResult =
   | { behavior: 'allow'; updatedInput?: unknown }
-  | { behavior: 'deny'; message?: string };
+  | { behavior: 'deny'; message?: string }; // Message shown to Claude explaining denial
 
 // ─── Approval / question / queue state ────────────────────────────
 
@@ -94,7 +95,7 @@ export interface PendingApproval {
 export interface PendingQuestion {
   stageId: string;
   requestId: string;
-  questions: unknown[];
+  questions: unknown[]; // TODO: type when AskUserQuestion schema stabilizes
   input: unknown;
   createdAt: number;
 }
