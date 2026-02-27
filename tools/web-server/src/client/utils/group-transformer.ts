@@ -118,6 +118,15 @@ function createSystemGroup(chunk: SystemChunk): SystemGroup {
 function createAIGroup(chunk: AIChunk, turnIndex: number): AIGroup {
   const messages = chunk.messages;
   const isEnhanced = isEnhancedAIChunk(chunk);
+  // TEMPORARY DEBUG LOG — remove after diagnosing SSE rendering issue
+  console.log('[SSE-DEBUG] createAIGroup:', {
+    turnIndex,
+    isEnhanced,
+    hasSemanticSteps: 'semanticSteps' in chunk,
+    semanticStepsType: typeof (chunk as any).semanticSteps,
+    numSteps: (chunk as any).semanticSteps?.length ?? 0,
+    numMessages: messages.length,
+  });
   const steps: SemanticStep[] = isEnhanced ? ((chunk as EnhancedAIChunk).semanticSteps ?? []) : [];
   const subagents = isEnhanced ? ((chunk as EnhancedAIChunk).subagents ?? []) : [];
 
