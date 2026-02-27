@@ -1,5 +1,4 @@
 import { join } from 'path';
-import { stat } from 'fs/promises';
 import type {
   ParsedSession,
   SessionMetrics,
@@ -17,23 +16,6 @@ import { calculateSessionCost } from './pricing.js';
 import { DataCache } from './data-cache.js';
 import { discoverClaudeMdFiles, decodeProjectRoot } from './claude-md-reader.js';
 import { readMentionedFiles } from './mentioned-file-reader.js';
-
-export interface IncrementalUpdate {
-  /** Newly parsed messages since the last offset */
-  newMessages: ParsedMessage[];
-  /** New chunks built from the new messages, with AI chunks enhanced */
-  newChunks: Chunk[];
-  /** Updated byte offset — store this and pass it back on the next incremental call */
-  newOffset: number;
-  /** Whether this update came from a subagent session file */
-  isSubagent: boolean;
-  /** When true, client should discard cached state and do a full session re-parse */
-  requiresFullRefresh: boolean;
-  /** Metrics computed from the new messages only (additive — client merges with existing) */
-  metrics: SessionMetrics;
-  /** Whether the session appears ongoing (last message is from user) */
-  isOngoing: boolean;
-}
 
 export interface SessionPipelineOptions {
   cacheSizeMB?: number;
@@ -110,85 +92,6 @@ export class SessionPipeline {
 
   invalidateSession(projectDir: string, sessionId: string): void {
     this.cache.invalidate(`${projectDir}/${sessionId}`);
-  }
-
-  /**
-   * Parse only new bytes appended to a session file since `lastOffset`.
-   *
-   * Returns an IncrementalUpdate with the new messages, chunks, and metrics.
-   * If the file has been truncated (size < lastOffset), sets requiresFullRefresh
-   * so the caller knows to discard cached state and re-parse from scratch.
-   */
-  async parseIncremental(
-    projectDir: string,
-    sessionId: string,
-    lastOffset: number,
-  ): Promise<IncrementalUpdate> {
-    const filePath = join(projectDir, `${sessionId}.jsonl`);
-    const isSubagent = sessionId.startsWith('agent-');
-
-    // Stat the file to check size
-    // Note: File may grow between this stat() and the parseSessionFile() call below.
-    // This is safe because newOffset is derived from bytesRead (actual bytes consumed),
-    // not from fileSize (which is only used for truncation/no-change detection).
-    let fileSize: number;
-    try {
-      const fileStat = await stat(filePath);
-      fileSize = fileStat.size;
-    } catch {
-      // File not found — return empty update
-      return emptyIncrementalUpdate(lastOffset, isSubagent);
-    }
-
-    // File truncated (e.g., session reset) — caller must do a full refresh
-    if (fileSize < lastOffset) {
-      return {
-        ...emptyIncrementalUpdate(fileSize, isSubagent),
-        requiresFullRefresh: true,
-      };
-    }
-
-    // No new data
-    if (fileSize === lastOffset) {
-      return emptyIncrementalUpdate(lastOffset, isSubagent);
-    }
-
-    // Parse only the new bytes
-    const { messages: newMessages, bytesRead } = await parseSessionFile(filePath, {
-      startOffset: lastOffset,
-    });
-
-    const newOffset = lastOffset + bytesRead;
-
-    if (newMessages.length === 0) {
-      return emptyIncrementalUpdate(newOffset, isSubagent);
-    }
-
-    const toolExecutions = buildToolExecutions(newMessages);
-    const newChunks = buildChunks(newMessages);
-
-    // Enhance AI chunks with semantic steps
-    enhanceAIChunks(newChunks, toolExecutions);
-
-    // Resolve subagents for new messages and link to chunks
-    const subagents = await resolveSubagents(newMessages, { projectDir, sessionId });
-    if (subagents.length > 0) {
-      linkSubagentsToChunks(newChunks, subagents);
-    }
-
-    const { totalCost } = calculateSessionCost(newMessages);
-    const metrics = computeMetrics(newMessages, toolExecutions, totalCost);
-    const isOngoing = detectOngoing(newMessages);
-
-    return {
-      newMessages,
-      newChunks,
-      newOffset,
-      isSubagent,
-      requiresFullRefresh: false,
-      metrics,
-      isOngoing,
-    };
   }
 }
 
@@ -331,29 +234,4 @@ function detectOngoing(messages: ParsedMessage[]): boolean {
   if (messages.length === 0) return false;
   const last = messages[messages.length - 1];
   return last.type === 'user';
-}
-
-/**
- * Return a no-op IncrementalUpdate (no new messages, zero metrics).
- */
-function emptyIncrementalUpdate(offset: number, isSubagent: boolean): IncrementalUpdate {
-  return {
-    newMessages: [],
-    newChunks: [],
-    newOffset: offset,
-    isSubagent,
-    requiresFullRefresh: false,
-    metrics: {
-      totalTokens: 0,
-      inputTokens: 0,
-      outputTokens: 0,
-      cacheReadTokens: 0,
-      cacheCreationTokens: 0,
-      totalCost: 0,
-      turnCount: 0,
-      toolCallCount: 0,
-      duration: 0,
-    },
-    isOngoing: false,
-  };
 }
