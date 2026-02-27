@@ -378,7 +378,8 @@ export function useSessionDetail(projectId: string, sessionId: string) {
         `/sessions/${encodeURIComponent(projectId)}/${sessionId}`,
       ),
     enabled: !!projectId && !!sessionId,
-    staleTime: 1000,
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
   });
 }
 

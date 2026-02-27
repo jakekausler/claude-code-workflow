@@ -99,17 +99,26 @@ export async function createServer(
 
     // Per-session SSE broadcast debouncing (300ms window)
     const sseDebounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
+    const sseDebounceOffsets = new Map<string, number>();
 
     // Invalidate cache + incremental parse on file changes
     fw.on('file-change', (event: FileChangeEvent) => {
       // Debounce SSE broadcast per session to coalesce rapid changes
-      const key = `${event.projectId}/${event.sessionId}`;
+      const key = `${event.projectId}/${event.sessionId}/${event.isSubagent ? 'sub' : 'main'}`;
       const existing = sseDebounceTimers.get(key);
       if (existing) {
         clearTimeout(existing);
       }
+      // Track the minimum previousOffset across all events in this debounce window
+      // so the incremental parse covers ALL bytes written during the window
+      const currentMin = sseDebounceOffsets.get(key);
+      if (currentMin === undefined || event.previousOffset < currentMin) {
+        sseDebounceOffsets.set(key, event.previousOffset);
+      }
       const timer = setTimeout(() => {
         sseDebounceTimers.delete(key);
+        const minOffset = sseDebounceOffsets.get(key) ?? 0;
+        sseDebounceOffsets.delete(key);
         const fullProjectDir = join(claudeProjectsDir, event.projectId);
 
         void (async () => {
@@ -129,7 +138,7 @@ export async function createServer(
             const update = await sessionPipeline.parseIncremental(
               fullProjectDir,
               event.sessionId,
-              event.previousOffset,
+              minOffset,
             );
 
             if (update.requiresFullRefresh) {
