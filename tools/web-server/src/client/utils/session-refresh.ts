@@ -5,7 +5,7 @@
  * - In-flight coalescing with queuing
  */
 
-const SESSION_REFRESH_DEBOUNCE_MS = 150;
+const SESSION_REFRESH_THROTTLE_MS = 150;
 
 const pendingTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const refreshGeneration = new Map<string, number>();
@@ -24,7 +24,7 @@ export function scheduleSessionRefresh(
   const timer = setTimeout(() => {
     pendingTimers.delete(key);
     void executeRefresh(key, refreshFn);
-  }, SESSION_REFRESH_DEBOUNCE_MS);
+  }, SESSION_REFRESH_THROTTLE_MS);
 
   pendingTimers.set(key, timer);
 }
@@ -61,11 +61,14 @@ async function executeRefresh(
   }
 }
 
-/** Clean up timers when component unmounts */
+/** Clean up timers and all state when component unmounts */
 export function cancelSessionRefresh(key: string): void {
   const timer = pendingTimers.get(key);
   if (timer) {
     clearTimeout(timer);
     pendingTimers.delete(key);
   }
+  refreshGeneration.delete(key);
+  refreshInFlight.delete(key);
+  refreshQueued.delete(key);
 }
