@@ -100,7 +100,14 @@ export async function createServer(
     // Per-session SSE broadcast debouncing (100ms window, matching devtools)
     const sseDebounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
+    app.addHook('onClose', async () => {
+      for (const timer of sseDebounceTimers.values()) clearTimeout(timer);
+      sseDebounceTimers.clear();
+    });
+
     fw.on('file-change', (event: FileChangeEvent) => {
+      // Single key per session (no main/sub distinction) — the client does a full
+      // re-fetch regardless of signal type, so coalescing is intentional.
       const key = `${event.projectId}/${event.sessionId}`;
       const existing = sseDebounceTimers.get(key);
       if (existing) {

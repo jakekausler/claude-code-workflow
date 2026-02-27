@@ -11,8 +11,8 @@ import { formatDuration, formatCost, formatTokenCount } from '../utils/session-f
 import { useSessionViewStore } from '../store/session-store.js';
 import { transformChunksToConversation } from '../utils/group-transformer.js';
 import { processSessionContextWithPhases } from '../utils/context-tracker.js';
-import { mergeIncrementalUpdate, mergeSubagentUpdate, type SSESessionUpdate } from '../utils/session-merger.js';
-import type { ParsedSession } from '../types/session.js';
+import type { SSESessionUpdate } from '../utils/session-merger.js';
+import { scheduleSessionRefresh, cancelSessionRefresh } from '../utils/session-refresh.js';
 
 export function SessionDetail() {
   const { projectId, sessionId } = useParams<{ projectId: string; sessionId: string }>();
@@ -25,42 +25,29 @@ export function SessionDetail() {
   }, [projectId, sessionId, resetView]);
 
   const queryClient = useQueryClient();
+  const refreshKey = `${projectId}/${sessionId}`;
 
   const handleSSE = useCallback(
     (_channel: string, data: unknown) => {
       const event = data as SSESessionUpdate;
       if (event.sessionId !== sessionId || event.projectId !== projectId) return;
 
-      if (event.type === 'incremental') {
-        // Merge new chunks directly into React Query cache — no refetch needed
-        queryClient.setQueryData<ParsedSession>(
-          ['session', projectId, sessionId],
-          (old) => {
-            if (!old) return old;
-            return mergeIncrementalUpdate(old, event);
-          },
-        );
-      } else if (event.type === 'full-refresh') {
-        // Full refresh: invalidate cache to trigger refetch
-        void queryClient.invalidateQueries({
+      // Schedule a throttled full re-fetch (matching devtools)
+      scheduleSessionRefresh(refreshKey, async () => {
+        await queryClient.invalidateQueries({
           queryKey: ['session', projectId, sessionId],
         });
-      } else if (event.type === 'subagent-update') {
-        // Merge updated subagent Process into React Query cache
-        queryClient.setQueryData<ParsedSession>(
-          ['session', projectId, sessionId],
-          (old) => {
-            if (!old) return old;
-            return mergeSubagentUpdate(old, event);
-          },
-        );
-      }
-      // Other unknown event types are silently ignored (safe no-op)
+      });
     },
-    [queryClient, projectId, sessionId],
+    [queryClient, projectId, sessionId, refreshKey],
   );
 
   useSSE(['session-update'], handleSSE);
+
+  // Clean up throttle timers on unmount or session change
+  useEffect(() => {
+    return () => cancelSessionRefresh(refreshKey);
+  }, [refreshKey]);
 
   const { data: session, isLoading, error } = useSessionDetail(projectId || '', sessionId || '');
 
