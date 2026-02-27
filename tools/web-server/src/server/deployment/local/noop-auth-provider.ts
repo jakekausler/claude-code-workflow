@@ -1,4 +1,4 @@
-import type { FastifyRequest, FastifyInstance, FastifyPluginCallback } from 'fastify';
+import type { FastifyReply, FastifyRequest, FastifyInstance, FastifyPluginCallback } from 'fastify';
 import type { AuthProvider, User } from '../types.js';
 
 /**
@@ -12,8 +12,8 @@ export class NoopAuthProvider implements AuthProvider {
 
   requireAuth(): FastifyPluginCallback {
     return (app: FastifyInstance, _opts: Record<string, unknown>, done: () => void) => {
-      app.addHook('preHandler', (_request: FastifyRequest, _reply: unknown, done: () => void) => {
-        done();
+      app.addHook('preHandler', (_request: FastifyRequest, _reply: FastifyReply, next: () => void) => {
+        next();
       });
       done();
     };
