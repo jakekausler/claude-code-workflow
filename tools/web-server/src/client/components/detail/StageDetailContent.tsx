@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useStage, useStageSession, useStageSessionHistory } from '../../api/hooks.js';
 import { useDrawerStore } from '../../store/drawer-store.js';
 import { useDrawerSessionStore } from '../../store/drawer-session-store.js';
+import { useBoardStore, selectSessionStatus } from '../../store/board-store.js';
 import { StatusBadge } from './StatusBadge.js';
 import { DependencyList } from './DependencyList.js';
 import { PhaseSection } from './PhaseSection.js';
@@ -10,6 +11,7 @@ import { DrawerTabs } from './DrawerTabs.js';
 import type { TabDef } from './DrawerTabs.js';
 import { SessionHistoryDropdown } from '../chat/SessionHistoryDropdown.js';
 import { EmbeddedSessionViewer } from '../chat/EmbeddedSessionViewer.js';
+import { LiveSessionSection } from '../stage/LiveSessionSection.js';
 import { slugToTitle } from '../../utils/formatters.js';
 import {
   ExternalLink,
@@ -30,6 +32,7 @@ export function StageDetailContent({ stageId }: StageDetailContentProps) {
   const { data: sessionHistoryData } = useStageSessionHistory(stageId);
   const sessions = sessionHistoryData?.sessions ?? [];
   const hasSessions = sessions.length > 0;
+  const sessionStatus = useBoardStore(selectSessionStatus(stageId));
 
   // Build tabs array
   const tabs: TabDef[] = [
@@ -168,6 +171,9 @@ export function StageDetailContent({ stageId }: StageDetailContentProps) {
               ))}
             </div>
           )}
+
+          {/* Live session status — shows active session indicator, duration, and link */}
+          <LiveSessionSection stageId={stageId} sessionStatus={sessionStatus} />
 
           {/* Session link — only rendered when the stage has a linked session */}
           {stage.session_id && (
