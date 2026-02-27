@@ -43,6 +43,9 @@ function statusSortKey(status: string): number {
 
 export function Board() {
   const { selectedRepo, selectedEpic, selectedTicket } = useBoardStore();
+  // TODO: Subscribes to entire sessionMap — any session change re-renders all cards.
+  // If board card count grows large, refactor renderStageCard into a React component
+  // using selectSessionStatus(stageId) for per-card subscriptions.
   const sessionMap = useBoardStore((s) => s.sessionMap);
   const { open, stack } = useDrawerStore();
   const currentDrawerId = stack.length > 0 ? stack[stack.length - 1].id : null;
