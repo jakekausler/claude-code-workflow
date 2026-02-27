@@ -5,11 +5,14 @@ import { useStats, useBoard, useStages } from '../api/hooks.js';
 import { AlertTriangle, Activity, Layers, GitBranch } from 'lucide-react';
 import { slugToTitle } from '../utils/formatters.js';
 import { useSSE } from '../api/use-sse.js';
+import { useBoardStore } from '../store/board-store.js';
+import { ActiveSessionsList } from '../components/dashboard/ActiveSessionsList.js';
 
 export function Dashboard() {
   const { data: stats, isLoading: statsLoading, error: statsError } = useStats();
   const { data: board, error: boardError } = useBoard({ column: 'backlog' });
   const { data: stages, error: stagesError } = useStages();
+  const sessionMap = useBoardStore((s) => s.sessionMap);
 
   const queryClient = useQueryClient();
 
@@ -48,7 +51,7 @@ export function Dashboard() {
         <StatCard label="Total Stages" value={statsLoading ? '...' : String(totalStages)} />
         <StatCard label="Total Tickets" value={statsLoading ? '...' : String(stats?.total_tickets ?? 0)} />
         <StatCard label="Completion" value={statsLoading ? '...' : `${completionPct}%`} />
-        <StatCard label="Active Sessions" value="—" subtitle="Available in 9E" />
+        <ActiveSessionsList sessions={sessionMap} />
       </div>
 
       {/* Blocked Alert */}
