@@ -145,6 +145,7 @@ export class OrchestratorClient extends EventEmitter {
       this.ws.on('close', () => {
         this._connected = false;
         this.ws = null;
+        this.emit('disconnected');
         this.scheduleReconnect();
       });
       this.ws.on('error', () => {

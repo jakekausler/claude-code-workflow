@@ -14,6 +14,15 @@ const interactionPlugin: FastifyPluginCallback<{ orchestratorClient: Orchestrato
 ) => {
   const { orchestratorClient } = opts;
 
+  /** Guard: reject requests when the orchestrator WebSocket is not connected. */
+  function ensureConnected(reply: { status: (code: number) => { send: (body: unknown) => unknown } }): boolean {
+    if (!orchestratorClient.isConnected()) {
+      reply.status(502).send({ error: 'Orchestrator is not connected' });
+      return false;
+    }
+    return true;
+  }
+
   /**
    * POST /api/sessions/:stageId/message
    *
@@ -23,6 +32,8 @@ const interactionPlugin: FastifyPluginCallback<{ orchestratorClient: Orchestrato
     Params: { stageId: string };
     Body: { message: string };
   }>('/api/sessions/:stageId/message', async (req, reply) => {
+    if (!ensureConnected(reply)) return;
+
     const { stageId } = req.params;
     const { message } = req.body ?? {};
 
@@ -48,6 +59,8 @@ const interactionPlugin: FastifyPluginCallback<{ orchestratorClient: Orchestrato
     Params: { stageId: string };
     Body: { requestId: string; decision: string; reason?: string };
   }>('/api/sessions/:stageId/approve', async (req, reply) => {
+    if (!ensureConnected(reply)) return;
+
     const { stageId } = req.params;
     const { requestId, decision, reason } = req.body ?? {};
 
@@ -77,6 +90,8 @@ const interactionPlugin: FastifyPluginCallback<{ orchestratorClient: Orchestrato
     Params: { stageId: string };
     Body: { requestId: string; answers: Record<string, string> };
   }>('/api/sessions/:stageId/answer', async (req, reply) => {
+    if (!ensureConnected(reply)) return;
+
     const { stageId } = req.params;
     const { requestId, answers } = req.body ?? {};
 
@@ -105,6 +120,8 @@ const interactionPlugin: FastifyPluginCallback<{ orchestratorClient: Orchestrato
   app.post<{
     Params: { stageId: string };
   }>('/api/sessions/:stageId/interrupt', async (req, reply) => {
+    if (!ensureConnected(reply)) return;
+
     const { stageId } = req.params;
 
     const session = orchestratorClient.getSession(stageId);

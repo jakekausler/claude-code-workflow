@@ -11,6 +11,7 @@ function createMockOrchestratorClient() {
     getSession: vi.fn(),
     getPendingForStage: vi.fn().mockReturnValue([]),
     isSessionBusy: vi.fn().mockReturnValue(false),
+    isConnected: vi.fn().mockReturnValue(true),
     on: vi.fn(),
   };
 }

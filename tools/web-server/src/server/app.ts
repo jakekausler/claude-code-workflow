@@ -232,6 +232,13 @@ export async function createServer(
     oc.on('message-sent', (data) => {
       broadcastEvent('message-sent', data);
     });
+
+    oc.on('disconnected', () => {
+      broadcastEvent('session-status', {
+        type: 'orchestrator_disconnected',
+        connected: false,
+      });
+    });
   }
 
   // --- API routes ---

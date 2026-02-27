@@ -22,7 +22,7 @@ interface SessionStatusResponse {
 /** Shape of the REST response envelope. */
 interface SessionsEnvelope {
   sessions: SessionStatusResponse[];
-  connected?: boolean;
+  connected: boolean;
 }
 
 /** Shape of a session-status SSE event (may omit optional fields). */
@@ -93,7 +93,7 @@ export function useSessionMap(): void {
       return;
     }
     if (data) {
-      const connected = data.connected !== false;
+      const connected = data.connected;
       setOrchestratorConnected(connected);
 
       const map = new Map<string, SessionMapEntry>();
@@ -112,7 +112,20 @@ export function useSessionMap(): void {
   }, [data, isError, setSessionMap, setOrchestratorConnected]);
 
   // ---- SSE subscription for real-time updates ----
+  const clearSessionMap = useBoardStore((s) => s.clearSessionMap);
+
   useSSE(['session-status'], (_channel: string, rawData: unknown) => {
+    // Handle orchestrator disconnection event
+    if (
+      rawData != null &&
+      typeof rawData === 'object' &&
+      (rawData as Record<string, unknown>).type === 'orchestrator_disconnected'
+    ) {
+      clearSessionMap();
+      setOrchestratorConnected(false);
+      return;
+    }
+
     const parsed = parseSessionStatusEvent(rawData);
     if (parsed) {
       updateSessionStatus(parsed.stageId, parsed.entry);
