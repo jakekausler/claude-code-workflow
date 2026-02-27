@@ -249,7 +249,7 @@ function buildProcess(
   };
 }
 
-function calculateAgentMetrics(messages: ParsedMessage[]): SessionMetrics {
+export function calculateAgentMetrics(messages: ParsedMessage[]): SessionMetrics {
   let inputTokens = 0;
   let outputTokens = 0;
   let cacheReadTokens = 0;
@@ -284,7 +284,7 @@ function calculateAgentMetrics(messages: ParsedMessage[]): SessionMetrics {
   };
 }
 
-function detectOngoing(messages: ParsedMessage[]): boolean {
+export function detectOngoing(messages: ParsedMessage[]): boolean {
   if (messages.length === 0) return false;
   const last = messages[messages.length - 1];
   // If last message is assistant with tool_use stop_reason or has thinking without completion

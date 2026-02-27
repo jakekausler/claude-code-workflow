@@ -17,7 +17,9 @@ import { graphRoutes } from './routes/graph.js';
 import { sessionRoutes } from './routes/sessions.js';
 import { repoRoutes } from './routes/repos.js';
 import { eventRoutes, broadcastEvent } from './routes/events.js';
-import { buildProcessFromFile } from './services/subagent-resolver.js';
+import { buildProcessFromFile, calculateAgentMetrics, detectOngoing } from './services/subagent-resolver.js';
+import { parseSessionFile } from './services/session-parser.js';
+import type { Process } from './types/jsonl.js';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -102,10 +104,13 @@ export async function createServer(
     const sseDebounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
     const sseDebounceOffsets = new Map<string, number>();
 
-    // Track last-parsed file size per subagent file to avoid re-parsing unchanged files.
-    // Without this, rapid file-change events (even when the file hasn't grown) cause
-    // repeated full JSONL parsing, which can exhaust the heap under heavy subagent activity.
-    const subagentLastParsedSize = new Map<string, number>();
+    // Cache per subagent file: holds the parsed Process and byte offset so we only
+    // parse NEW bytes on each file-change event instead of re-parsing the entire file.
+    interface CachedSubagent {
+      process: Process;
+      offset: number;
+    }
+    const subagentCache = new Map<string, CachedSubagent>();
 
     // Invalidate cache + incremental parse on file changes
     fw.on('file-change', (event: FileChangeEvent) => {
@@ -139,37 +144,64 @@ export async function createServer(
               return;
             }
 
-            // Subagent file changes: invalidate cache for next page load,
-            // parse the subagent file, and broadcast its Process data so
-            // connected clients can merge it without a full refetch.
+            // Subagent file changes: use incremental parsing to avoid
+            // re-parsing the entire file on every change.  We cache the
+            // Process object and byte offset, parsing only NEW bytes.
             if (event.isSubagent) {
-              // Skip re-parsing if the file hasn't grown since the last successful parse.
-              // This prevents redundant full-file parses when multiple events fire for the
-              // same unchanged file (e.g. during debounce coalescing or catch-up scans),
-              // which was the primary cause of OOM under heavy subagent activity.
-              const fileSize = event.currentSize;
-              const lastParsedSize = subagentLastParsedSize.get(event.filePath);
-              if (lastParsedSize !== undefined && fileSize <= lastParsedSize) {
+              const cached = subagentCache.get(event.filePath);
+              const startOffset = cached?.offset ?? 0;
+
+              // Skip if file hasn't grown since last successful parse.
+              if (cached && event.currentSize <= cached.offset) {
                 return;
               }
 
               sessionPipeline.invalidateSession(fullProjectDir, event.sessionId);
 
               // Extract the agent ID from the file path.
-              // event.filePath is the full absolute path to the .jsonl file.
               const agentFilename = event.filePath.split('/').pop() ?? '';
               const agentIdMatch = agentFilename.match(/^agent-(.+)\.jsonl$/);
               const agentId = agentIdMatch ? agentIdMatch[1] : event.sessionId;
 
-              let subagentProcess = null;
+              let subagentProcess: Process | null = null;
               try {
-                subagentProcess = await buildProcessFromFile(event.filePath, agentId);
-                // Record the size we successfully parsed so subsequent events for the
-                // same (or smaller) size are skipped.
-                subagentLastParsedSize.set(event.filePath, fileSize);
+                if (cached) {
+                  // Incremental: parse only new bytes and merge into cached Process.
+                  const { messages: newMessages, bytesRead } = await parseSessionFile(
+                    event.filePath,
+                    { startOffset },
+                  );
+                  const newOffset = startOffset + bytesRead;
+
+                  if (newMessages.length === 0) {
+                    // No new messages — update offset but skip broadcast.
+                    subagentCache.set(event.filePath, { process: cached.process, offset: newOffset });
+                    return;
+                  }
+
+                  const allMessages = [...cached.process.messages, ...newMessages];
+                  const endTime = allMessages[allMessages.length - 1]?.timestamp ?? cached.process.endTime;
+                  subagentProcess = {
+                    ...cached.process,
+                    messages: allMessages,
+                    endTime,
+                    durationMs: endTime.getTime() - cached.process.startTime.getTime(),
+                    metrics: calculateAgentMetrics(allMessages),
+                    isOngoing: detectOngoing(allMessages),
+                  };
+
+                  subagentCache.set(event.filePath, { process: subagentProcess, offset: newOffset });
+                } else {
+                  // First time seeing this file — full parse via buildProcessFromFile
+                  // which handles filtering (warmup, compact, empty) and extracts parentTaskId.
+                  subagentProcess = await buildProcessFromFile(event.filePath, agentId);
+                  if (subagentProcess) {
+                    subagentCache.set(event.filePath, { process: subagentProcess, offset: event.currentSize });
+                  }
+                }
               } catch {
                 // Parse failed — broadcast without data (fallback).
-                // Do NOT update subagentLastParsedSize so the next event retries.
+                // Do NOT update cache so the next event retries.
               }
 
               console.log('[SSE-DEBUG] Subagent-update broadcast:', {
