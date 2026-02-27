@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { useStats, useBoard, useStages } from '../api/hooks.js';
@@ -7,6 +7,7 @@ import { slugToTitle } from '../utils/formatters.js';
 import { useSSE } from '../api/use-sse.js';
 import { useBoardStore } from '../store/board-store.js';
 import { ActiveSessionsList } from '../components/dashboard/ActiveSessionsList.js';
+import { formatSessionEvent, type ActivityFeedItem } from '../utils/activity-formatters.js';
 
 export function Dashboard() {
   const { data: stats, isLoading: statsLoading, error: statsError } = useStats();
@@ -16,16 +17,26 @@ export function Dashboard() {
 
   const queryClient = useQueryClient();
 
+  // Activity feed: session lifecycle events from SSE
+  const MAX_FEED_ITEMS = 50;
+  const [sessionEvents, setSessionEvents] = useState<ActivityFeedItem[]>([]);
+
   const handleSSE = useCallback(
-    (_channel: string, _data: unknown) => {
+    (channel: string, data: unknown) => {
       void queryClient.invalidateQueries({ queryKey: ['stats'] });
       void queryClient.invalidateQueries({ queryKey: ['stages'] });
       void queryClient.invalidateQueries({ queryKey: ['board'] });
+
+      // Capture session lifecycle events for the activity feed
+      const feedItem = formatSessionEvent(channel, data);
+      if (feedItem) {
+        setSessionEvents((prev) => [feedItem, ...prev].slice(0, MAX_FEED_ITEMS));
+      }
     },
     [queryClient],
   );
 
-  useSSE(['board-update', 'stage-transition'], handleSSE);
+  useSSE(['board-update', 'stage-transition', 'session-status'], handleSSE);
 
   const blockedCount = board?.columns['backlog']?.length ?? 0;
 
@@ -91,7 +102,23 @@ export function Dashboard() {
           <Activity size={16} className="text-slate-500" />
           <h2 className="text-sm font-semibold text-slate-700">Recent Activity</h2>
         </div>
-        {recentStages.length === 0 ? (
+
+        {/* Session lifecycle events (from SSE) */}
+        {sessionEvents.length > 0 && (
+          <div className="mb-3 space-y-1">
+            {sessionEvents.map((item) => (
+              <div key={item.id} className="flex items-center gap-3 text-xs">
+                <span className="w-32 shrink-0 text-slate-400 truncate">
+                  {new Date(item.timestamp).toLocaleTimeString()}
+                </span>
+                <span className="truncate text-slate-700">{item.message}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Stage list */}
+        {recentStages.length === 0 && sessionEvents.length === 0 ? (
           <p className="text-sm text-slate-400">No recent activity.</p>
         ) : (
           <div className="space-y-2">
