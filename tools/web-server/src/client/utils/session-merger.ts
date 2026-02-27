@@ -5,13 +5,18 @@ import type { Chunk, SessionMetrics, Process, EnhancedAIChunk } from '../types/s
 export interface SSESessionUpdate {
   projectId: string;
   sessionId: string;
-  type: 'incremental' | 'full-refresh' | 'subagent-update';
-  /** Only present when type === 'incremental' */
+  type: 'session-change' | 'subagent-change' | 'incremental' | 'full-refresh' | 'subagent-update';
+  // Legacy fields — no longer sent by the server (lightweight signals only).
+  // Retained until merge infrastructure is removed (Task 4).
+  /** @deprecated Server no longer sends incremental chunks */
   newChunks?: Chunk[];
+  /** @deprecated Server no longer sends metrics */
   metrics?: SessionMetrics;
+  /** @deprecated Server no longer sends isOngoing */
   isOngoing?: boolean;
+  /** @deprecated Server no longer sends newOffset */
   newOffset?: number;
-  /** Only present when type === 'subagent-update' — the parsed Process for the changed subagent file */
+  /** @deprecated Server no longer sends subagentProcess */
   subagentProcess?: Process;
 }
 

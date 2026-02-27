@@ -17,9 +17,6 @@ import { graphRoutes } from './routes/graph.js';
 import { sessionRoutes } from './routes/sessions.js';
 import { repoRoutes } from './routes/repos.js';
 import { eventRoutes, broadcastEvent } from './routes/events.js';
-import { buildProcessFromFile, calculateAgentMetrics, detectOngoing, resolveParentTaskId } from './services/subagent-resolver.js';
-import { parseSessionFile } from './services/session-parser.js';
-import type { Process } from './types/jsonl.js';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -100,186 +97,33 @@ export async function createServer(
     app.addHook('onReady', async () => fw.start());
     app.addHook('onClose', async () => fw.stop());
 
-    // Per-session SSE broadcast debouncing (300ms window)
+    // Per-session SSE broadcast debouncing (100ms window, matching devtools)
     const sseDebounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
-    const sseDebounceOffsets = new Map<string, number>();
 
-    // Cache per subagent file: holds the parsed Process and byte offset so we only
-    // parse NEW bytes on each file-change event instead of re-parsing the entire file.
-    interface CachedSubagent {
-      process: Process;
-      offset: number;
-    }
-    const subagentCache = new Map<string, CachedSubagent>();
-
-    // Cache agentId -> parentTaskId so we only scan the main session once per agent.
-    const parentTaskIdCache = new Map<string, string>();
-
-    // Invalidate cache + incremental parse on file changes
     fw.on('file-change', (event: FileChangeEvent) => {
-      // Debounce SSE broadcast per session to coalesce rapid changes
-      const key = `${event.projectId}/${event.sessionId}/${event.isSubagent ? 'sub' : 'main'}`;
+      const key = `${event.projectId}/${event.sessionId}`;
       const existing = sseDebounceTimers.get(key);
       if (existing) {
         clearTimeout(existing);
       }
-      // Track the minimum previousOffset across all events in this debounce window
-      // so the incremental parse covers ALL bytes written during the window
-      const currentMin = sseDebounceOffsets.get(key);
-      if (currentMin === undefined || event.previousOffset < currentMin) {
-        sseDebounceOffsets.set(key, event.previousOffset);
+
+      // Invalidate cache IMMEDIATELY (before debounce), matching devtools
+      if (sessionPipeline) {
+        const fullProjectDir = join(claudeProjectsDir, event.projectId);
+        sessionPipeline.invalidateSession(fullProjectDir, event.sessionId);
       }
+
       const timer = setTimeout(() => {
         sseDebounceTimers.delete(key);
-        const minOffset = sseDebounceOffsets.get(key) ?? 0;
-        sseDebounceOffsets.delete(key);
-        const fullProjectDir = join(claudeProjectsDir, event.projectId);
 
-        void (async () => {
-          try {
-            // No pipeline available — can't parse anything
-            if (!sessionPipeline) {
-              broadcastEvent('session-update', {
-                projectId: event.projectId,
-                sessionId: event.sessionId,
-                type: 'full-refresh',
-              });
-              return;
-            }
+        // Broadcast lightweight signal — NO parsed data
+        broadcastEvent('session-update', {
+          projectId: event.projectId,
+          sessionId: event.sessionId,
+          type: event.isSubagent ? 'subagent-change' : 'session-change',
+        });
+      }, 100); // 100ms debounce matching devtools FileWatcher
 
-            // Subagent file changes: use incremental parsing to avoid
-            // re-parsing the entire file on every change.  We cache the
-            // Process object and byte offset, parsing only NEW bytes.
-            if (event.isSubagent) {
-              const cached = subagentCache.get(event.filePath);
-              const startOffset = cached?.offset ?? 0;
-
-              // Skip if file hasn't grown since last successful parse.
-              if (cached && event.currentSize <= cached.offset) {
-                return;
-              }
-
-              sessionPipeline.invalidateSession(fullProjectDir, event.sessionId);
-
-              // Extract the agent ID from the file path.
-              const agentFilename = event.filePath.split('/').pop() ?? '';
-              const agentIdMatch = agentFilename.match(/^agent-(.+)\.jsonl$/);
-              const agentId = agentIdMatch ? agentIdMatch[1] : event.sessionId;
-
-              // Resolve parentTaskId from the main session's messages.
-              // This links the subagent to the Task tool_use block that spawned it.
-              // Cached per agentId so we only scan the main session once per agent.
-              let parentTaskId = parentTaskIdCache.get(agentId);
-              if (!parentTaskId) {
-                try {
-                  const mainSessionPath = join(fullProjectDir, `${event.sessionId}.jsonl`);
-                  const { messages: parentMessages } = await parseSessionFile(mainSessionPath);
-                  parentTaskId = resolveParentTaskId(parentMessages, agentId);
-                  if (parentTaskId) {
-                    parentTaskIdCache.set(agentId, parentTaskId);
-                  }
-                } catch {
-                  // Main session parse failed — proceed without parentTaskId
-                }
-              }
-
-              let subagentProcess: Process | null = null;
-              try {
-                if (cached) {
-                  // Incremental: parse only new bytes and merge into cached Process.
-                  const { messages: newMessages, bytesRead } = await parseSessionFile(
-                    event.filePath,
-                    { startOffset },
-                  );
-                  const newOffset = startOffset + bytesRead;
-
-                  if (newMessages.length === 0) {
-                    // No new messages — update offset but skip broadcast.
-                    subagentCache.set(event.filePath, { process: cached.process, offset: newOffset });
-                    return;
-                  }
-
-                  const allMessages = [...cached.process.messages, ...newMessages];
-                  const endTime = allMessages[allMessages.length - 1]?.timestamp ?? cached.process.endTime;
-                  subagentProcess = {
-                    ...cached.process,
-                    // Ensure parentTaskId is set (may have been resolved after initial cache)
-                    parentTaskId: cached.process.parentTaskId ?? parentTaskId,
-                    messages: allMessages,
-                    endTime,
-                    durationMs: endTime.getTime() - cached.process.startTime.getTime(),
-                    metrics: calculateAgentMetrics(allMessages),
-                    isOngoing: detectOngoing(allMessages),
-                  };
-
-                  subagentCache.set(event.filePath, { process: subagentProcess, offset: newOffset });
-                } else {
-                  // First time seeing this file — full parse via buildProcessFromFile
-                  // which handles filtering (warmup, compact, empty).
-                  subagentProcess = await buildProcessFromFile(event.filePath, agentId, parentTaskId);
-                  if (subagentProcess) {
-                    subagentCache.set(event.filePath, { process: subagentProcess, offset: event.currentSize });
-                  }
-                }
-              } catch {
-                // Parse failed — broadcast without data (fallback).
-                // Do NOT update cache so the next event retries.
-              }
-
-              broadcastEvent('session-update', {
-                projectId: event.projectId,
-                sessionId: event.sessionId,
-                type: 'subagent-update',
-                ...(subagentProcess && { subagentProcess }),
-              });
-              return;
-            }
-
-            const update = await sessionPipeline.parseIncremental(
-              fullProjectDir,
-              event.sessionId,
-              minOffset,
-            );
-
-            if (update.requiresFullRefresh) {
-              broadcastEvent('session-update', {
-                projectId: event.projectId,
-                sessionId: event.sessionId,
-                type: 'full-refresh',
-              });
-            } else if (update.newChunks.length === 0) {
-              // No meaningful new data, skip broadcast
-            } else {
-              broadcastEvent('session-update', {
-                projectId: event.projectId,
-                sessionId: event.sessionId,
-                type: 'incremental',
-                newChunks: update.newChunks,
-                metrics: update.metrics,
-                isOngoing: update.isOngoing,
-                newOffset: update.newOffset,
-              });
-            }
-
-            // Always invalidate cache after broadcasting so next full page
-            // load gets a fresh parse (the incremental data was a one-shot
-            // push to connected SSE clients)
-            sessionPipeline.invalidateSession(fullProjectDir, event.sessionId);
-          } catch (err) {
-            // On any error, fall back to full refresh
-            console.error('Incremental parse failed, falling back to full refresh:', err);
-            sessionPipeline?.invalidateSession(
-              join(claudeProjectsDir, event.projectId),
-              event.sessionId,
-            );
-            broadcastEvent('session-update', {
-              projectId: event.projectId,
-              sessionId: event.sessionId,
-              type: 'full-refresh',
-            });
-          }
-        })();
-      }, 300);
       sseDebounceTimers.set(key, timer);
     });
   }
