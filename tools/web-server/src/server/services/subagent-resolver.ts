@@ -253,7 +253,7 @@ function buildProcess(
   };
 }
 
-export function calculateAgentMetrics(messages: ParsedMessage[]): SessionMetrics {
+function calculateAgentMetrics(messages: ParsedMessage[]): SessionMetrics {
   let inputTokens = 0;
   let outputTokens = 0;
   let cacheReadTokens = 0;
@@ -288,7 +288,7 @@ export function calculateAgentMetrics(messages: ParsedMessage[]): SessionMetrics
   };
 }
 
-export function detectOngoing(messages: ParsedMessage[]): boolean {
+function detectOngoing(messages: ParsedMessage[]): boolean {
   if (messages.length === 0) return false;
   const last = messages[messages.length - 1];
   // If last message is assistant with tool_use stop_reason or has thinking without completion
@@ -304,56 +304,3 @@ export function detectOngoing(messages: ParsedMessage[]): boolean {
   return false;
 }
 
-/**
- * Parse a single subagent JSONL file and build a Process object.
- *
- * Returns null if the file cannot be parsed, is empty, or is a
- * filtered agent (warmup, compact).  This is a lightweight alternative
- * to the full `resolveSubagents` pipeline — it skips parallel detection.
- *
- * The caller can supply `parentTaskId` (the Task tool_use block ID from
- * the parent session) to link this Process to the correct AI chunk.
- * If not provided, the Process will have no parentTaskId and will fall
- * back to timing-based linking on the client.
- */
-export async function buildProcessFromFile(
-  filePath: string,
-  agentId: string,
-  parentTaskId?: string,
-): Promise<Process | null> {
-  try {
-    const { messages } = await parseSessionFile(filePath);
-    if (isFilteredAgent(messages, agentId)) return null;
-
-    return buildProcess(
-      { agentId, filePath, messages },
-      { parentTaskId },
-    );
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Scan a parent session's messages to find the Task tool_use_id that
- * spawned a given subagent (identified by agentId).
- *
- * When a Task tool completes, Claude Code writes a tool_result user message
- * with `toolUseResult.agentId` set to the subagent's agent ID and a
- * `tool_result` content block whose `tool_use_id` references the original
- * Task tool_use block.  This function finds that link.
- *
- * Returns the tool_use_id (parentTaskId) or undefined if not found.
- */
-export function resolveParentTaskId(
-  parentMessages: ParsedMessage[],
-  agentId: string,
-): string | undefined {
-  for (const msg of parentMessages) {
-    if (msg.toolUseResult && msg.toolUseResult.agentId === agentId) {
-      const toolUseId = msg.toolResults?.[0]?.toolUseId;
-      if (toolUseId) return toolUseId;
-    }
-  }
-  return undefined;
-}
