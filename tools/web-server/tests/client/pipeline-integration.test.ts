@@ -77,10 +77,11 @@ function makeEnhancedAIChunk(
   };
 }
 
+let compactCounter = 0;
 function makeCompactChunk(summary: string = 'Conversation compacted'): CompactChunk {
   return {
     type: 'compact',
-    id: `compact-${Math.random().toString(36).slice(2, 8)}`,
+    id: `compact-test-${++compactCounter}`,
     summary,
     timestamp: new Date('2025-01-01T01:00:00Z'),
   };

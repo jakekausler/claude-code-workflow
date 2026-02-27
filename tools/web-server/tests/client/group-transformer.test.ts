@@ -59,10 +59,11 @@ function makeSystemChunk(content: string = 'system output'): SystemChunk {
   };
 }
 
+let compactCounter = 0;
 function makeCompactChunk(summary: string = 'Conversation compacted'): CompactChunk {
   return {
     type: 'compact',
-    id: `compact-${Math.random().toString(36).slice(2, 8)}`,
+    id: `compact-test-${++compactCounter}`,
     summary,
     timestamp: new Date('2025-01-01T01:00:00Z'),
   };
@@ -329,15 +330,17 @@ describe('transformChunksToConversation', () => {
   });
 
   it('handles enhanced AI chunk with semantic steps', () => {
+    const msgs = [
+      makeMsg({
+        type: 'assistant',
+        content: [{ type: 'text', text: 'Response' }],
+        usage: { input_tokens: 100, output_tokens: 50 },
+      }),
+    ];
     const enhancedChunk: EnhancedAIChunk = {
       type: 'ai',
-      messages: [
-        makeMsg({
-          type: 'assistant',
-          content: [{ type: 'text', text: 'Response' }],
-          usage: { input_tokens: 100, output_tokens: 50 },
-        }),
-      ],
+      id: `ai-${msgs[0].uuid}`,
+      messages: msgs,
       timestamp: new Date('2025-01-01T00:00:00Z'),
       semanticSteps: [
         { type: 'thinking', content: 'Let me think...' },
@@ -360,15 +363,17 @@ describe('transformChunksToConversation', () => {
   });
 
   it('detects error status from error steps', () => {
+    const msgs = [
+      makeMsg({
+        type: 'assistant',
+        content: [],
+        usage: { input_tokens: 100, output_tokens: 50 },
+      }),
+    ];
     const enhancedChunk: EnhancedAIChunk = {
       type: 'ai',
-      messages: [
-        makeMsg({
-          type: 'assistant',
-          content: [],
-          usage: { input_tokens: 100, output_tokens: 50 },
-        }),
-      ],
+      id: `ai-${msgs[0].uuid}`,
+      messages: msgs,
       timestamp: new Date('2025-01-01T00:00:00Z'),
       semanticSteps: [
         { type: 'tool_result', content: 'Error occurred', isError: true },

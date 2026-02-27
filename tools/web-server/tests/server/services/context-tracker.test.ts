@@ -209,7 +209,7 @@ describe('ContextTracker', () => {
         createAIChunk([createAssistantMsg('First response', 100, 50)]),
         {
           type: 'compact',
-          id: `compact-${Math.random()}`,
+          id: 'compact-test-boundary',
           summary: 'Previous conversation was about...',
           timestamp: new Date(),
         } as CompactChunk,
@@ -543,14 +543,14 @@ describe('ContextTracker', () => {
         createAIChunk([createAssistantMsg('First response', 100, 50)]),
         {
           type: 'compact',
-          id: `compact-${Math.random()}`,
+          id: 'compact-test-1',
           summary: 'Compaction 1',
           timestamp: new Date(),
         } as CompactChunk,
         // Second compaction immediately — no turns between compactions
         {
           type: 'compact',
-          id: `compact-${Math.random()}`,
+          id: 'compact-test-2',
           summary: 'Compaction 2',
           timestamp: new Date(),
         } as CompactChunk,
