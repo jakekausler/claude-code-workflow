@@ -1,4 +1,3 @@
-import { existsSync, statSync } from 'fs';
 import { join, basename } from 'path';
 import { homedir } from 'os';
 import type { ClaudeMdFileEstimate } from '../types/jsonl.js';
@@ -50,13 +49,16 @@ async function readFileTokens(
  * Returns undefined if the encoded name cannot be decoded to a valid
  * directory (e.g., the original directory was deleted).
  */
-export function decodeProjectRoot(projectDir: string): string | undefined {
+export async function decodeProjectRoot(
+  projectDir: string,
+  fs: FileSystemProvider = defaultFs,
+): Promise<string | undefined> {
   const dirName = basename(projectDir);
   if (!dirName.startsWith('-')) return undefined;
 
   // Remove leading '-' (represents the leading '/' in the absolute path)
   const segments = dirName.slice(1).split('-');
-  return tryDecodePath('/', segments, 0);
+  return tryDecodePath('/', segments, 0, fs);
 }
 
 /**
@@ -64,14 +66,15 @@ export function decodeProjectRoot(projectDir: string): string | undefined {
  * At each level, consume 1..N segments joined by '-' as a single
  * directory component and verify it exists on disk before continuing.
  */
-function tryDecodePath(
+async function tryDecodePath(
   currentPath: string,
   segments: string[],
   startIdx: number,
-): string | undefined {
+  fs: FileSystemProvider,
+): Promise<string | undefined> {
   if (startIdx >= segments.length) {
     try {
-      if (existsSync(currentPath) && statSync(currentPath).isDirectory()) {
+      if (await fs.exists(currentPath) && (await fs.stat(currentPath)).isDirectory) {
         return currentPath;
       }
     } catch { /* ignore */ }
@@ -83,8 +86,8 @@ function tryDecodePath(
     const candidatePath = join(currentPath, component);
 
     try {
-      if (existsSync(candidatePath) && statSync(candidatePath).isDirectory()) {
-        const result = tryDecodePath(candidatePath, segments, endIdx + 1);
+      if (await fs.exists(candidatePath) && (await fs.stat(candidatePath)).isDirectory) {
+        const result = await tryDecodePath(candidatePath, segments, endIdx + 1, fs);
         if (result !== undefined) return result;
       }
     } catch { /* ignore */ }

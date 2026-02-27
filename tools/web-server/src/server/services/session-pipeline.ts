@@ -66,7 +66,7 @@ export class SessionPipeline {
     // Extract the project root from the first message's cwd field, falling back
     // to decoding the project directory name (e.g., '-storage-programs-my-project'
     // → '/storage/programs/my-project') for sessions without parseable messages.
-    const projectRoot = messages.find(m => m.cwd)?.cwd ?? decodeProjectRoot(projectDir);
+    const projectRoot = messages.find(m => m.cwd)?.cwd ?? await decodeProjectRoot(projectDir, this.fileSystem);
     const claudeMdFiles = await discoverClaudeMdFiles(projectRoot, this.fileSystem);
 
     // Read @-mentioned files from disk to get accurate token estimates.

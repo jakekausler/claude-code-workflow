@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { discoverClaudeMdFiles, decodeProjectRoot } from '../../../src/server/services/claude-md-reader.js';
+import type { FileSystemProvider } from '../../../src/server/deployment/types.js';
 
 // Mock fs/promises so we don't touch the real filesystem
 vi.mock('fs/promises', () => ({
@@ -9,28 +10,15 @@ vi.mock('fs/promises', () => ({
   constants: { R_OK: 4 },
 }));
 
-// Mock synchronous fs for decodeProjectRoot
-vi.mock('fs', async (importOriginal) => {
-  const original = await importOriginal<typeof import('fs')>();
-  return {
-    ...original,
-    existsSync: vi.fn(),
-    statSync: vi.fn(),
-  };
-});
-
 // Mock os to control homedir
 vi.mock('os', () => ({
   homedir: vi.fn(() => '/home/testuser'),
 }));
 
 import { access, readFile } from 'fs/promises';
-import { existsSync, statSync } from 'fs';
 
 const mockAccess = vi.mocked(access);
 const mockReadFile = vi.mocked(readFile);
-const mockExistsSync = vi.mocked(existsSync);
-const mockStatSync = vi.mocked(statSync);
 
 afterEach(() => {
   vi.clearAllMocks();
@@ -128,82 +116,90 @@ describe('discoverClaudeMdFiles', () => {
 });
 
 describe('decodeProjectRoot', () => {
-  /** Helper to set up the filesystem mock so that the given directories exist. */
-  function mockDirectories(existingDirs: string[]): void {
+  /** Create a mock FileSystemProvider that recognises the given directories. */
+  function createMockFs(existingDirs: string[]): FileSystemProvider {
     const dirSet = new Set(existingDirs);
-    mockExistsSync.mockImplementation((p: unknown) => dirSet.has(String(p)));
-    mockStatSync.mockImplementation((p: unknown) => {
-      if (dirSet.has(String(p))) {
-        return { isDirectory: () => true } as ReturnType<typeof statSync>;
-      }
-      throw new Error('ENOENT');
-    });
+    return {
+      type: 'local',
+      exists: vi.fn(async (p: string) => dirSet.has(p)),
+      stat: vi.fn(async (p: string) => {
+        if (dirSet.has(p)) {
+          return { size: 0, mtimeMs: 0, isDirectory: true };
+        }
+        throw new Error('ENOENT');
+      }),
+      readFile: vi.fn(),
+      readdir: vi.fn(),
+      createReadStream: vi.fn(),
+      watch: vi.fn(),
+    } as unknown as FileSystemProvider;
   }
 
-  it('decodes a simple path without hyphens', () => {
+  it('decodes a simple path without hyphens', async () => {
     // -storage-programs-myproject -> /storage/programs/myproject
-    mockDirectories(['/storage', '/storage/programs', '/storage/programs/myproject']);
+    const fs = createMockFs(['/storage', '/storage/programs', '/storage/programs/myproject']);
 
-    const result = decodeProjectRoot('/home/user/.claude/projects/-storage-programs-myproject');
+    const result = await decodeProjectRoot('/home/user/.claude/projects/-storage-programs-myproject', fs);
     expect(result).toBe('/storage/programs/myproject');
   });
 
-  it('decodes a path where a directory name contains hyphens', () => {
+  it('decodes a path where a directory name contains hyphens', async () => {
     // -storage-programs-claude-code-workflow -> /storage/programs/claude-code-workflow
-    mockDirectories([
+    const fs = createMockFs([
       '/storage',
       '/storage/programs',
       '/storage/programs/claude-code-workflow',
     ]);
 
-    const result = decodeProjectRoot(
+    const result = await decodeProjectRoot(
       '/home/user/.claude/projects/-storage-programs-claude-code-workflow',
+      fs,
     );
     expect(result).toBe('/storage/programs/claude-code-workflow');
   });
 
-  it('decodes a home directory path', () => {
+  it('decodes a home directory path', async () => {
     // -home-jakekausler -> /home/jakekausler
-    mockDirectories(['/home', '/home/jakekausler']);
+    const fs = createMockFs(['/home', '/home/jakekausler']);
 
-    const result = decodeProjectRoot('/home/user/.claude/projects/-home-jakekausler');
+    const result = await decodeProjectRoot('/home/user/.claude/projects/-home-jakekausler', fs);
     expect(result).toBe('/home/jakekausler');
   });
 
-  it('returns undefined when the directory name does not start with a hyphen', () => {
-    mockDirectories([]);
+  it('returns undefined when the directory name does not start with a hyphen', async () => {
+    const fs = createMockFs([]);
 
-    const result = decodeProjectRoot('/home/user/.claude/projects/not-encoded');
+    const result = await decodeProjectRoot('/home/user/.claude/projects/not-encoded', fs);
     expect(result).toBeUndefined();
   });
 
-  it('returns undefined when the decoded path does not exist', () => {
+  it('returns undefined when the decoded path does not exist', async () => {
     // No matching directories on disk
-    mockDirectories([]);
+    const fs = createMockFs([]);
 
-    const result = decodeProjectRoot('/home/user/.claude/projects/-tmp-deleted-project');
+    const result = await decodeProjectRoot('/home/user/.claude/projects/-tmp-deleted-project', fs);
     expect(result).toBeUndefined();
   });
 
-  it('prefers the shortest valid path when multiple decodings are possible', () => {
+  it('prefers the shortest valid path when multiple decodings are possible', async () => {
     // -a-b could decode to /a/b or /a-b
     // If /a exists as a directory and /a/b exists, it should find /a/b
     // If /a-b also exists, the first valid decode wins (depth-first)
-    mockDirectories(['/a', '/a/b']);
+    const fs = createMockFs(['/a', '/a/b']);
 
-    const result = decodeProjectRoot('/x/-a-b');
+    const result = await decodeProjectRoot('/x/-a-b', fs);
     expect(result).toBe('/a/b');
   });
 
-  it('finds a path with multiple hyphenated segments', () => {
+  it('finds a path with multiple hyphenated segments', async () => {
     // -home-user-my-cool-project -> /home/user/my-cool-project
-    mockDirectories([
+    const fs = createMockFs([
       '/home',
       '/home/user',
       '/home/user/my-cool-project',
     ]);
 
-    const result = decodeProjectRoot('/x/-home-user-my-cool-project');
+    const result = await decodeProjectRoot('/x/-home-user-my-cool-project', fs);
     expect(result).toBe('/home/user/my-cool-project');
   });
 });
