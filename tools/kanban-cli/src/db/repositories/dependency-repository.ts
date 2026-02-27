@@ -7,6 +7,7 @@ export interface DependencyUpsertData {
   from_type: string;
   to_type: string;
   repo_id: number;
+  target_repo_name?: string | null;
 }
 
 /**
@@ -24,6 +25,7 @@ export class DependencyRepository {
    */
   upsert(data: DependencyUpsertData): void {
     const raw = this.db.raw();
+    const targetRepoName = data.target_repo_name ?? null;
 
     const existing = raw
       .prepare('SELECT id FROM dependencies WHERE from_id = ? AND to_id = ?')
@@ -32,16 +34,16 @@ export class DependencyRepository {
     if (existing) {
       raw
         .prepare(
-          'UPDATE dependencies SET from_type = ?, to_type = ?, repo_id = ? WHERE id = ?'
+          'UPDATE dependencies SET from_type = ?, to_type = ?, repo_id = ?, target_repo_name = ? WHERE id = ?'
         )
-        .run(data.from_type, data.to_type, data.repo_id, existing.id);
+        .run(data.from_type, data.to_type, data.repo_id, targetRepoName, existing.id);
     } else {
       raw
         .prepare(
-          `INSERT INTO dependencies (from_id, to_id, from_type, to_type, repo_id)
-           VALUES (?, ?, ?, ?, ?)`
+          `INSERT INTO dependencies (from_id, to_id, from_type, to_type, repo_id, target_repo_name)
+           VALUES (?, ?, ?, ?, ?, ?)`
         )
-        .run(data.from_id, data.to_id, data.from_type, data.to_type, data.repo_id);
+        .run(data.from_id, data.to_id, data.from_type, data.to_type, data.repo_id, targetRepoName);
     }
   }
 

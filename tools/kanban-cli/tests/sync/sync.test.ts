@@ -329,4 +329,341 @@ id: STAGE-BAD-001
     expect(result.stages).toBe(0);
     expect(result.errors).toHaveLength(0);
   });
+
+  describe('cross-repo dependencies', () => {
+    const targetRepoDir = path.join(tmpDir, 'backend');
+    const targetEpicsDir = path.join(targetRepoDir, 'epics', 'api');
+
+    function writeTargetEpic(id: string, title: string): void {
+      fs.writeFileSync(
+        path.join(targetEpicsDir, `${id}.md`),
+        `---
+id: ${id}
+title: ${title}
+status: In Progress
+jira_key: null
+tickets:
+  - TICKET-002-001
+depends_on: []
+---
+
+# ${title}
+`
+      );
+    }
+
+    function writeTargetTicket(id: string, epicId: string, title: string): void {
+      fs.writeFileSync(
+        path.join(targetEpicsDir, `${id}.md`),
+        `---
+id: ${id}
+epic: ${epicId}
+title: ${title}
+status: In Progress
+jira_key: null
+source: local
+stages:
+  - STAGE-002-001-001
+depends_on: []
+---
+
+# ${title}
+`
+      );
+    }
+
+    function writeTargetStage(
+      id: string,
+      ticketId: string,
+      epicId: string,
+      title: string,
+      status: string,
+      deps: string[] = []
+    ): void {
+      const depsYaml = deps.length > 0
+        ? deps.map((d) => `  - ${d}`).join('\n')
+        : '[]';
+      fs.writeFileSync(
+        path.join(targetEpicsDir, `${id}.md`),
+        `---
+id: ${id}
+ticket: ${ticketId}
+epic: ${epicId}
+title: ${title}
+status: ${status}
+session_active: false
+refinement_type:
+  - backend
+depends_on:
+${deps.length > 0 ? depsYaml : '  []'}
+worktree_branch: null
+priority: 0
+due_date: null
+---
+
+# ${title}
+`
+      );
+    }
+
+    beforeEach(() => {
+      fs.mkdirSync(targetEpicsDir, { recursive: true });
+    });
+
+    it('local deps continue working unchanged (regression)', () => {
+      writeEpic('EPIC-001', 'Auth');
+      writeTicket('TICKET-001-001', 'EPIC-001', 'Login');
+      writeStage(
+        'STAGE-001-001-001',
+        'TICKET-001-001',
+        'EPIC-001',
+        'Login Form',
+        'Design',
+        ['STAGE-001-001-002']
+      );
+      writeStage(
+        'STAGE-001-001-002',
+        'TICKET-001-001',
+        'EPIC-001',
+        'Login API',
+        'Complete'
+      );
+
+      syncRepo({ repoPath: repoDir, db, config: testConfig });
+
+      const depRepo = new DependencyRepository(db);
+      const deps = depRepo.listByTarget('STAGE-001-001-001');
+      expect(deps).toHaveLength(1);
+      expect(deps[0].to_id).toBe('STAGE-001-001-002');
+      expect(deps[0].target_repo_name).toBeNull();
+      expect(deps[0].resolved).toBe(1);
+
+      const stageRepo = new StageRepository(db);
+      const stage = stageRepo.findById('STAGE-001-001-001');
+      expect(stage!.kanban_column).toBe('design');
+    });
+
+    it('stores cross-repo dep with target_repo_name set', () => {
+      writeEpic('EPIC-001', 'Auth');
+      writeTicket('TICKET-001-001', 'EPIC-001', 'Login');
+      writeStage(
+        'STAGE-001-001-001',
+        'TICKET-001-001',
+        'EPIC-001',
+        'Login Form',
+        'Design',
+        ['backend/STAGE-002-001-001']
+      );
+
+      syncRepo({ repoPath: repoDir, db, config: testConfig });
+
+      const depRepo = new DependencyRepository(db);
+      const deps = depRepo.listByTarget('STAGE-001-001-001');
+      expect(deps).toHaveLength(1);
+      expect(deps[0].to_id).toBe('STAGE-002-001-001');
+      expect(deps[0].target_repo_name).toBe('backend');
+    });
+
+    it('resolves cross-repo dep when target repo is synced and item is Complete', () => {
+      // Sync the target repo first with a Complete stage
+      writeTargetEpic('EPIC-002', 'API');
+      writeTargetTicket('TICKET-002-001', 'EPIC-002', 'Endpoints');
+      writeTargetStage(
+        'STAGE-002-001-001',
+        'TICKET-002-001',
+        'EPIC-002',
+        'REST API',
+        'Complete'
+      );
+      syncRepo({ repoPath: targetRepoDir, db, config: testConfig });
+
+      // Sync the current repo with a cross-repo dep on the target stage
+      writeEpic('EPIC-001', 'Auth');
+      writeTicket('TICKET-001-001', 'EPIC-001', 'Login');
+      writeStage(
+        'STAGE-001-001-001',
+        'TICKET-001-001',
+        'EPIC-001',
+        'Login Form',
+        'Design',
+        ['backend/STAGE-002-001-001']
+      );
+      syncRepo({ repoPath: repoDir, db, config: testConfig });
+
+      const depRepo = new DependencyRepository(db);
+      const deps = depRepo.listByTarget('STAGE-001-001-001');
+      expect(deps).toHaveLength(1);
+      expect(deps[0].resolved).toBe(1);
+
+      const stageRepo = new StageRepository(db);
+      const stage = stageRepo.findById('STAGE-001-001-001');
+      expect(stage!.kanban_column).toBe('design');
+    });
+
+    it('cross-repo dep stays unresolved when target repo not in DB', () => {
+      // Don't sync the target repo — it doesn't exist in DB yet
+      writeEpic('EPIC-001', 'Auth');
+      writeTicket('TICKET-001-001', 'EPIC-001', 'Login');
+      writeStage(
+        'STAGE-001-001-001',
+        'TICKET-001-001',
+        'EPIC-001',
+        'Login Form',
+        'Design',
+        ['backend/STAGE-002-001-001']
+      );
+      syncRepo({ repoPath: repoDir, db, config: testConfig });
+
+      const depRepo = new DependencyRepository(db);
+      const deps = depRepo.listByTarget('STAGE-001-001-001');
+      expect(deps).toHaveLength(1);
+      expect(deps[0].resolved).toBe(0);
+
+      const stageRepo = new StageRepository(db);
+      const stage = stageRepo.findById('STAGE-001-001-001');
+      expect(stage!.kanban_column).toBe('backlog');
+    });
+
+    it('cross-repo dep stays unresolved when target item is not Complete', () => {
+      // Sync the target repo with a non-Complete stage
+      writeTargetEpic('EPIC-002', 'API');
+      writeTargetTicket('TICKET-002-001', 'EPIC-002', 'Endpoints');
+      writeTargetStage(
+        'STAGE-002-001-001',
+        'TICKET-002-001',
+        'EPIC-002',
+        'REST API',
+        'Build'
+      );
+      syncRepo({ repoPath: targetRepoDir, db, config: testConfig });
+
+      // Sync the current repo with a cross-repo dep on the incomplete target
+      writeEpic('EPIC-001', 'Auth');
+      writeTicket('TICKET-001-001', 'EPIC-001', 'Login');
+      writeStage(
+        'STAGE-001-001-001',
+        'TICKET-001-001',
+        'EPIC-001',
+        'Login Form',
+        'Design',
+        ['backend/STAGE-002-001-001']
+      );
+      syncRepo({ repoPath: repoDir, db, config: testConfig });
+
+      const depRepo = new DependencyRepository(db);
+      const deps = depRepo.listByTarget('STAGE-001-001-001');
+      expect(deps).toHaveLength(1);
+      expect(deps[0].resolved).toBe(0);
+
+      const stageRepo = new StageRepository(db);
+      const stage = stageRepo.findById('STAGE-001-001-001');
+      expect(stage!.kanban_column).toBe('backlog');
+    });
+
+    it('cross-repo stage dep soft-resolves with PR Created status', () => {
+      // Sync the target repo with a stage in "PR Created" status
+      writeTargetEpic('EPIC-002', 'API');
+      writeTargetTicket('TICKET-002-001', 'EPIC-002', 'Endpoints');
+      writeTargetStage(
+        'STAGE-002-001-001',
+        'TICKET-002-001',
+        'EPIC-002',
+        'REST API',
+        'PR Created'
+      );
+      syncRepo({ repoPath: targetRepoDir, db, config: testConfig });
+
+      // Sync the current repo with a cross-repo dep on the soft-resolved target
+      writeEpic('EPIC-001', 'Auth');
+      writeTicket('TICKET-001-001', 'EPIC-001', 'Login');
+      writeStage(
+        'STAGE-001-001-001',
+        'TICKET-001-001',
+        'EPIC-001',
+        'Login Form',
+        'Design',
+        ['backend/STAGE-002-001-001']
+      );
+      syncRepo({ repoPath: repoDir, db, config: testConfig });
+
+      const depRepo = new DependencyRepository(db);
+      const deps = depRepo.listByTarget('STAGE-001-001-001');
+      expect(deps).toHaveLength(1);
+      // Hard-resolution should be false (not Complete)
+      expect(deps[0].resolved).toBe(0);
+
+      // But soft-or-hard-resolution should unblock the kanban column
+      const stageRepo = new StageRepository(db);
+      const stage = stageRepo.findById('STAGE-001-001-001');
+      expect(stage!.kanban_column).toBe('design');
+    });
+
+    it('cross-repo ticket dep resolves when all target stages are Complete', () => {
+      // Sync the target repo with all stages Complete
+      writeTargetEpic('EPIC-002', 'API');
+      writeTargetTicket('TICKET-002-001', 'EPIC-002', 'Endpoints');
+      writeTargetStage(
+        'STAGE-002-001-001',
+        'TICKET-002-001',
+        'EPIC-002',
+        'REST API',
+        'Complete'
+      );
+      syncRepo({ repoPath: targetRepoDir, db, config: testConfig });
+
+      // Sync the current repo with a cross-repo ticket dep
+      writeEpic('EPIC-001', 'Auth');
+      writeTicket('TICKET-001-001', 'EPIC-001', 'Login');
+      writeStage(
+        'STAGE-001-001-001',
+        'TICKET-001-001',
+        'EPIC-001',
+        'Login Form',
+        'Design',
+        ['backend/TICKET-002-001']
+      );
+      syncRepo({ repoPath: repoDir, db, config: testConfig });
+
+      const depRepo = new DependencyRepository(db);
+      const deps = depRepo.listByTarget('STAGE-001-001-001');
+      expect(deps).toHaveLength(1);
+      expect(deps[0].to_id).toBe('TICKET-002-001');
+      expect(deps[0].target_repo_name).toBe('backend');
+      expect(deps[0].resolved).toBe(1);
+    });
+
+    it('cross-repo epic dep resolves when all target tickets/stages are Complete', () => {
+      // Sync the target repo with all stages Complete
+      writeTargetEpic('EPIC-002', 'API');
+      writeTargetTicket('TICKET-002-001', 'EPIC-002', 'Endpoints');
+      writeTargetStage(
+        'STAGE-002-001-001',
+        'TICKET-002-001',
+        'EPIC-002',
+        'REST API',
+        'Complete'
+      );
+      syncRepo({ repoPath: targetRepoDir, db, config: testConfig });
+
+      // Sync the current repo with a cross-repo epic dep
+      writeEpic('EPIC-001', 'Auth');
+      writeTicket('TICKET-001-001', 'EPIC-001', 'Login');
+      writeStage(
+        'STAGE-001-001-001',
+        'TICKET-001-001',
+        'EPIC-001',
+        'Login Form',
+        'Design',
+        ['backend/EPIC-002']
+      );
+      syncRepo({ repoPath: repoDir, db, config: testConfig });
+
+      const depRepo = new DependencyRepository(db);
+      const deps = depRepo.listByTarget('STAGE-001-001-001');
+      expect(deps).toHaveLength(1);
+      expect(deps[0].to_id).toBe('EPIC-002');
+      expect(deps[0].target_repo_name).toBe('backend');
+      expect(deps[0].resolved).toBe(1);
+    });
+  });
 });

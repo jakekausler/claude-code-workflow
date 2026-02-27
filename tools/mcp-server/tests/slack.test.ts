@@ -261,6 +261,135 @@ describe('Slack tools', () => {
     });
   });
 
+  describe('handleSlackNotify — webhook_url override', () => {
+    describe('mock mode', () => {
+      let mockState: MockState;
+      let deps: SlackToolDeps;
+
+      beforeEach(() => {
+        process.env.KANBAN_MOCK = 'true';
+        mockState = new MockState();
+        deps = { mockState };
+      });
+
+      it('stores webhook_url in MockState notification', async () => {
+        const args = {
+          message: 'test notification',
+          webhook_url: 'https://hooks.slack.com/services/T111/B111/override',
+        };
+        await handleSlackNotify(args, deps);
+
+        const notifications = mockState.getNotifications();
+        expect(notifications).toHaveLength(1);
+        expect(notifications[0].webhook_url).toBe(
+          'https://hooks.slack.com/services/T111/B111/override',
+        );
+        expect(notifications[0].message).toBe('test notification');
+      });
+
+      it('works without webhook_url (existing behavior unchanged)', async () => {
+        await handleSlackNotify({ message: 'no override' }, deps);
+
+        const notifications = mockState.getNotifications();
+        expect(notifications).toHaveLength(1);
+        expect(notifications[0].webhook_url).toBeUndefined();
+        expect(notifications[0].message).toBe('no override');
+      });
+    });
+
+    describe('real mode', () => {
+      let mockFetch: ReturnType<typeof vi.fn>;
+
+      beforeEach(() => {
+        delete process.env.KANBAN_MOCK;
+        mockFetch = vi.fn().mockResolvedValue({ ok: true, status: 200 });
+      });
+
+      it('webhook_url override sends to specified URL', async () => {
+        const deps: SlackToolDeps = {
+          mockState: null,
+          webhookUrl: 'https://hooks.slack.com/services/T000/B000/global',
+          fetch: mockFetch as unknown as typeof globalThis.fetch,
+        };
+        await handleSlackNotify(
+          {
+            message: 'test',
+            webhook_url: 'https://hooks.slack.com/services/T111/B111/override',
+          },
+          deps,
+        );
+
+        expect(mockFetch).toHaveBeenCalledTimes(1);
+        const [url] = mockFetch.mock.calls[0];
+        expect(url).toBe('https://hooks.slack.com/services/T111/B111/override');
+      });
+
+      it('webhook_url takes precedence over global webhook', async () => {
+        const deps: SlackToolDeps = {
+          mockState: null,
+          webhookUrl: 'https://hooks.slack.com/services/T000/B000/global',
+          fetch: mockFetch as unknown as typeof globalThis.fetch,
+        };
+        await handleSlackNotify(
+          {
+            message: 'test',
+            webhook_url: 'https://hooks.slack.com/services/T222/B222/repo-specific',
+          },
+          deps,
+        );
+
+        const [url] = mockFetch.mock.calls[0];
+        expect(url).toBe('https://hooks.slack.com/services/T222/B222/repo-specific');
+        expect(url).not.toBe('https://hooks.slack.com/services/T000/B000/global');
+      });
+
+      it('without webhook_url, uses global webhookUrl (existing behavior)', async () => {
+        const deps: SlackToolDeps = {
+          mockState: null,
+          webhookUrl: 'https://hooks.slack.com/services/T000/B000/global',
+          fetch: mockFetch as unknown as typeof globalThis.fetch,
+        };
+        await handleSlackNotify({ message: 'test' }, deps);
+
+        const [url] = mockFetch.mock.calls[0];
+        expect(url).toBe('https://hooks.slack.com/services/T000/B000/global');
+      });
+
+      it('webhook_url without global webhookUrl still sends successfully', async () => {
+        const deps: SlackToolDeps = {
+          mockState: null,
+          fetch: mockFetch as unknown as typeof globalThis.fetch,
+        };
+        const result = await handleSlackNotify(
+          {
+            message: 'test',
+            webhook_url: 'https://hooks.slack.com/services/T333/B333/only-override',
+          },
+          deps,
+        );
+
+        expect(mockFetch).toHaveBeenCalledTimes(1);
+        const [url] = mockFetch.mock.calls[0];
+        expect(url).toBe('https://hooks.slack.com/services/T333/B333/only-override');
+        const data = parseResult(result);
+        expect(data).toContain('sent');
+      });
+
+      it('neither webhook_url nor global webhookUrl skips silently', async () => {
+        const deps: SlackToolDeps = {
+          mockState: null,
+          fetch: mockFetch as unknown as typeof globalThis.fetch,
+        };
+        const result = await handleSlackNotify({ message: 'test' }, deps);
+
+        expect(mockFetch).not.toHaveBeenCalled();
+        const data = parseResult(result);
+        expect(data).toContain('skipped');
+        expect(data).toContain('no webhook URL');
+      });
+    });
+  });
+
   describe('registerSlackTools', () => {
     it('registers 1 tool on the server without error', () => {
       const server = new McpServer({ name: 'test-server', version: '0.0.1' });

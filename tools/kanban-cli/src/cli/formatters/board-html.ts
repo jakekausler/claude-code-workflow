@@ -51,6 +51,7 @@ function renderTicketCard(item: TicketBoardItem): string {
           ${item.epic ? `<span class="badge badge-epic">${escapeHtml(item.epic)}</span>` : ''}
           <span class="badge badge-source">${escapeHtml(item.source)}</span>
           ${item.jira_key ? `<span class="badge badge-jira">${escapeHtml(item.jira_key)}</span>` : ''}
+          ${item.repo ? `<span class="badge badge-repo">${escapeHtml(item.repo)}</span>` : ''}
         </div>
       </div>`;
 }
@@ -72,6 +73,7 @@ function renderStageCard(item: StageBoardItem): string {
           ${item.epic ? `<span class="badge badge-epic">${escapeHtml(item.epic)}</span>` : ''}
           ${item.blocked_by && item.blocked_by.length > 0 ? `<span class="badge badge-blocked">Blocked</span>` : ''}
           ${item.worktree_branch ? `<span class="badge badge-branch" title="${escapeHtml(item.worktree_branch)}">branch</span>` : ''}
+          ${item.repo ? `<span class="badge badge-repo">${escapeHtml(item.repo)}</span>` : ''}
         </div>
       </div>`;
 }
@@ -137,7 +139,7 @@ export function renderBoardHtml(board: BoardOutput): string {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Kanban Board - ${escapeHtml(board.repo)}</title>
+  <title>Kanban Board - ${board.repos ? 'Global' : escapeHtml(board.repo)}</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -237,6 +239,7 @@ export function renderBoardHtml(board: BoardOutput): string {
     .badge-jira { background: #fff3e0; color: #e65100; }
     .badge-blocked { background: #ffebee; color: #c62828; }
     .badge-branch { background: #e8f5e9; color: #2e7d32; }
+    .badge-repo { background: #fce4ec; color: #880e4f; }
     .pending-merge { cursor: help; }
     .session-dot {
       display: inline-block;
@@ -267,7 +270,7 @@ export function renderBoardHtml(board: BoardOutput): string {
   <div class="board">
     ${columnsHtml}
   </div>
-  <footer>Generated ${escapeHtml(board.generated_at)} &mdash; ${escapeHtml(board.repo)}</footer>
+  <footer>Generated ${escapeHtml(board.generated_at)} &mdash; ${board.repos ? `Global (${board.repos.map(escapeHtml).join(', ')})` : escapeHtml(board.repo)}</footer>
 </body>
 </html>`;
 }

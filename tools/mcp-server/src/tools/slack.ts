@@ -6,6 +6,10 @@ import type { MockState } from '../state.js';
 
 const slackNotifyArgsSchema = z.object({
   message: z.string(),
+  webhook_url: z
+    .string()
+    .optional()
+    .describe('Override the global webhook URL. Use for per-repo Slack channel routing.'),
   stage: z.string().optional(),
   title: z.string().optional(),
   ticket: z.string().optional(),
@@ -52,12 +56,13 @@ export async function handleSlackNotify(
     return successResult('Slack notification skipped: mock mode but no state available');
   }
 
-  // Real mode: check for webhook URL
-  if (!deps.webhookUrl) {
+  // Real mode: resolve webhook URL (per-repo override > global default)
+  const resolvedWebhookUrl = args.webhook_url || deps.webhookUrl;
+  if (!resolvedWebhookUrl) {
     return successResult('Slack notification skipped: no webhook URL configured');
   }
 
-  if (!deps.webhookUrl.startsWith('https://')) {
+  if (!resolvedWebhookUrl.startsWith('https://')) {
     return errorResult('Webhook URL must use https://');
   }
 
@@ -94,7 +99,7 @@ export async function handleSlackNotify(
   // POST to webhook
   const fetchFn = deps.fetch ?? globalThis.fetch;
   try {
-    const response = await fetchFn(deps.webhookUrl, {
+    const response = await fetchFn(resolvedWebhookUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),

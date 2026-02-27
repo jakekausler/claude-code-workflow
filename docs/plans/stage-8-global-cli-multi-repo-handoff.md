@@ -246,9 +246,193 @@ cd ../kanban-cli && npm run verify
 
 ---
 
-## Next Steps After Stage 8
+## Completion Summary
+
+**Stage 8 is complete.** All 14 tasks across 6 waves were successfully implemented on `feat/stage-8-multi-repo` branch.
+
+### Implementation Overview
+
+The global CLI + multi-repo system is fully functional with 888 tests across 58 test files (up from 775 tests in Stage 7).
+
+### Wave 1: Foundations (✅ Complete)
+- **8-1**: Added `RepoRepository.findAll()` and `findByName()` methods
+- **8-3**: Implemented cross-repo dependency parser (`parseDependencyRef`, `isCrossRepoDep`, `formatCrossRepoDep`)
+
+### Wave 2: Registry + Schema (✅ Complete)
+- **8-2**: Created `repos.yaml` registry module with Zod validation
+  - `createRegistry()` factory with DI pattern
+  - `loadRepos()`, `registerRepo()`, `unregisterRepo()`, `findByName()` methods
+  - CONFIG_PATHS updated with `reposConfig` path
+  - 17 tests covering validation, duplicates, and error handling
+- **8-4**: Added `target_repo_name` column to dependencies table
+  - Fresh DB creates with column
+  - Existing DB gets migration on open
+  - Nullable for local deps, text for cross-repo
+
+### Wave 3: Core Multi-Repo (✅ Complete)
+- **8-5**: Implemented `createMultiRepoHelper()` for shared sync/aggregation
+  - `syncAllRepos()`: Syncs all registered repos, returns repo info
+  - `loadAllRepoData()`: Aggregates data across repos with `repo` field
+  - 10 tests covering multi-repo scenarios
+- **8-7**: Integrated cross-repo dependency resolution in syncRepo
+  - Cross-repo deps stored with `target_repo_name`
+  - Resolution looks up target repo, gets repo_id, checks target item status
+  - Hard resolution (blocks if target incomplete) and soft resolution (unresolved if target not in DB)
+  - Full end-to-end tested with two repos
+
+### Wave 4: CLI Commands (✅ Complete)
+- **8-6**: Three new CLI commands
+  - `register-repo <path> [--name] [--slack-webhook]`: Adds repo to registry, syncs immediately
+  - `unregister-repo <name>`: Removes from registry (preserves DB data)
+  - `list-repos`: Shows all registered repos with last-sync status from DB
+  - 18 tests covering validation, duplicates, and error cases
+- **8-8**: Added `--global` flag to `board` command
+  - Aggregates stages from all registered repos
+  - Each item includes `repo` field
+  - Output shows `repos: string[]` array in global mode
+- **8-9**: Added `--global` flag to `next` command
+  - Shows ready stages across all repos
+  - Cross-repo deps factor into blocking determination
+  - Each result includes `repo` field
+- **8-10**: Added `--global` flag to `graph` command
+  - Nodes/edges span all repos
+  - Cross-repo edges marked with `cross_repo: true`
+  - Mermaid output groups by repo with subgraphs
+  - Cycle detection spans all repos
+- **8-11**: Added `--global` flag to `validate` command
+  - Runs per-repo validation for each registered repo
+  - Checks cross-repo reference existence and validity
+  - Extended Tarjan SCC for cross-repo cycles
+  - Errors include `repo` field
+  - Without `--global`, cross-repo deps produce warnings (not errors)
+
+### Wave 5: Integration (✅ Complete)
+- **8-13**: End-to-end integration tests with two repos
+  - 6 tests covering registration, sync, all global commands
+  - Tests cross-repo dependency resolution
+  - Tests cross-repo cycle detection
+  - All passing
+
+### Wave 6: Documentation (✅ Complete)
+- **8-14**: This completion summary
+
+### Architecture & Key Decisions
+
+**Shared Database**
+- Single SQLite database at `~/.config/kanban-workflow/kanban.db`
+- All repos (epics, tickets, stages, dependencies) in same DB
+- Every table scoped by `repo_id` FOREIGN KEY
+- Existing queries automatically isolated per-repo
+
+**Registry System**
+- Separate `~/.config/kanban-workflow/repos.yaml` file
+- Zod-validated entries: path, name, optional slack_webhook
+- Never touches the database schema — purely config-based
+- `createRegistry(deps)` factory with injectable file I/O
+
+**Cross-Repo Dependencies**
+- Format: `<repoName>/ITEM-ID` (slash-delimited, no prefix)
+- Stored in dependencies table with `target_repo_name` column
+- Resolution: lookup repo by name → get repo_id → check target item status
+- Cycle detection extended to detect cross-repo circles
+
+**Global Commands**
+- All existing single-repo paths untouched (backward-compatible)
+- When `--global`: pre-sync all repos, aggregate data, add `repo` field to items
+- Output format unchanged in structure, only added `repos` array and item `repo` field
+
+**DI Pattern Throughout**
+- Every new module follows factory + partial dependency injection
+- Enables testing without real files/database
+- Example: `createRegistry(deps)` with injectable readFile/writeFile
+
+**Slack Routing**
+- Per-repo `slack_webhook` optional in repos.yaml
+- `slack_notify` MCP tool gains `webhook_url` parameter
+- Skills (phase-finalize, review-cycle) look up repo webhook, pass to tool
+
+### Test Coverage
+
+- **Total tests**: 888 (up from 775 in Stage 7)
+- **New test files**: 12
+- **Modified test files**: 7
+- **Integration tests**: 6 end-to-end tests with two real repos
+
+### Files Added
+
+1. `src/parser/cross-repo-deps.ts` — Cross-repo dependency format parser
+2. `src/repos/registry.ts` — Repos.yaml registry management
+3. `src/repos/multi-repo.ts` — Multi-repo sync/aggregation helper
+4. `src/cli/commands/register-repo.ts` — CLI command
+5. `src/cli/commands/unregister-repo.ts` — CLI command
+6. `src/cli/commands/list-repos.ts` — CLI command
+7. `tests/parser/cross-repo-deps.test.ts` — 16 tests
+8. `tests/repos/registry.test.ts` — 17 tests
+9. `tests/repos/multi-repo.test.ts` — 10 tests
+10. `tests/cli/commands/register-repo.test.ts` — 8 tests
+11. `tests/cli/commands/unregister-repo.test.ts` — 5 tests
+12. `tests/cli/commands/list-repos.test.ts` — 5 tests
+13. `tests/integration/multi-repo.test.ts` — 6 integration tests
+14. `tests/cli/commands/__helpers/mock-registry.ts` — Shared test helper
+
+### Files Modified
+
+**Database Layer**
+- `src/db/schema.ts` — Added target_repo_name column + migration
+- `src/db/repositories/repo-repository.ts` — Added findAll(), findByName()
+- `src/db/repositories/dependency-repository.ts` — target_repo_name support
+- `src/db/repositories/ticket-repository.ts` — repo_id param support
+- `src/db/repositories/types.ts` — DependencyRow.target_repo_name
+
+**Config & Sync**
+- `src/config/loader.ts` — Added CONFIG_PATHS.reposConfig
+- `src/sync/sync.ts` — Cross-repo dependency resolution integration
+
+**CLI Layer**
+- `src/cli/index.ts` — Registered 3 new commands
+- `src/cli/commands/board.ts` — --global flag
+- `src/cli/commands/next.ts` — --global flag
+- `src/cli/commands/graph.ts` — --global flag
+- `src/cli/commands/validate.ts` — --global flag
+
+**Business Logic**
+- `src/cli/logic/board.ts` — repo field support
+- `src/cli/logic/next.ts` — repo field support
+- `src/cli/logic/graph.ts` — repo/cross_repo field support
+- `src/cli/logic/validate.ts` — repo field + global mode validation
+
+**Formatters**
+- `src/cli/formatters/board-html.ts` — Global mode repo badges
+- `src/cli/formatters/graph-mermaid.ts` — Global mode repo subgraphs
+
+**MCP & Skills**
+- `tools/mcp-server/src/tools/slack.ts` — webhook_url override parameter
+- `tools/mcp-server/src/state.ts` — webhook_url field support
+- `skills/phase-finalize/SKILL.md` — Per-repo webhook routing documentation
+- `skills/review-cycle/SKILL.md` — Per-repo webhook routing documentation
+
+### Known Limitations
+
+1. **Global mode pipeline config**: Global mode uses the first registered repo's `.kanban-workflow.yaml` for pipeline phase definitions and column layout. Repos with different pipeline phases may have stages placed in unexpected columns. This is acceptable for MVP — each repo can still be viewed individually in single-repo mode with correct phases.
+
+2. **Global mode pipeline validation**: Pipeline validation in global mode (`validate --global`) only validates the first repo's `.kanban-workflow.yaml`, not per-repo pipelines. This is noted in the code with TODO comments.
+
+Both limitations are low-severity and documented. They can be addressed in future iterations if needed (e.g., when global mode multi-pipeline support is required).
+
+### Verification
+
+All verification commands pass:
+
+```bash
+cd tools/kanban-cli && npm run verify  # 888 tests across 58 files — ALL PASSING
+cd tools/orchestrator && npm run verify  # Existing tests still pass
+```
+
+### Next Steps After Stage 8
 
 Stage 8 completes the core feature set. After this:
 - The system supports multiple repos with cross-repo dependencies
 - The orchestrator can run as multiple instances (one per repo)
 - All CLI commands work in both single-repo and global modes
+- Users can register repos, manage them via CLI, and view aggregated workflows
+- Slack notifications route per-repo to configured webhooks

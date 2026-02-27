@@ -12,6 +12,9 @@ import { jiraImportCommand } from './commands/jira-import.js';
 import { jiraSyncCommand } from './commands/jira-sync.js';
 import { learningsCountCommand } from './commands/learnings-count.js';
 import { enrichCommand } from './commands/enrich.js';
+import { registerRepoCommand } from './commands/register-repo.js';
+import { unregisterRepoCommand } from './commands/unregister-repo.js';
+import { listReposCommand } from './commands/list-repos.js';
 
 const program = new Command();
 
@@ -32,5 +35,8 @@ program.addCommand(jiraImportCommand);
 program.addCommand(jiraSyncCommand);
 program.addCommand(learningsCountCommand);
 program.addCommand(enrichCommand);
+program.addCommand(registerRepoCommand);
+program.addCommand(unregisterRepoCommand);
+program.addCommand(listReposCommand);
 
 program.parse();

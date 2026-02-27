@@ -416,8 +416,11 @@ Steps 1-8 are IDENTICAL for local and remote mode. Steps 9+ diverge.
 14. [CONDITIONAL: Slack Notification]
     IF `WORKFLOW_SLACK_WEBHOOK` environment variable is set:
 
+      **Per-repo webhook routing:** Before calling `slack_notify`, check if `~/.config/kanban-workflow/repos.yaml` exists. If it does, look up the current repo's entry by matching the repo path. If the entry has a `slack_webhook` field, pass it as `webhook_url` to `slack_notify` — this routes the notification to a repo-specific Slack channel instead of the global one.
+
       **Preferred:** Use the `mcp__kanban__slack_notify` tool:
       - message: `"New MR/PR Ready for Review"`
+      - webhook_url: `<repo slack_webhook from repos.yaml, if found>` (omit if not found)
       - stage: `STAGE-XXX-YYY-ZZZ`
       - title: `<stage title>`
       - ticket: `TICKET-XXX-YYY`

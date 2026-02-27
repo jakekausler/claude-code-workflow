@@ -8,6 +8,7 @@ export interface ValidateEpicRow {
   tickets: string[];
   depends_on: string[];
   file_path: string;
+  repo?: string;
 }
 
 export interface ValidateJiraLinkRow {
@@ -28,6 +29,7 @@ export interface ValidateTicketRow {
   depends_on: string[];
   jira_links: ValidateJiraLinkRow[];
   file_path: string;
+  repo?: string;
 }
 
 export interface ValidatePendingMergeParentRow {
@@ -52,6 +54,7 @@ export interface ValidateStageRow {
   pending_merge_parents: ValidatePendingMergeParentRow[];
   is_draft: boolean;
   file_path: string;
+  repo?: string;
 }
 
 export interface ValidateDependencyRow {
@@ -66,18 +69,21 @@ export interface ValidationError {
   file: string;
   field: string;
   error: string;
+  repo?: string;
 }
 
 export interface ValidationWarning {
   file: string;
   field: string;
   warning: string;
+  repo?: string;
 }
 
 export interface ValidateOutput {
   valid: boolean;
   errors: ValidationError[];
   warnings: ValidationWarning[];
+  repos?: string[];
 }
 
 export interface ValidateInput {
@@ -87,6 +93,7 @@ export interface ValidateInput {
   dependencies: ValidateDependencyRow[];
   allIds: Set<string>;
   validStatuses: Set<string>;
+  global?: boolean;
 }
 
 // ---------- Helpers ----------
@@ -171,7 +178,7 @@ const VALID_DEP_PAIRS: Record<string, Set<string>> = {
 // ---------- Core logic ----------
 
 export function validateWorkItems(input: ValidateInput): ValidateOutput {
-  const { epics, tickets, stages, dependencies, allIds, validStatuses } = input;
+  const { epics, tickets, stages, dependencies, allIds, validStatuses, global } = input;
   const errors: ValidationError[] = [];
   const warnings: ValidationWarning[] = [];
 
@@ -184,49 +191,59 @@ export function validateWorkItems(input: ValidateInput): ValidateOutput {
   for (const epic of epics) {
     // Required fields
     if (!epic.title) {
-      errors.push({ file: epic.file_path, field: 'title', error: 'Epic title is required' });
+      const err: ValidationError = { file: epic.file_path, field: 'title', error: 'Epic title is required' };
+      if (global && epic.repo) err.repo = epic.repo;
+      errors.push(err);
     }
 
     // Validate tickets array references
     for (const ticketId of epic.tickets) {
       if (!ticketIds.has(ticketId) && !allIds.has(ticketId)) {
-        errors.push({
+        const err: ValidationError = {
           file: epic.file_path,
           field: 'tickets',
           error: `Referenced ticket ${ticketId} does not exist`,
-        });
+        };
+        if (global && epic.repo) err.repo = epic.repo;
+        errors.push(err);
       }
     }
 
     // Validate depends_on references
     for (const depId of epic.depends_on) {
       if (!allIds.has(depId)) {
-        errors.push({
+        const err: ValidationError = {
           file: epic.file_path,
           field: 'depends_on',
           error: `Reference ${depId} does not exist`,
-        });
+        };
+        if (global && epic.repo) err.repo = epic.repo;
+        errors.push(err);
       } else {
         // Check valid dependency type
         const depType = getEntityType(depId);
         const allowed = VALID_DEP_PAIRS['epic'];
         if (allowed && !allowed.has(depType)) {
-          errors.push({
+          const err: ValidationError = {
             file: epic.file_path,
             field: 'depends_on',
             error: `Epic cannot depend on ${depType} (${depId}). Epics can only depend on other epics.`,
-          });
+          };
+          if (global && epic.repo) err.repo = epic.repo;
+          errors.push(err);
         }
       }
     }
 
     // Validate status
     if (!validStatuses.has(epic.status)) {
-      errors.push({
+      const err: ValidationError = {
         file: epic.file_path,
         field: 'status',
         error: `Invalid status "${epic.status}". Valid values: ${[...validStatuses].join(', ')}`,
-      });
+      };
+      if (global && epic.repo) err.repo = epic.repo;
+      errors.push(err);
     }
   }
 
@@ -234,87 +251,107 @@ export function validateWorkItems(input: ValidateInput): ValidateOutput {
   for (const ticket of tickets) {
     // Required fields
     if (!ticket.title) {
-      errors.push({ file: ticket.file_path, field: 'title', error: 'Ticket title is required' });
+      const err: ValidationError = { file: ticket.file_path, field: 'title', error: 'Ticket title is required' };
+      if (global && ticket.repo) err.repo = ticket.repo;
+      errors.push(err);
     }
 
     // Warning for tickets without stages
     if (ticket.stages.length === 0) {
-      warnings.push({
+      const warn: ValidationWarning = {
         file: ticket.file_path,
         field: 'stages',
         warning: 'Ticket has no stages — needs conversion',
-      });
+      };
+      if (global && ticket.repo) warn.repo = ticket.repo;
+      warnings.push(warn);
     }
 
     // Validate stages array references
     for (const stageId of ticket.stages) {
       if (!stageIds.has(stageId) && !allIds.has(stageId)) {
-        errors.push({
+        const err: ValidationError = {
           file: ticket.file_path,
           field: 'stages',
           error: `Referenced stage ${stageId} does not exist`,
-        });
+        };
+        if (global && ticket.repo) err.repo = ticket.repo;
+        errors.push(err);
       }
     }
 
     // Validate depends_on references
     for (const depId of ticket.depends_on) {
       if (!allIds.has(depId)) {
-        errors.push({
+        const err: ValidationError = {
           file: ticket.file_path,
           field: 'depends_on',
           error: `Reference ${depId} does not exist`,
-        });
+        };
+        if (global && ticket.repo) err.repo = ticket.repo;
+        errors.push(err);
       } else {
         const depType = getEntityType(depId);
         const allowed = VALID_DEP_PAIRS['ticket'];
         if (allowed && !allowed.has(depType)) {
-          errors.push({
+          const err: ValidationError = {
             file: ticket.file_path,
             field: 'depends_on',
             error: `Ticket cannot depend on ${depType} (${depId}). Tickets can depend on tickets and epics.`,
-          });
+          };
+          if (global && ticket.repo) err.repo = ticket.repo;
+          errors.push(err);
         }
       }
     }
 
     // Validate status
     if (!validStatuses.has(ticket.status)) {
-      errors.push({
+      const err: ValidationError = {
         file: ticket.file_path,
         field: 'status',
         error: `Invalid status "${ticket.status}". Valid values: ${[...validStatuses].join(', ')}`,
-      });
+      };
+      if (global && ticket.repo) err.repo = ticket.repo;
+      errors.push(err);
     }
 
     // Validate jira_links
     for (const link of ticket.jira_links) {
       if (!link.type) {
-        errors.push({
+        const err: ValidationError = {
           file: ticket.file_path,
           field: 'jira_links',
           error: 'Jira link is missing required field "type"',
-        });
+        };
+        if (global && ticket.repo) err.repo = ticket.repo;
+        errors.push(err);
       } else if (!(VALID_JIRA_LINK_TYPES as readonly string[]).includes(link.type)) {
-        errors.push({
+        const err: ValidationError = {
           file: ticket.file_path,
           field: 'jira_links',
           error: `Invalid jira_links type "${link.type}". Valid values: ${VALID_JIRA_LINK_TYPES.join(', ')}`,
-        });
+        };
+        if (global && ticket.repo) err.repo = ticket.repo;
+        errors.push(err);
       }
       if (!link.url) {
-        errors.push({
+        const err: ValidationError = {
           file: ticket.file_path,
           field: 'jira_links',
           error: 'Jira link is missing required field "url"',
-        });
+        };
+        if (global && ticket.repo) err.repo = ticket.repo;
+        errors.push(err);
       }
       if (!link.title) {
-        errors.push({
+        const err: ValidationError = {
           file: ticket.file_path,
           field: 'jira_links',
           error: 'Jira link is missing required field "title"',
-        });
+        };
+        if (global && ticket.repo) err.repo = ticket.repo;
+        errors.push(err);
       }
     }
   }
@@ -325,35 +362,43 @@ export function validateWorkItems(input: ValidateInput): ValidateOutput {
   for (const stage of stages) {
     // Required fields
     if (!stage.title) {
-      errors.push({ file: stage.file_path, field: 'title', error: 'Stage title is required' });
+      const err: ValidationError = { file: stage.file_path, field: 'title', error: 'Stage title is required' };
+      if (global && stage.repo) err.repo = stage.repo;
+      errors.push(err);
     }
 
     // Validate status
     if (!validStatuses.has(stage.status)) {
-      errors.push({
+      const err: ValidationError = {
         file: stage.file_path,
         field: 'status',
         error: `Invalid status "${stage.status}". Valid values: ${[...validStatuses].join(', ')}`,
-      });
+      };
+      if (global && stage.repo) err.repo = stage.repo;
+      errors.push(err);
     }
 
     // Validate depends_on references
     for (const depId of stage.depends_on) {
       if (!allIds.has(depId)) {
-        errors.push({
+        const err: ValidationError = {
           file: stage.file_path,
           field: 'depends_on',
           error: `Reference ${depId} does not exist`,
-        });
+        };
+        if (global && stage.repo) err.repo = stage.repo;
+        errors.push(err);
       } else {
         const depType = getEntityType(depId);
         const allowed = VALID_DEP_PAIRS['stage'];
         if (allowed && !allowed.has(depType)) {
-          errors.push({
+          const err: ValidationError = {
             file: stage.file_path,
             field: 'depends_on',
             error: `Stage cannot depend on ${depType} (${depId}). Invalid dependency type.`,
-          });
+          };
+          if (global && stage.repo) err.repo = stage.repo;
+          errors.push(err);
         }
       }
     }
@@ -362,11 +407,13 @@ export function validateWorkItems(input: ValidateInput): ValidateOutput {
     if (stage.worktree_branch) {
       const existingFile = worktreeBranches.get(stage.worktree_branch);
       if (existingFile) {
-        errors.push({
+        const err: ValidationError = {
           file: stage.file_path,
           field: 'worktree_branch',
           error: `Duplicate worktree_branch "${stage.worktree_branch}" — also used by ${existingFile}`,
-        });
+        };
+        if (global && stage.repo) err.repo = stage.repo;
+        errors.push(err);
       } else {
         worktreeBranches.set(stage.worktree_branch, stage.file_path);
       }
@@ -375,41 +422,51 @@ export function validateWorkItems(input: ValidateInput): ValidateOutput {
     // Validate pending_merge_parents
     for (const parent of stage.pending_merge_parents) {
       if (!stageIds.has(parent.stage_id)) {
-        errors.push({
+        const err: ValidationError = {
           file: stage.file_path,
           field: 'pending_merge_parents',
           error: `Referenced stage ${parent.stage_id} does not exist`,
-        });
+        };
+        if (global && stage.repo) err.repo = stage.repo;
+        errors.push(err);
       } else {
         const parentStatus = stageStatusById.get(parent.stage_id);
         if (parentStatus && !ACCEPTABLE_PARENT_STATUSES.has(parentStatus)) {
-          warnings.push({
+          const warn: ValidationWarning = {
             file: stage.file_path,
             field: 'pending_merge_parents',
             warning: `Parent stage ${parent.stage_id} has status "${parentStatus}" — expected PR Created, Addressing Comments, or Complete`,
-          });
+          };
+          if (global && stage.repo) warn.repo = stage.repo;
+          warnings.push(warn);
         }
       }
     }
 
     // is_draft: true with empty pending_merge_parents is inconsistent
     if (stage.is_draft && stage.pending_merge_parents.length === 0) {
-      warnings.push({
+      const warn: ValidationWarning = {
         file: stage.file_path,
         field: 'is_draft',
         warning: 'Stage is marked as draft but has no pending merge parents — inconsistent state',
-      });
+      };
+      if (global && stage.repo) warn.repo = stage.repo;
+      warnings.push(warn);
     }
   }
 
   // --- Check for circular dependencies ---
   const circles = findCircularDeps(dependencies);
   for (const cycle of circles) {
-    errors.push({
+    const err: ValidationError = {
       file: '',
       field: 'depends_on',
       error: `Circular dependency detected: ${cycle.join(' → ')} → ${cycle[0]}`,
-    });
+    };
+    if (global) {
+      err.repo = 'cross-repo';
+    }
+    errors.push(err);
   }
 
   return {

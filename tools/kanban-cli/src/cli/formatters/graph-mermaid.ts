@@ -54,6 +54,65 @@ function inferTicketId(node: GraphNode): string | undefined {
   return undefined;
 }
 
+/**
+ * Render epic and ticket subgraphs with nested stages.
+ * Handles the grouping of nodes by epic and then by ticket within each epic.
+ * Returns an array of Mermaid diagram lines.
+ */
+function renderEpicTicketSubgraphs(
+  epicNodes: GraphNode[],
+  allChildren: GraphNode[],
+  indent: string,
+  epicChildMap: Map<string, GraphNode[]>
+): string[] {
+  const lines: string[] = [];
+
+  for (const epic of epicNodes) {
+    const children = epicChildMap.get(epic.id) || [];
+    const safeEpicId = sanitizeNodeId(epic.id);
+    lines.push(`${indent}subgraph sub_${safeEpicId} ["${epic.id}: ${epic.title}"]`);
+    lines.push(`${indent}    ${nodeDefinition(epic)}`);
+
+    const tickets = children.filter((n) => n.type === 'ticket');
+    const stages = children.filter((n) => n.type === 'stage');
+
+    const ticketStageMap = new Map<string, GraphNode[]>();
+    const ungroupedStages: GraphNode[] = [];
+
+    for (const ticket of tickets) {
+      ticketStageMap.set(ticket.id, []);
+    }
+
+    for (const stage of stages) {
+      const ticketId = inferTicketId(stage);
+      if (ticketId && ticketStageMap.has(ticketId)) {
+        ticketStageMap.get(ticketId)!.push(stage);
+      } else {
+        ungroupedStages.push(stage);
+      }
+    }
+
+    for (const ticket of tickets) {
+      const safeTicketId = sanitizeNodeId(ticket.id);
+      const ticketStages = ticketStageMap.get(ticket.id) || [];
+      lines.push(`${indent}    subgraph sub_${safeTicketId} ["${ticket.id}: ${ticket.title}"]`);
+      lines.push(`${indent}        ${nodeDefinition(ticket)}`);
+      for (const stage of ticketStages) {
+        lines.push(`${indent}        ${nodeDefinition(stage)}`);
+      }
+      lines.push(`${indent}    end`);
+    }
+
+    for (const stage of ungroupedStages) {
+      lines.push(`${indent}    ${nodeDefinition(stage)}`);
+    }
+
+    lines.push(`${indent}end`);
+  }
+
+  return lines;
+}
+
 /** Map a status string to a fill color for Mermaid style directives. */
 function statusColor(status: string): { fill: string; color: string } {
   const normalized = status.toLowerCase();
@@ -113,15 +172,17 @@ function nodeDefinition(node: GraphNode): string {
  * Format a GraphOutput as a Mermaid diagram string.
  *
  * Produces a `graph TD` diagram with:
- * - Subgraphs grouping tickets/stages under their epic
+ * - In global mode: top-level subgraphs per repo, then epic subgraphs inside
+ * - In single-repo mode: subgraphs grouping tickets/stages under their epic
  * - Shaped nodes by type (stadium for epics, rect for tickets, rounded for stages)
  * - Colored nodes by status
  * - Solid arrows for resolved deps, dashed arrows for unresolved
+ * - Thick dashed arrows for cross-repo edges (global mode only)
  * - Thick arrows for critical path edges
  * - Comments noting any detected cycles
  */
 export function formatGraphAsMermaid(graph: GraphOutput): string {
-  const { nodes, edges, cycles, critical_path } = graph;
+  const { nodes, edges, cycles, critical_path, repos } = graph;
   const lines: string[] = ['graph TD'];
 
   if (nodes.length === 0) {
@@ -146,81 +207,101 @@ export function formatGraphAsMermaid(graph: GraphOutput): string {
     criticalEdges.add(`${critical_path[i + 1]}|${critical_path[i]}`);
   }
 
-  // Group nodes by epic for subgraph rendering
-  const epicNodes = nodes.filter((n) => n.type === 'epic');
-  const epicChildMap = new Map<string, GraphNode[]>(); // epicId -> children (tickets + stages)
-  const ungroupedNodes: GraphNode[] = [];
+  // Check if this is global mode
+  const isGlobal = repos && repos.length > 0;
 
-  // Initialize epic groups
-  for (const epic of epicNodes) {
-    epicChildMap.set(epic.id, []);
-  }
+  if (isGlobal) {
+    // ── Global mode: group by repo, then by epic ──
 
-  // Assign tickets and stages to their epic groups
-  for (const node of nodes) {
-    if (node.type === 'epic') continue;
-    const epicId = inferEpicId(node);
-    if (epicId && epicChildMap.has(epicId)) {
-      epicChildMap.get(epicId)!.push(node);
-    } else {
-      ungroupedNodes.push(node);
-    }
-  }
+    // Group nodes by repo
+    const repoNodeMap = new Map<string, GraphNode[]>();
+    const ungroupedByRepo: GraphNode[] = [];
 
-  // Render subgraphs for each epic with nested ticket subgraphs
-  for (const epic of epicNodes) {
-    const children = epicChildMap.get(epic.id) || [];
-    const safeEpicId = sanitizeNodeId(epic.id);
-    lines.push(`    subgraph sub_${safeEpicId} ["${epic.id}: ${epic.title}"]`);
-    // Epic node itself inside the subgraph
-    lines.push(`        ${nodeDefinition(epic)}`);
-
-    // Separate children into tickets and stages, group stages by ticket
-    const tickets = children.filter((n) => n.type === 'ticket');
-    const stages = children.filter((n) => n.type === 'stage');
-
-    // Map ticketId -> stages belonging to that ticket
-    const ticketStageMap = new Map<string, GraphNode[]>();
-    const ungroupedStages: GraphNode[] = [];
-
-    // Initialize ticket stage groups
-    for (const ticket of tickets) {
-      ticketStageMap.set(ticket.id, []);
+    for (const repo of repos) {
+      repoNodeMap.set(repo, []);
     }
 
-    // Assign stages to their ticket groups
-    for (const stage of stages) {
-      const ticketId = inferTicketId(stage);
-      if (ticketId && ticketStageMap.has(ticketId)) {
-        ticketStageMap.get(ticketId)!.push(stage);
+    for (const node of nodes) {
+      if (node.repo && repoNodeMap.has(node.repo)) {
+        repoNodeMap.get(node.repo)!.push(node);
       } else {
-        ungroupedStages.push(stage);
+        ungroupedByRepo.push(node);
       }
     }
 
-    // Render ticket subgraphs
-    for (const ticket of tickets) {
-      const safeTicketId = sanitizeNodeId(ticket.id);
-      const ticketStages = ticketStageMap.get(ticket.id) || [];
-      lines.push(`        subgraph sub_${safeTicketId} ["${ticket.id}: ${ticket.title}"]`);
-      lines.push(`            ${nodeDefinition(ticket)}`);
-      for (const stage of ticketStages) {
-        lines.push(`            ${nodeDefinition(stage)}`);
+    // Render repo subgraphs
+    for (const repo of repos) {
+      const repoNodes = repoNodeMap.get(repo) || [];
+      if (repoNodes.length === 0) continue;
+
+      const safeRepoId = sanitizeNodeId(repo);
+      lines.push(`    subgraph repo_${safeRepoId} ["${repo}"]`);
+
+      // Group nodes within repo by epic
+      const epicNodes = repoNodes.filter((n) => n.type === 'epic');
+      const epicChildMap = new Map<string, GraphNode[]>();
+      const repoUngroupedNodes: GraphNode[] = [];
+
+      for (const epic of epicNodes) {
+        epicChildMap.set(epic.id, []);
       }
-      lines.push('        end');
+
+      for (const node of repoNodes) {
+        if (node.type === 'epic') continue;
+        const epicId = inferEpicId(node);
+        if (epicId && epicChildMap.has(epicId)) {
+          epicChildMap.get(epicId)!.push(node);
+        } else {
+          repoUngroupedNodes.push(node);
+        }
+      }
+
+      // Render epic subgraphs within repo
+      lines.push(...renderEpicTicketSubgraphs(epicNodes, repoNodes, '        ', epicChildMap));
+
+      // Render ungrouped nodes within repo
+      for (const node of repoUngroupedNodes) {
+        lines.push(`        ${nodeDefinition(node)}`);
+      }
+
+      lines.push('    end');
     }
 
-    // Render any stages that couldn't be matched to a ticket
-    for (const stage of ungroupedStages) {
-      lines.push(`        ${nodeDefinition(stage)}`);
+    // Render ungrouped nodes (no repo field)
+    for (const node of ungroupedByRepo) {
+      lines.push(`    ${nodeDefinition(node)}`);
+    }
+  } else {
+    // ── Single-repo mode: group by epic only ──
+
+    // Group nodes by epic for subgraph rendering
+    const epicNodes = nodes.filter((n) => n.type === 'epic');
+    const epicChildMap = new Map<string, GraphNode[]>(); // epicId -> children (tickets + stages)
+    const ungroupedNodes: GraphNode[] = [];
+
+    // Initialize epic groups
+    for (const epic of epicNodes) {
+      epicChildMap.set(epic.id, []);
     }
 
-    lines.push('    end');
-  }
+    // Assign tickets and stages to their epic groups
+    for (const node of nodes) {
+      if (node.type === 'epic') continue;
+      const epicId = inferEpicId(node);
+      if (epicId && epicChildMap.has(epicId)) {
+        epicChildMap.get(epicId)!.push(node);
+      } else {
+        ungroupedNodes.push(node);
+      }
+    }
 
-  // Render ungrouped nodes
-  for (const node of ungroupedNodes) {
-    lines.push(`    ${nodeDefinition(node)}`);
+    // Render subgraphs for each epic with nested ticket subgraphs
+    lines.push(...renderEpicTicketSubgraphs(epicNodes, nodes, '    ', epicChildMap));
+
+    // Render ungrouped nodes
+    for (const node of ungroupedNodes) {
+      lines.push(`    ${nodeDefinition(node)}`);
+    }
   }
 
   // Render edges
@@ -231,6 +312,9 @@ export function formatGraphAsMermaid(graph: GraphOutput): string {
 
     if (isCritical) {
       lines.push(`    ${fromSafe} ==> ${toSafe}`);
+    } else if (edge.cross_repo) {
+      // Cross-repo edges use thick dashed style
+      lines.push(`    ${fromSafe} -.->|cross-repo| ${toSafe}`);
     } else if (edge.resolved) {
       lines.push(`    ${fromSafe} --> ${toSafe}`);
     } else {

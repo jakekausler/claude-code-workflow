@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { buildBoard, toColumnKey } from '../../../src/cli/logic/board.js';
-import type { StageBoardItem } from '../../../src/cli/logic/board.js';
+import type { StageBoardItem, TicketBoardItem } from '../../../src/cli/logic/board.js';
 import type { PipelineConfig } from '../../../src/types/pipeline.js';
 
 const testConfig: PipelineConfig = {
@@ -336,5 +336,130 @@ describe('buildBoard', () => {
     // Ensure no stage has pending_merge_parents key in JSON output
     const json = JSON.stringify(result);
     expect(json).not.toContain('pending_merge_parents');
+  });
+});
+
+describe('buildBoard (global mode)', () => {
+  it('includes repos array at top level when global flag is set', () => {
+    const result = buildBoard({
+      config: testConfig,
+      repoPath: '(global)',
+      epics: [],
+      tickets: [],
+      stages: [],
+      dependencies: [],
+      global: true,
+      repos: ['repo-alpha', 'repo-beta'],
+    });
+    expect(result.repos).toEqual(['repo-alpha', 'repo-beta']);
+    expect(result.repo).toBe('(global)');
+  });
+
+  it('includes repo field on stage items in global mode', () => {
+    const result = buildBoard({
+      config: testConfig,
+      repoPath: '(global)',
+      epics: [],
+      tickets: [],
+      stages: [
+        { id: 'STAGE-A-001', ticket_id: 'TICKET-A-001', epic_id: 'EPIC-A', title: 'Stage from Alpha', status: 'Design', kanban_column: 'design', refinement_type: '[]', worktree_branch: 'b1', priority: 0, due_date: null, session_active: false, file_path: 'f.md', repo: 'repo-alpha' },
+        { id: 'STAGE-B-001', ticket_id: 'TICKET-B-001', epic_id: 'EPIC-B', title: 'Stage from Beta', status: 'Build', kanban_column: 'build', refinement_type: '[]', worktree_branch: 'b2', priority: 0, due_date: null, session_active: false, file_path: 'f.md', repo: 'repo-beta' },
+      ],
+      dependencies: [],
+      global: true,
+      repos: ['repo-alpha', 'repo-beta'],
+    });
+    const designItem = result.columns.design[0] as StageBoardItem;
+    expect(designItem.repo).toBe('repo-alpha');
+    const buildItem = result.columns.build[0] as StageBoardItem;
+    expect(buildItem.repo).toBe('repo-beta');
+  });
+
+  it('includes repo field on ticket items in global mode', () => {
+    const result = buildBoard({
+      config: testConfig,
+      repoPath: '(global)',
+      epics: [],
+      tickets: [
+        { id: 'TICKET-A-001', epic_id: 'EPIC-A', title: 'Ticket Alpha', status: 'Not Started', jira_key: null, source: 'local', has_stages: false, file_path: 'f.md', repo: 'repo-alpha' },
+        { id: 'TICKET-B-001', epic_id: 'EPIC-B', title: 'Ticket Beta', status: 'Not Started', jira_key: null, source: 'local', has_stages: false, file_path: 'f.md', repo: 'repo-beta' },
+      ],
+      stages: [],
+      dependencies: [],
+      global: true,
+      repos: ['repo-alpha', 'repo-beta'],
+    });
+    expect(result.columns.to_convert).toHaveLength(2);
+    const ticketA = result.columns.to_convert[0] as TicketBoardItem;
+    expect(ticketA.repo).toBe('repo-alpha');
+    const ticketB = result.columns.to_convert[1] as TicketBoardItem;
+    expect(ticketB.repo).toBe('repo-beta');
+  });
+
+  it('aggregates stages from multiple repos into correct columns', () => {
+    const result = buildBoard({
+      config: testConfig,
+      repoPath: '(global)',
+      epics: [],
+      tickets: [],
+      stages: [
+        { id: 'STAGE-A-001', ticket_id: 'TICKET-A-001', epic_id: 'EPIC-A', title: 'Alpha Design', status: 'Design', kanban_column: 'design', refinement_type: '[]', worktree_branch: 'b1', priority: 0, due_date: null, session_active: false, file_path: 'f.md', repo: 'repo-alpha' },
+        { id: 'STAGE-B-001', ticket_id: 'TICKET-B-001', epic_id: 'EPIC-B', title: 'Beta Design', status: 'Design', kanban_column: 'design', refinement_type: '[]', worktree_branch: 'b2', priority: 0, due_date: null, session_active: false, file_path: 'f.md', repo: 'repo-beta' },
+        { id: 'STAGE-A-002', ticket_id: 'TICKET-A-001', epic_id: 'EPIC-A', title: 'Alpha Build', status: 'Build', kanban_column: 'build', refinement_type: '[]', worktree_branch: 'b3', priority: 0, due_date: null, session_active: false, file_path: 'f.md', repo: 'repo-alpha' },
+      ],
+      dependencies: [],
+      global: true,
+      repos: ['repo-alpha', 'repo-beta'],
+    });
+    expect(result.columns.design).toHaveLength(2);
+    expect(result.columns.build).toHaveLength(1);
+    expect(result.stats.total_stages).toBe(3);
+    expect(result.stats.by_column.design).toBe(2);
+    expect(result.stats.by_column.build).toBe(1);
+  });
+
+  it('does NOT include repos or repo fields in single-repo mode (regression)', () => {
+    const result = buildBoard({
+      config: testConfig,
+      repoPath: '/tmp/test-repo',
+      epics: [],
+      tickets: [
+        { id: 'TICKET-001-001', epic_id: 'EPIC-001', title: 'T1', status: 'Not Started', jira_key: null, source: 'local', has_stages: false, file_path: 'f.md' },
+      ],
+      stages: [
+        { id: 'STAGE-001-001-001', ticket_id: 'TICKET-001-001', epic_id: 'EPIC-001', title: 'S1', status: 'Design', kanban_column: 'design', refinement_type: '[]', worktree_branch: 'b1', priority: 0, due_date: null, session_active: false, file_path: 'f.md' },
+      ],
+      dependencies: [],
+    });
+    // No repos array at top level
+    expect(result.repos).toBeUndefined();
+    // No repo field on items
+    const json = JSON.stringify(result);
+    // repo appears only as the top-level field, not on any item
+    const parsed = JSON.parse(json);
+    expect(parsed.repo).toBe('/tmp/test-repo');
+    const stageItem = parsed.columns.design[0];
+    expect(stageItem.repo).toBeUndefined();
+    const ticketItem = parsed.columns.to_convert[0];
+    expect(ticketItem.repo).toBeUndefined();
+  });
+
+  it('filters by epic in global mode', () => {
+    const result = buildBoard({
+      config: testConfig,
+      repoPath: '(global)',
+      epics: [],
+      tickets: [],
+      stages: [
+        { id: 'STAGE-A-001', ticket_id: 'TICKET-A-001', epic_id: 'EPIC-A', title: 'Alpha', status: 'Design', kanban_column: 'design', refinement_type: '[]', worktree_branch: 'b1', priority: 0, due_date: null, session_active: false, file_path: 'f.md', repo: 'repo-alpha' },
+        { id: 'STAGE-B-001', ticket_id: 'TICKET-B-001', epic_id: 'EPIC-B', title: 'Beta', status: 'Design', kanban_column: 'design', refinement_type: '[]', worktree_branch: 'b2', priority: 0, due_date: null, session_active: false, file_path: 'f.md', repo: 'repo-beta' },
+      ],
+      dependencies: [],
+      filters: { epic: 'EPIC-A' },
+      global: true,
+      repos: ['repo-alpha', 'repo-beta'],
+    });
+    expect(result.columns.design).toHaveLength(1);
+    expect(result.columns.design[0].id).toBe('STAGE-A-001');
   });
 });

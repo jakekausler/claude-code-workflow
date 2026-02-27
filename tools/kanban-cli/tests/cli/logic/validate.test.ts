@@ -455,4 +455,140 @@ describe('validateWorkItems', () => {
       expect(result.errors.filter((e) => e.field === 'jira_links')).toHaveLength(0);
     });
   });
+
+  // --- Global mode tests ---
+
+  describe('global mode', () => {
+    it('global mode validates all repos', () => {
+      const epic1 = makeEpic({ id: 'EPIC-REPO1', tickets: ['TICKET-REPO1-001'], repo: 'repo1' });
+      const ticket1 = makeTicket({ id: 'TICKET-REPO1-001', epic_id: 'EPIC-REPO1', stages: ['STAGE-REPO1-001'], repo: 'repo1' });
+      const stage1 = makeStage({ id: 'STAGE-REPO1-001', ticket_id: 'TICKET-REPO1-001', worktree_branch: 'branch-repo1', repo: 'repo1' });
+
+      const epic2 = makeEpic({ id: 'EPIC-REPO2', title: 'Feature', tickets: ['TICKET-REPO2-001'], repo: 'repo2' });
+      const ticket2 = makeTicket({ id: 'TICKET-REPO2-001', epic_id: 'EPIC-REPO2', stages: ['STAGE-REPO2-001'], repo: 'repo2' });
+      const stage2 = makeStage({ id: 'STAGE-REPO2-001', ticket_id: 'TICKET-REPO2-001', worktree_branch: 'branch-repo2', repo: 'repo2' });
+
+      const result = validateWorkItems({
+        epics: [epic1, epic2],
+        tickets: [ticket1, ticket2],
+        stages: [stage1, stage2],
+        dependencies: [],
+        allIds: new Set(['EPIC-REPO1', 'TICKET-REPO1-001', 'STAGE-REPO1-001', 'EPIC-REPO2', 'TICKET-REPO2-001', 'STAGE-REPO2-001']),
+        validStatuses: new Set(['Not Started', 'In Progress']),
+        global: true,
+      });
+      expect(result.valid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('global mode reports error for reference to non-existent item', () => {
+      const epic = makeEpic({ depends_on: ['MISSING-ID'], repo: 'repo1' });
+
+      const result = validateWorkItems({
+        epics: [epic],
+        tickets: [],
+        stages: [],
+        dependencies: [],
+        allIds: new Set(['EPIC-001']),
+        validStatuses: new Set(['In Progress']),
+        global: true,
+      });
+      expect(result.valid).toBe(false);
+      const err = result.errors.find((e) => e.error.includes('MISSING-ID'));
+      expect(err).toBeDefined();
+      expect(err?.repo).toBe('repo1');
+    });
+
+    it('global mode detects cross-repo circular dependencies', () => {
+      const ticket1 = makeTicket({ id: 'T1', depends_on: ['T2'], repo: 'repo1', file_path: 't1.md' });
+      const ticket2 = makeTicket({ id: 'T2', depends_on: ['T1'], repo: 'repo2', file_path: 't2.md' });
+
+      const result = validateWorkItems({
+        epics: [],
+        tickets: [ticket1, ticket2],
+        stages: [],
+        dependencies: [
+          { from_id: 'T1', to_id: 'T2', resolved: false },
+          { from_id: 'T2', to_id: 'T1', resolved: false },
+        ],
+        allIds: new Set(['T1', 'T2']),
+        validStatuses: new Set(['In Progress']),
+        global: true,
+      });
+      expect(result.valid).toBe(false);
+      expect(result.errors.some((e) => e.error.toLowerCase().includes('circular'))).toBe(true);
+    });
+
+    it('global mode enforces type rules across repos', () => {
+      const epic = makeEpic({ depends_on: ['STAGE-001-001-001'], repo: 'repo1' });
+      const stage = makeStage({ id: 'STAGE-001-001-001', repo: 'repo2' });
+
+      const result = validateWorkItems({
+        epics: [epic],
+        tickets: [],
+        stages: [stage],
+        dependencies: [],
+        allIds: new Set(['EPIC-001', 'STAGE-001-001-001']),
+        validStatuses: new Set(['Not Started', 'In Progress']),
+        global: true,
+      });
+      expect(result.valid).toBe(false);
+      const err = result.errors.find((e) => e.error.includes('cannot depend on'));
+      expect(err).toBeDefined();
+      expect(err?.repo).toBe('repo1');
+    });
+
+    it('global mode errors include repo field', () => {
+      const ticket = makeTicket({ title: '', repo: 'repo1' });
+
+      const result = validateWorkItems({
+        epics: [],
+        tickets: [ticket],
+        stages: [],
+        dependencies: [],
+        allIds: new Set(['TICKET-001-001']),
+        validStatuses: new Set(['In Progress']),
+        global: true,
+      });
+      expect(result.valid).toBe(false);
+      expect(result.errors.length).toBeGreaterThan(0);
+      expect(result.errors[0].repo).toBe('repo1');
+    });
+
+    it('global mode accepts global flag without error', () => {
+      const epic = makeEpic({ tickets: [], repo: 'repo1' });
+
+      const result = validateWorkItems({
+        epics: [epic],
+        tickets: [],
+        stages: [],
+        dependencies: [],
+        allIds: new Set(['EPIC-001']),
+        validStatuses: new Set(['In Progress']),
+        global: true,
+      });
+      expect(result.valid).toBe(true);
+      // Note: repos array is added by the command, not by validateWorkItems
+      // This test verifies the input accepts global: true
+    });
+
+    it('without --global, cross-repo deps produce errors for unresolvable refs', () => {
+      const ticket = makeTicket({ depends_on: ['NONEXISTENT-ID'] });
+
+      const result = validateWorkItems({
+        epics: [],
+        tickets: [ticket],
+        stages: [],
+        dependencies: [],
+        allIds: new Set(['TICKET-001-001']),
+        validStatuses: new Set(['In Progress']),
+        global: false,
+      });
+      expect(result.valid).toBe(false);
+      expect(result.errors.some((e) => e.error.includes('NONEXISTENT-ID'))).toBe(true);
+      // Error should not have repo field when global: false or not set
+      const err = result.errors.find((e) => e.error.includes('NONEXISTENT-ID'));
+      expect(err?.repo).toBeUndefined();
+    });
+  });
 });

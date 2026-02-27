@@ -154,4 +154,102 @@ describe('buildGraph', () => {
     expect(result.nodes.some((n) => n.id === 'S1')).toBe(true);
     expect(result.nodes.some((n) => n.id === 'S2')).toBe(false);
   });
+
+  it('global mode includes nodes from multiple repos', () => {
+    const result = buildGraph({
+      epics: [
+        { id: 'EPIC-001', title: 'Backend Auth', status: 'In Progress', repo: 'backend' },
+        { id: 'EPIC-002', title: 'Frontend UI', status: 'In Progress', repo: 'frontend' },
+      ],
+      tickets: [
+        { id: 'TICKET-001-001', epic_id: 'EPIC-001', title: 'Login API', status: 'In Progress', repo: 'backend' },
+        { id: 'TICKET-002-001', epic_id: 'EPIC-002', title: 'Login Form', status: 'In Progress', repo: 'frontend' },
+      ],
+      stages: [],
+      dependencies: [],
+      global: true,
+      repos: ['backend', 'frontend'],
+    });
+    expect(result.nodes).toHaveLength(4);
+    expect(result.nodes.some((n) => n.id === 'EPIC-001' && n.repo === 'backend')).toBe(true);
+    expect(result.nodes.some((n) => n.id === 'EPIC-002' && n.repo === 'frontend')).toBe(true);
+    expect(result.repos).toEqual(['backend', 'frontend']);
+  });
+
+  it('cross-repo edges have cross_repo flag', () => {
+    const result = buildGraph({
+      epics: [],
+      tickets: [],
+      stages: [
+        { id: 'STAGE-001-001-001', ticket_id: 'T', epic_id: 'E', title: 'S1', status: 'Complete', repo: 'backend' },
+        { id: 'STAGE-002-001-001', ticket_id: 'T', epic_id: 'E', title: 'S2', status: 'Not Started', repo: 'frontend' },
+      ],
+      dependencies: [
+        { id: 1, from_id: 'STAGE-002-001-001', to_id: 'STAGE-001-001-001', from_type: 'stage', to_type: 'stage', resolved: true, repo: 'backend' },
+      ],
+      global: true,
+      repos: ['backend', 'frontend'],
+    });
+    expect(result.edges).toHaveLength(1);
+    expect(result.edges[0].cross_repo).toBe(true);
+  });
+
+  it('same-repo edges do not have cross_repo flag', () => {
+    const result = buildGraph({
+      epics: [],
+      tickets: [],
+      stages: [
+        { id: 'STAGE-001-001-001', ticket_id: 'T', epic_id: 'E', title: 'S1', status: 'Complete', repo: 'backend' },
+        { id: 'STAGE-001-001-002', ticket_id: 'T', epic_id: 'E', title: 'S2', status: 'Not Started', repo: 'backend' },
+      ],
+      dependencies: [
+        { id: 1, from_id: 'STAGE-001-001-002', to_id: 'STAGE-001-001-001', from_type: 'stage', to_type: 'stage', resolved: true, repo: 'backend' },
+      ],
+      global: true,
+      repos: ['backend'],
+    });
+    expect(result.edges).toHaveLength(1);
+    expect(result.edges[0].cross_repo).toBeUndefined();
+  });
+
+  it('cross-repo cycle detection works', () => {
+    const result = buildGraph({
+      epics: [],
+      tickets: [],
+      stages: [
+        { id: 'S1', ticket_id: 'T', epic_id: 'E', title: 'S1', status: 'Not Started', repo: 'backend' },
+        { id: 'S2', ticket_id: 'T', epic_id: 'E', title: 'S2', status: 'Not Started', repo: 'frontend' },
+        { id: 'S3', ticket_id: 'T', epic_id: 'E', title: 'S3', status: 'Not Started', repo: 'backend' },
+      ],
+      dependencies: [
+        { id: 1, from_id: 'S1', to_id: 'S2', from_type: 'stage', to_type: 'stage', resolved: false, repo: 'backend' },
+        { id: 2, from_id: 'S2', to_id: 'S3', from_type: 'stage', to_type: 'stage', resolved: false, repo: 'frontend' },
+        { id: 3, from_id: 'S3', to_id: 'S1', from_type: 'stage', to_type: 'stage', resolved: false, repo: 'backend' },
+      ],
+      global: true,
+      repos: ['backend', 'frontend'],
+    });
+    expect(result.cycles.length).toBeGreaterThan(0);
+    // The cycle should contain all three IDs
+    const cycleIds = result.cycles[0];
+    expect(cycleIds).toContain('S1');
+    expect(cycleIds).toContain('S2');
+    expect(cycleIds).toContain('S3');
+  });
+
+  it('without --global, output unchanged (no repo field)', () => {
+    const result = buildGraph({
+      epics: [
+        { id: 'EPIC-001', title: 'Auth', status: 'In Progress' },
+      ],
+      tickets: [
+        { id: 'TICKET-001-001', epic_id: 'EPIC-001', title: 'Login', status: 'In Progress' },
+      ],
+      stages: [],
+      dependencies: [],
+    });
+    expect(result.nodes).toHaveLength(2);
+    expect(result.nodes.every((n) => !n.repo)).toBe(true);
+    expect(result.repos).toBeUndefined();
+  });
 });
