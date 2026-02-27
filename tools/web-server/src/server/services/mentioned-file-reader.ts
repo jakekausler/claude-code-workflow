@@ -1,8 +1,9 @@
-import { readFile, access, stat, constants } from 'fs/promises';
 import { resolve, isAbsolute } from 'path';
 import { homedir } from 'os';
 import type { ParsedMessage } from '../types/jsonl.js';
 import type { MentionedFileEstimate } from '../types/jsonl.js';
+import type { FileSystemProvider } from '../deployment/types.js';
+import { DirectFileSystemProvider } from '../deployment/local/direct-fs-provider.js';
 
 /** Maximum file size to read (100 KB). Larger files are skipped. */
 const MAX_FILE_SIZE = 100 * 1024;
@@ -87,6 +88,8 @@ function resolveFilePath(filePath: string, projectRoot: string): string {
   return resolve(projectRoot, filePath);
 }
 
+const defaultFs = new DirectFileSystemProvider();
+
 /**
  * Read a single file and return its token estimate.
  * Returns null if the file doesn't exist, is too large, or is binary.
@@ -94,22 +97,26 @@ function resolveFilePath(filePath: string, projectRoot: string): string {
 async function readMentionedFileTokens(
   rawPath: string,
   projectRoot: string,
+  fs: FileSystemProvider,
 ): Promise<MentionedFileEstimate | null> {
   if (isBinaryExtension(rawPath)) return null;
 
   const absolutePath = resolveFilePath(rawPath, projectRoot);
 
   try {
-    await access(absolutePath, constants.R_OK);
-    const fileStat = await stat(absolutePath);
+    const exists = await fs.exists(absolutePath);
+    if (!exists) return null;
+
+    const fileStat = await fs.stat(absolutePath);
 
     // Skip directories
-    if (!fileStat.isFile()) return null;
+    if (fileStat.isDirectory) return null;
 
     // Skip files larger than MAX_FILE_SIZE
     if (fileStat.size > MAX_FILE_SIZE) return null;
 
-    const content = await readFile(absolutePath, 'utf-8');
+    const buf = await fs.readFile(absolutePath);
+    const content = buf.toString('utf-8');
     const tokens = estimateTokens(content);
     if (tokens <= 0) return null;
 
@@ -127,17 +134,20 @@ async function readMentionedFileTokens(
  *
  * @param messages - All parsed messages from the session
  * @param projectRoot - The project root directory (from session cwd) for resolving relative paths
+ * @param fileSystem - FileSystemProvider for file I/O. Defaults to DirectFileSystemProvider.
  * @returns Array of file estimates (files that don't exist or can't be read are excluded)
  */
 export async function readMentionedFiles(
   messages: ParsedMessage[],
   projectRoot: string,
+  fileSystem?: FileSystemProvider,
 ): Promise<MentionedFileEstimate[]> {
+  const fs = fileSystem ?? defaultFs;
   const rawPaths = extractMentionedFilePaths(messages);
   if (rawPaths.length === 0) return [];
 
   const results = await Promise.all(
-    rawPaths.map((p) => readMentionedFileTokens(p, projectRoot)),
+    rawPaths.map((p) => readMentionedFileTokens(p, projectRoot, fs)),
   );
 
   return results.filter((r): r is MentionedFileEstimate => r !== null);

@@ -26,7 +26,9 @@ const deploymentContext = process.env.DEPLOYMENT_MODE === 'hosted'
 
 const claudeProjectsDir =
   process.env.CLAUDE_PROJECTS_DIR ?? join(os.homedir(), '.claude', 'projects');
-const sessionPipeline = new SessionPipeline();
+const sessionPipeline = new SessionPipeline({
+  fileSystem: deploymentContext.getFileAccess(),
+});
 const fileWatcher = new FileWatcher({
   rootDir: claudeProjectsDir,
   fileSystem: deploymentContext.getFileAccess(),

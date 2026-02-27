@@ -1,8 +1,9 @@
-import { readFile, access, constants } from 'fs/promises';
 import { existsSync, statSync } from 'fs';
 import { join, basename } from 'path';
 import { homedir } from 'os';
 import type { ClaudeMdFileEstimate } from '../types/jsonl.js';
+import type { FileSystemProvider } from '../deployment/types.js';
+import { DirectFileSystemProvider } from '../deployment/local/direct-fs-provider.js';
 
 /**
  * Rough token estimation matching the convention used elsewhere:
@@ -12,14 +13,21 @@ function estimateTokens(text: string): number {
   return Math.ceil(text.length / 4);
 }
 
+const defaultFs = new DirectFileSystemProvider();
+
 /**
  * Attempt to read a file and return its token estimate.
  * Returns null if the file does not exist or cannot be read.
  */
-async function readFileTokens(filePath: string): Promise<ClaudeMdFileEstimate | null> {
+async function readFileTokens(
+  filePath: string,
+  fs: FileSystemProvider,
+): Promise<ClaudeMdFileEstimate | null> {
   try {
-    await access(filePath, constants.R_OK);
-    const content = await readFile(filePath, 'utf-8');
+    const exists = await fs.exists(filePath);
+    if (!exists) return null;
+    const buf = await fs.readFile(filePath);
+    const content = buf.toString('utf-8');
     const tokens = estimateTokens(content);
     if (tokens <= 0) return null;
     return { path: filePath, estimatedTokens: tokens };
@@ -97,8 +105,13 @@ function tryDecodePath(
  *
  * @param projectRoot - The absolute project root path (from the session's cwd field).
  *   If not available, only the user-global CLAUDE.md is checked.
+ * @param fileSystem - FileSystemProvider for file I/O. Defaults to DirectFileSystemProvider.
  */
-export async function discoverClaudeMdFiles(projectRoot?: string): Promise<ClaudeMdFileEstimate[]> {
+export async function discoverClaudeMdFiles(
+  projectRoot?: string,
+  fileSystem?: FileSystemProvider,
+): Promise<ClaudeMdFileEstimate[]> {
+  const fs = fileSystem ?? defaultFs;
   const home = homedir();
 
   const candidates = [
@@ -109,6 +122,6 @@ export async function discoverClaudeMdFiles(projectRoot?: string): Promise<Claud
     candidates.push(join(projectRoot, 'CLAUDE.md'));
   }
 
-  const results = await Promise.all(candidates.map(readFileTokens));
+  const results = await Promise.all(candidates.map((c) => readFileTokens(c, fs)));
   return results.filter((r): r is ClaudeMdFileEstimate => r !== null);
 }

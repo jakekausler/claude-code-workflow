@@ -8,6 +8,8 @@ import type {
   EnhancedAIChunk,
   Process,
 } from '../types/jsonl.js';
+import type { FileSystemProvider } from '../deployment/types.js';
+import { DirectFileSystemProvider } from '../deployment/local/direct-fs-provider.js';
 import { parseSessionFile } from './session-parser.js';
 import { buildToolExecutions } from './tool-execution-builder.js';
 import { buildChunks, extractSemanticSteps } from './chunk-builder.js';
@@ -19,15 +21,18 @@ import { readMentionedFiles } from './mentioned-file-reader.js';
 
 export interface SessionPipelineOptions {
   cacheSizeMB?: number;
+  fileSystem?: FileSystemProvider;
 }
 
 export class SessionPipeline {
   private cache: DataCache<ParsedSession>;
+  private fileSystem: FileSystemProvider;
 
   constructor(options?: SessionPipelineOptions) {
     const parsed = parseInt(process.env.CACHE_SIZE_MB ?? '50', 10);
     const sizeMB = options?.cacheSizeMB ?? (Number.isNaN(parsed) ? 50 : parsed);
     this.cache = new DataCache<ParsedSession>(sizeMB);
+    this.fileSystem = options?.fileSystem ?? new DirectFileSystemProvider();
   }
 
   async parseSession(projectDir: string, sessionId: string): Promise<ParsedSession> {
@@ -36,14 +41,18 @@ export class SessionPipeline {
     if (cached) return cached;
 
     const filePath = join(projectDir, `${sessionId}.jsonl`);
-    const { messages } = await parseSessionFile(filePath);
+    const { messages } = await parseSessionFile(filePath, { fileSystem: this.fileSystem });
     const toolExecutions = buildToolExecutions(messages);
     const chunks = buildChunks(messages);
 
     // Enhance AI chunks with semantic steps
     enhanceAIChunks(chunks, toolExecutions);
 
-    const subagents = await resolveSubagents(messages, { projectDir, sessionId });
+    const subagents = await resolveSubagents(messages, {
+      projectDir,
+      sessionId,
+      fileSystem: this.fileSystem,
+    });
 
     // Link subagents to their corresponding AI chunks so downstream consumers
     // (group transformer, display item builder) can access them per-chunk.
@@ -58,13 +67,13 @@ export class SessionPipeline {
     // to decoding the project directory name (e.g., '-storage-programs-my-project'
     // → '/storage/programs/my-project') for sessions without parseable messages.
     const projectRoot = messages.find(m => m.cwd)?.cwd ?? decodeProjectRoot(projectDir);
-    const claudeMdFiles = await discoverClaudeMdFiles(projectRoot);
+    const claudeMdFiles = await discoverClaudeMdFiles(projectRoot, this.fileSystem);
 
     // Read @-mentioned files from disk to get accurate token estimates.
     // Without this, the client can only estimate tokens from the file path
     // string (~87 tokens) instead of the actual content (~4.9k tokens).
     const mentionedFileTokens = projectRoot
-      ? await readMentionedFiles(messages, projectRoot)
+      ? await readMentionedFiles(messages, projectRoot, this.fileSystem)
       : [];
 
     const session: ParsedSession = {

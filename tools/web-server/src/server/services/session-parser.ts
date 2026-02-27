@@ -1,6 +1,4 @@
-import { createReadStream } from 'fs';
 import { createInterface } from 'readline';
-import { stat } from 'fs/promises';
 import type {
   ParsedMessage,
   ToolCall,
@@ -10,6 +8,8 @@ import type {
   ToolUseContent,
   ToolResultContent,
 } from '../types/jsonl.js';
+import type { FileSystemProvider } from '../deployment/types.js';
+import { DirectFileSystemProvider } from '../deployment/local/direct-fs-provider.js';
 
 const KNOWN_ENTRY_TYPES = new Set<string>([
   'user', 'assistant', 'system', 'summary', 'file-history-snapshot', 'queue-operation',
@@ -23,6 +23,8 @@ export interface ParseOptions {
    * split multi-byte UTF-8 characters or land mid-line, corrupting the first entry.
    */
   startOffset?: number;
+  /** FileSystemProvider for file I/O. Defaults to DirectFileSystemProvider. */
+  fileSystem?: FileSystemProvider;
 }
 
 export interface ParseResult {
@@ -36,15 +38,18 @@ export interface ParseResult {
  * Handles missing files gracefully (returns empty result).
  * Skips invalid JSON lines, empty lines, and entries without uuid.
  */
+const defaultFs = new DirectFileSystemProvider();
+
 export async function parseSessionFile(
   filePath: string,
   options?: ParseOptions,
 ): Promise<ParseResult> {
   const startOffset = options?.startOffset ?? 0;
+  const fs = options?.fileSystem ?? defaultFs;
 
   let fileSize: number;
   try {
-    const fileStat = await stat(filePath);
+    const fileStat = await fs.stat(filePath);
     fileSize = fileStat.size;
   } catch {
     // File not found or inaccessible — return empty
@@ -57,7 +62,7 @@ export async function parseSessionFile(
 
   const messages: ParsedMessage[] = [];
 
-  const stream = createReadStream(filePath, { start: startOffset });
+  const stream = fs.createReadStream(filePath, { start: startOffset });
   const rl = createInterface({ input: stream, crlfDelay: Infinity });
 
   for await (const line of rl) {

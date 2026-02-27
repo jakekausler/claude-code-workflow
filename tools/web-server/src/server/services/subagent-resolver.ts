@@ -1,27 +1,33 @@
-import { readdir, readFile } from 'fs/promises';
 import { join } from 'path';
 import type { ParsedMessage, Process, SessionMetrics } from '../types/jsonl.js';
+import type { FileSystemProvider } from '../deployment/types.js';
+import { DirectFileSystemProvider } from '../deployment/local/direct-fs-provider.js';
 import { parseSessionFile } from './session-parser.js';
 
 const PARALLEL_THRESHOLD_MS = 100;
 
+const defaultFs = new DirectFileSystemProvider();
+
 export interface SubagentResolverOptions {
   projectDir: string;
   sessionId: string;
+  fileSystem?: FileSystemProvider;
 }
 
 export async function resolveSubagents(
   parentMessages: ParsedMessage[],
   options: SubagentResolverOptions,
 ): Promise<Process[]> {
+  const fs = options.fileSystem ?? defaultFs;
+
   // 1. Discover subagent files from both directory structures
-  const files = await discoverSubagentFiles(options.projectDir, options.sessionId);
+  const files = await discoverSubagentFiles(options.projectDir, options.sessionId, fs);
   if (files.length === 0) return [];
 
   // 2. Parse each subagent file and filter out warmup/compact/empty
   const agents: { agentId: string; filePath: string; messages: ParsedMessage[] }[] = [];
   for (const file of files) {
-    const { messages } = await parseSessionFile(file.filePath);
+    const { messages } = await parseSessionFile(file.filePath, { fileSystem: fs });
     if (isFilteredAgent(messages, file.agentId)) continue;
     agents.push({ ...file, messages });
   }
@@ -151,10 +157,15 @@ export async function resolveSubagents(
   return processes;
 }
 
-async function belongsToSession(filePath: string, sessionId: string): Promise<boolean> {
+async function belongsToSession(
+  filePath: string,
+  sessionId: string,
+  fs: FileSystemProvider,
+): Promise<boolean> {
   try {
     // Read just the first line to check sessionId
-    const content = await readFile(filePath, 'utf8');
+    const buf = await fs.readFile(filePath);
+    const content = buf.toString('utf8');
     const firstNewline = content.indexOf('\n');
     const firstLine = firstNewline > 0 ? content.slice(0, firstNewline) : content;
 
@@ -173,13 +184,14 @@ async function belongsToSession(filePath: string, sessionId: string): Promise<bo
 async function discoverSubagentFiles(
   projectDir: string,
   sessionId: string,
+  fs: FileSystemProvider,
 ): Promise<{ agentId: string; filePath: string }[]> {
   const results: { agentId: string; filePath: string }[] = [];
 
   // New structure: {projectDir}/{sessionId}/subagents/agent-*.jsonl
   const newDir = join(projectDir, sessionId, 'subagents');
   try {
-    const entries = await readdir(newDir);
+    const entries = await fs.readdir(newDir);
     for (const entry of entries) {
       const match = entry.match(/^agent-(.+)\.jsonl$/);
       if (match) {
@@ -192,7 +204,7 @@ async function discoverSubagentFiles(
 
   // Legacy structure: {projectDir}/agent-*.jsonl
   try {
-    const entries = await readdir(projectDir);
+    const entries = await fs.readdir(projectDir);
     for (const entry of entries) {
       const match = entry.match(/^agent-(.+)\.jsonl$/);
       if (match) {
@@ -200,7 +212,7 @@ async function discoverSubagentFiles(
         // Avoid duplicates if already found in new structure
         if (!results.some((r) => r.agentId === match[1])) {
           // Filter by sessionId - only include files that belong to this session
-          const belongsToThisSession = await belongsToSession(filePath, sessionId);
+          const belongsToThisSession = await belongsToSession(filePath, sessionId, fs);
           if (belongsToThisSession) {
             results.push({ agentId: match[1], filePath });
           }
