@@ -1,5 +1,5 @@
 import { useParams, useNavigate } from 'react-router-dom';
-import { useEffect, useMemo, useCallback, useRef } from 'react';
+import { useEffect, useMemo, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Loader2, AlertCircle, ArrowLeft } from 'lucide-react';
 import { ChatHistory } from '../components/chat/ChatHistory.js';
@@ -11,6 +11,8 @@ import { formatDuration, formatCost, formatTokenCount } from '../utils/session-f
 import { useSessionViewStore } from '../store/session-store.js';
 import { transformChunksToConversation } from '../utils/group-transformer.js';
 import { processSessionContextWithPhases } from '../utils/context-tracker.js';
+import { mergeIncrementalUpdate, type SSESessionUpdate } from '../utils/session-merger.js';
+import type { ParsedSession } from '../types/session.js';
 
 export function SessionDetail() {
   const { projectId, sessionId } = useParams<{ projectId: string; sessionId: string }>();
@@ -23,36 +25,31 @@ export function SessionDetail() {
   }, [projectId, sessionId, resetView]);
 
   const queryClient = useQueryClient();
-  const sseDebounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleSSE = useCallback(
     (_channel: string, data: unknown) => {
-      const event = data as { sessionId?: string; projectId?: string };
-      // Only re-fetch if this event is for the session we're viewing
-      if (event.sessionId === sessionId && event.projectId === projectId) {
-        // Debounce invalidation to at most once per 500ms
-        if (sseDebounceTimerRef.current) {
-          clearTimeout(sseDebounceTimerRef.current);
-        }
-        sseDebounceTimerRef.current = setTimeout(() => {
-          void queryClient.invalidateQueries({
-            queryKey: ['session', projectId, sessionId],
-          });
-          sseDebounceTimerRef.current = null;
-        }, 500);
+      const event = data as SSESessionUpdate;
+      if (event.sessionId !== sessionId || event.projectId !== projectId) return;
+
+      if (event.type === 'incremental') {
+        // Merge new chunks directly into React Query cache — no refetch needed
+        queryClient.setQueryData<ParsedSession>(
+          ['session', projectId, sessionId],
+          (old) => {
+            if (!old) return old;
+            return mergeIncrementalUpdate(old, event);
+          },
+        );
+      } else if (event.type === 'full-refresh') {
+        // Full refresh: invalidate cache to trigger refetch
+        void queryClient.invalidateQueries({
+          queryKey: ['session', projectId, sessionId],
+        });
       }
+      // Unknown event types are silently ignored (safe no-op)
     },
     [queryClient, projectId, sessionId],
   );
-
-  // Clean up debounce timer on unmount
-  useEffect(() => {
-    return () => {
-      if (sseDebounceTimerRef.current) {
-        clearTimeout(sseDebounceTimerRef.current);
-      }
-    };
-  }, []);
 
   useSSE(['session-update'], handleSSE);
 
