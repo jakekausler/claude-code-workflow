@@ -22,7 +22,18 @@ cd tools/web-server && npm run dev
 
 ---
 
-## 1. Stage 9 — Session Display & Live Updates (Active Branch: `feat/stage-9-web-view`)
+## 1. Branch Overview
+
+The `kanban` branch is the primary integration branch. It currently contains:
+- **Stages 0–9**: All complete and merged (CLI, kanban engine, Jira, orchestrator infra, MCP server, Slack, multi-repo, web UI)
+- **Stage 10A**: Orchestrator communication foundation (merged)
+- **Stage 10E**: Drawer session integration — session tabs in detail drawers, multi-session history (merged)
+
+The `worktree-stage-10d` branch contains ALL of 10b + 10c + 10d stacked on top of each other. It is up to date with current `kanban` but **nothing on this branch has been tested**. See the testing plan at `docs/plans/2026-02-27-stage-10bcd-testing-plan.md`.
+
+---
+
+## 2. Stage 9 — Session Display & Live Updates
 
 ### Status: In Progress, Functional but Sketchy
 
@@ -57,25 +68,25 @@ Key files to compare:
 
 ---
 
-## 2. Stage 10 — Session Monitor Integration (Written, Not Tested)
+## 3. Stage 10 — Session Monitor Integration (Written, Not Tested)
 
 ### Branch Structure
 
 Stage 10 was developed in parallel worktree branches. Each builds on the previous:
 
 ```
-feat/stage-9-web-view          (base — current HEAD)
+kanban                         (primary integration branch — stages 0-9, 10A, 10E)
   └─ worktree-stage-10b-bidirectional-interaction
        └─ worktree-stage-10c-live-session-status
-            └─ worktree-stage-10d (deployment abstraction)
+            └─ worktree-stage-10d (deployment abstraction — has ALL of 10b+10c+10d)
 ```
 
-All three branches are now pushed to GitHub:
-- `worktree-stage-10b-bidirectional-interaction` — User can respond to Claude from the browser (WebSocket relay, interaction overlay)
-- `worktree-stage-10c-live-session-status` — Live session state on kanban cards (SSE-driven phase transitions)
-- `worktree-stage-10d` — Deployment abstraction (DeploymentContext, ScopedFileSystemProvider, local vs hosted)
+All three branches are pushed to GitHub. **Use `worktree-stage-10d` for testing** — it contains everything.
 
-**Stage 10e** (drawer session integration — session tabs in detail drawers, multi-session history) was completed and **already merged** into `feat/stage-9-web-view`.
+**What each substage implemented:**
+- **10b** — ProtocolPeer (stdin/stdout stream-JSON), ApprovalService, MessageQueue, REST interaction endpoints, browser interaction overlay (ApprovalDialog, MessageInput, QuestionAnswerForm)
+- **10c** — Session-to-stage mapping via orchestrator WS events, SessionStatusIndicator component, BoardCard session status, LiveSessionSection in stage drawer, Dashboard activity feed enrichment, useSessionMap hook
+- **10d** — DeploymentContext interface, FileSystemProvider/AuthProvider/EventBroadcaster abstractions, LocalDeploymentContext (local mode implementations), HOSTED-DESIGN.md for future multi-user
 
 ### Critical Blocker: Orchestrator → Session Lifecycle
 
@@ -83,17 +94,7 @@ All three branches are now pushed to GitHub:
 
 > **The orchestrator needs to correctly move sessions between phases (Design → Build → Refinement → Finalize).** Only when that's working will sessions show up on the frontend with the expected state transitions.
 
-Until the orchestrator is driving sessions end-to-end, you can't meaningfully test:
-- 10b's bidirectional interaction (needs a running session to interact with)
-- 10c's live status updates (needs phase transitions to display)
-- 10d's deployment context (needs the full pipeline running)
-
-### These branches are based on an older Stage 9 state
-
-Since 10b/10c/10d were developed in worktrees branched off an earlier point, they're **out of sync** with the latest Stage 9 changes (SSE debouncing, incremental parsing, etc.). When merging, expect conflicts — especially in:
-- `app.ts` (SSE broadcast integration)
-- `file-watcher.ts` (offset tracking)
-- Session-related stores and hooks
+However, **unit tests and integration tests with mocked orchestrators can be run now**. See the comprehensive testing plan at `docs/plans/2026-02-27-stage-10bcd-testing-plan.md`.
 
 ### Gold Standard: vibe-kanban
 
@@ -107,7 +108,7 @@ If the interaction flow isn't working, compare our approach with theirs and foll
 
 ---
 
-## 3. Orchestrator Testing
+## 4. Orchestrator Testing
 
 ### Status: Minimally Tested
 
@@ -140,7 +141,7 @@ npm run dev
 
 ---
 
-## 4. Project Structure
+## 5. Project Structure
 
 ### Monorepo Layout
 
@@ -260,7 +261,7 @@ There is no root package.json — run commands within each tool directory.
 
 ---
 
-## 5. Future Milestones & Issues
+## 6. Future Milestones & Issues
 
 34 GitHub issues have been created and organized into milestones. See the full overview at `docs/plans/2026-02-27-post-stage-10-issues-design.md`.
 
@@ -311,7 +312,7 @@ Validate stages 9-10 with mocked and real-service integration tests.
 
 ---
 
-## 6. Priority for Next Week
+## 7. Priority for Next Week
 
 Suggested order of focus:
 
@@ -324,7 +325,7 @@ Suggested order of focus:
 
 ---
 
-## 7. Reference Repositories
+## 8. Reference Repositories
 
 | Repository | Use For | When |
 |-----------|---------|------|
@@ -333,7 +334,7 @@ Suggested order of focus:
 
 ---
 
-## 8. Key Files to Know
+## 9. Key Files to Know
 
 | File | What It Does |
 |------|-------------|
@@ -351,7 +352,7 @@ Suggested order of focus:
 
 ---
 
-## 9. Environment Notes
+## 10. Environment Notes
 
 - **Server**: Accessible at `http://192.168.2.148:3100`
 - **Frontend log file**: `/tmp/claude-code-workflow.frontend.log` (browser console forwarded via POST /api/log, cleared on page refresh)
