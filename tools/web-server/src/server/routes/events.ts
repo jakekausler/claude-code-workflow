@@ -2,11 +2,6 @@ import type { FastifyPluginCallback, FastifyReply } from 'fastify';
 import fp from 'fastify-plugin';
 import type { EventBroadcaster } from '../deployment/index.js';
 
-export interface SSEClient {
-  reply: FastifyReply;
-  timer: ReturnType<typeof setInterval>;
-}
-
 /**
  * Mutable broadcaster reference. Set via `setBroadcaster()` during server
  * startup so that `broadcastEvent()` delegates to the deployment-context's
@@ -39,7 +34,7 @@ const KEEPALIVE_MS = 30_000;
 
 const eventsPlugin: FastifyPluginCallback = (app, _opts, done) => {
   app.get('/api/events', (request, reply) => {
-    const eventBroadcaster = app.deploymentContext?.getEventBroadcaster();
+    const eventBroadcaster = app.deploymentContext.getEventBroadcaster();
 
     reply.hijack();
     reply.raw.writeHead(200, {
@@ -58,16 +53,18 @@ const eventsPlugin: FastifyPluginCallback = (app, _opts, done) => {
         reply.raw.write(':ping\n\n');
       } catch {
         clearInterval(timer);
-        eventBroadcaster?.removeClient(reply);
+        eventBroadcaster.removeClient(reply);
       }
     }, KEEPALIVE_MS);
 
     // Register with the EventBroadcaster for broadcast delivery
-    eventBroadcaster?.addClient(reply);
+    eventBroadcaster.addClient(reply);
 
+    // Note: BroadcastAllSSE also self-cleans on socket close; removeClient here is
+    // a secondary cleanup that also handles the keepalive timer.
     request.raw.on('close', () => {
       clearInterval(timer);
-      eventBroadcaster?.removeClient(reply);
+      eventBroadcaster.removeClient(reply);
     });
 
     // Keep the connection open — do not call reply.send()
