@@ -17,10 +17,12 @@
   "dependencies": {
     "commander": "^12.1.0",
     "gray-matter": "^4.0.3",
-    "kanban-cli": "file:../kanban-cli"
+    "kanban-cli": "file:../kanban-cli",
+    "ws": "^8.19.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
+    "@types/ws": "^8.18.1",
     "tsx": "^4.19.0",
     "typescript": "^5.7.0",
     "vitest": "^2.1.0"

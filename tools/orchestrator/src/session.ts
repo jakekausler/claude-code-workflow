@@ -1,4 +1,5 @@
 import { spawn as nodeSpawn } from 'node:child_process';
+import { StreamParser } from './stream-parser.js';
 
 /**
  * Options for spawning a Claude Code session.
@@ -11,6 +12,7 @@ export interface SpawnOptions {
   worktreeIndex: number;
   model: string;
   workflowEnv: Record<string, string>;
+  onSessionId?: (sessionId: string) => void;
 }
 
 /**
@@ -126,7 +128,13 @@ export function createSessionExecutor(deps: Partial<SessionDeps> = {}): SessionE
         const prompt = assemblePrompt(options);
         const startTime = resolved.now();
 
-        const child = resolved.spawnProcess('claude', ['-p', '--model', options.model], {
+        const child = resolved.spawnProcess('claude', [
+          '-p',
+          '--model', options.model,
+          '--output-format', 'stream-json',
+          '--input-format', 'stream-json',
+          '--verbose',
+        ], {
           cwd: options.worktreePath,
           env: {
             ...process.env,
@@ -138,8 +146,16 @@ export function createSessionExecutor(deps: Partial<SessionDeps> = {}): SessionE
 
         // Register all event handlers BEFORE writing to stdin so that
         // errors during spawn are captured even if they fire synchronously.
+        const parser = new StreamParser();
+
+        parser.on('session-id', (sessionId: string) => {
+          options.onSessionId?.(sessionId);
+        });
+
         child.stdout.on('data', (chunk: Buffer) => {
-          sessionLogger.write(chunk.toString());
+          const text = chunk.toString();
+          parser.feed(text);
+          sessionLogger.write(text);
         });
 
         child.stderr.on('data', (chunk: Buffer) => {
@@ -149,6 +165,7 @@ export function createSessionExecutor(deps: Partial<SessionDeps> = {}): SessionE
         let settled = false;
 
         child.on('close', (code: number | null) => {
+          parser.flush();
           if (settled) return;
           settled = true;
 

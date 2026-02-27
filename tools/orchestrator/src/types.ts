@@ -20,4 +20,5 @@ export interface OrchestratorConfig {
   pipelineConfig: PipelineConfig;
   workflowEnv: Record<string, string>;
   mock: boolean;
+  wsPort?: number; // WebSocket port for session broadcasting; default undefined (disabled)
 }

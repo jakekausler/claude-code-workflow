@@ -46,6 +46,7 @@ export interface StageRow {
   is_draft: number;
   pending_merge_parents: string | null;
   mr_target_branch: string | null;
+  session_id: string | null;
   file_path: string;
   last_synced: string;
 }
@@ -77,4 +78,23 @@ export interface MrCommentTrackingRow {
   last_poll_timestamp: string;
   last_known_unresolved_count: number;
   repo_id: number;
+}
+
+export interface StageSessionRow {
+  id: number;
+  stage_id: string;
+  session_id: string;
+  phase: string;
+  started_at: string;
+  ended_at: string | null;
+  is_current: number;
+}
+
+export interface TicketSessionRow {
+  id: number;
+  ticket_id: string;
+  session_id: string;
+  session_type: string;
+  started_at: string;
+  ended_at: string | null;
 }

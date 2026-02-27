@@ -268,6 +268,14 @@ You are a subagent (not the main coordinating agent). As a subagent, you CAN and
 - Use existing test utilities/helpers
 - Tests should be deterministic
 
+## Frontend Remote Logging
+
+All browser `console.*` calls are forwarded to `/tmp/claude-code-workflow.frontend.log` via `POST /api/log`. The log file is cleared on every page refresh (`POST /api/log/clear`). This enables reading frontend console output from the terminal without opening browser DevTools.
+
+- **Log file**: `/tmp/claude-code-workflow.frontend.log`
+- **Clear**: Happens automatically on page refresh, or manually via `POST /api/log/clear`
+- **Format**: `[ISO-timestamp] [LEVEL] arg1 arg2 ...`
+
 ## Important Reminders
 
 **NEVER**:

@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+CLI="node $SCRIPT_DIR/dist/cli/index.js"
+
 REPO_DIR="/tmp/kanban-test-repo"
 
 echo "=== Kanban CLI Test Repo Seeder ==="
@@ -959,6 +962,24 @@ echo "    TICKET-002-003 (Refund Processing) -> TICKET-002-001 (Checkout Flow)"
 echo "  Epic → Epic:"
 echo "    EPIC-003 (Notifications) -> EPIC-001 (User Authentication)"
 echo ""
+
+###############################################################################
+# Register repo in kanban database
+###############################################################################
+
+echo "--- Registering repo in kanban database ---"
+echo ""
+
+# Unregister if already exists (ignore errors)
+$CLI unregister-repo test-repo 2>/dev/null || true
+
+# Register fresh
+$CLI register-repo "$REPO_DIR" --name test-repo
+
+echo ""
+echo "=== Repo registered and synced ==="
+echo ""
+
 echo "=== Example CLI Commands ==="
 echo ""
 echo "  # Sync filesystem into SQLite"

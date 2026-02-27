@@ -192,7 +192,7 @@ describe('createSessionExecutor', () => {
 
       expect(deps.spawnProcess).toHaveBeenCalledWith(
         'claude',
-        ['-p', '--model', 'sonnet'],
+        ['-p', '--model', 'sonnet', '--output-format', 'stream-json', '--input-format', 'stream-json', '--verbose'],
         expect.objectContaining({
           cwd: options.worktreePath,
           stdio: ['pipe', 'pipe', 'pipe'],
@@ -489,6 +489,118 @@ describe('createSessionExecutor', () => {
       expect(logger.write).toHaveBeenNthCalledWith(1, 'out-1');
       expect(logger.write).toHaveBeenNthCalledWith(2, 'err-1');
       expect(logger.write).toHaveBeenNthCalledWith(3, 'out-2');
+    });
+
+    it('includes stream-json output and input format flags', async () => {
+      const mock = makeMockChild();
+      const deps = makeDeps(mock);
+      const executor = createSessionExecutor(deps);
+      const logger = makeLogger();
+      const options = makeSpawnOptions({ model: 'opus' });
+
+      const promise = executor.spawn(options, logger);
+      mock.emitClose(0);
+      await promise;
+
+      const callArgs = deps.spawnProcess.mock.calls[0];
+      const args = callArgs[1] as string[];
+      expect(args).toContain('--output-format');
+      expect(args).toContain('--input-format');
+      expect(args[args.indexOf('--output-format') + 1]).toBe('stream-json');
+      expect(args[args.indexOf('--input-format') + 1]).toBe('stream-json');
+    });
+
+    it('fires onSessionId callback when stdout contains a session ID', async () => {
+      const mock = makeMockChild();
+      const deps = makeDeps(mock);
+      const executor = createSessionExecutor(deps);
+      const logger = makeLogger();
+      const onSessionId = vi.fn();
+      const options = makeSpawnOptions({ onSessionId });
+
+      const promise = executor.spawn(options, logger);
+      mock.emitStdout('{"type":"init","session_id":"sess-abc-123"}\n');
+      mock.emitClose(0);
+      await promise;
+
+      expect(onSessionId).toHaveBeenCalledTimes(1);
+      expect(onSessionId).toHaveBeenCalledWith('sess-abc-123');
+    });
+
+    it('fires onSessionId only once for multiple session_id messages', async () => {
+      const mock = makeMockChild();
+      const deps = makeDeps(mock);
+      const executor = createSessionExecutor(deps);
+      const logger = makeLogger();
+      const onSessionId = vi.fn();
+      const options = makeSpawnOptions({ onSessionId });
+
+      const promise = executor.spawn(options, logger);
+      mock.emitStdout('{"type":"init","session_id":"sess-first"}\n');
+      mock.emitStdout('{"type":"update","session_id":"sess-second"}\n');
+      mock.emitClose(0);
+      await promise;
+
+      expect(onSessionId).toHaveBeenCalledTimes(1);
+      expect(onSessionId).toHaveBeenCalledWith('sess-first');
+    });
+
+    it('does not error when onSessionId is not provided', async () => {
+      const mock = makeMockChild();
+      const deps = makeDeps(mock);
+      const executor = createSessionExecutor(deps);
+      const logger = makeLogger();
+      // No onSessionId callback — should not throw
+      const options = makeSpawnOptions();
+
+      const promise = executor.spawn(options, logger);
+      mock.emitStdout('{"type":"init","session_id":"sess-xyz"}\n');
+      mock.emitClose(0);
+      await promise;
+
+      // Just verify we completed without error
+      expect(logger.write).toHaveBeenCalled();
+    });
+
+    it('still pipes stdout to logger when stream parser is active', async () => {
+      const mock = makeMockChild();
+      const deps = makeDeps(mock);
+      const executor = createSessionExecutor(deps);
+      const logger = makeLogger();
+      const onSessionId = vi.fn();
+      const options = makeSpawnOptions({ onSessionId });
+
+      const promise = executor.spawn(options, logger);
+      mock.emitStdout('{"type":"init","session_id":"sess-abc"}\n');
+      mock.emitStdout('{"type":"assistant","text":"hello"}\n');
+      mock.emitClose(0);
+      await promise;
+
+      // Logger received both chunks
+      expect(logger.write).toHaveBeenCalledTimes(2);
+      expect(logger.write).toHaveBeenCalledWith('{"type":"init","session_id":"sess-abc"}\n');
+      expect(logger.write).toHaveBeenCalledWith('{"type":"assistant","text":"hello"}\n');
+      // And onSessionId also fired
+      expect(onSessionId).toHaveBeenCalledWith('sess-abc');
+    });
+
+    it('flushes stream parser on process close', async () => {
+      const mock = makeMockChild();
+      const deps = makeDeps(mock);
+      const executor = createSessionExecutor(deps);
+      const logger = makeLogger();
+      const onSessionId = vi.fn();
+      const options = makeSpawnOptions({ onSessionId });
+
+      const promise = executor.spawn(options, logger);
+      // Send data without trailing newline — parser buffers it
+      mock.emitStdout('{"type":"init","session_id":"sess-flush"}');
+      mock.emitClose(0);
+      await promise;
+
+      // The flush on close should have processed the buffered line
+      expect(onSessionId).toHaveBeenCalledTimes(1);
+      expect(onSessionId).toHaveBeenCalledWith('sess-flush');
     });
   });
 

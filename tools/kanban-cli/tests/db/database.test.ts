@@ -211,6 +211,19 @@ describe('KanbanDatabase', () => {
     }
   });
 
+  it('creates stages table with session_id column', () => {
+    const db = new KanbanDatabase(dbPath);
+    try {
+      const columns = db.raw()
+        .prepare("PRAGMA table_info(stages)")
+        .all() as Array<{ name: string }>;
+      const colNames = columns.map((c) => c.name);
+      expect(colNames).toContain('session_id');
+    } finally {
+      db.close();
+    }
+  });
+
   it('schema migration is idempotent (runs twice without error)', () => {
     const db1 = new KanbanDatabase(dbPath);
     db1.close();
@@ -225,6 +238,7 @@ describe('KanbanDatabase', () => {
       expect(colNames).toContain('is_draft');
       expect(colNames).toContain('pending_merge_parents');
       expect(colNames).toContain('mr_target_branch');
+      expect(colNames).toContain('session_id');
     } finally {
       db2.close();
     }
