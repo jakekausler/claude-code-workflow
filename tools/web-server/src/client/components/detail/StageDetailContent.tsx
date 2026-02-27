@@ -173,7 +173,11 @@ export function StageDetailContent({ stageId }: StageDetailContentProps) {
           )}
 
           {/* Live session status — shows active session indicator, duration, and link */}
-          <LiveSessionSection stageId={stageId} sessionStatus={sessionStatus} />
+          <LiveSessionSection
+            stageId={stageId}
+            sessionStatus={sessionStatus}
+            projectId={sessions.find((s) => s.isCurrent)?.projectId}
+          />
 
           {/* Session link — only rendered when the stage has a linked session */}
           {stage.session_id && (

@@ -7,6 +7,8 @@ import { SessionStatusIndicator } from '../board/SessionStatusIndicator.js';
 export interface LiveSessionSectionProps {
   stageId: string;
   sessionStatus: SessionMapEntry | null;
+  /** Optional projectId for building the session page link. */
+  projectId?: string;
 }
 
 /**
@@ -35,13 +37,13 @@ export function formatDuration(ms: number): string {
  * to LiveSessionContent for active sessions. This avoids hooks in the
  * null-return path, keeping it testable without a React render tree.
  */
-export function LiveSessionSection({ stageId, sessionStatus }: LiveSessionSectionProps) {
+export function LiveSessionSection({ stageId, sessionStatus, projectId }: LiveSessionSectionProps) {
   if (!sessionStatus || sessionStatus.status === 'ended') {
     return null;
   }
 
   return (
-    <LiveSessionContent stageId={stageId} sessionStatus={sessionStatus} />
+    <LiveSessionContent stageId={stageId} sessionStatus={sessionStatus} projectId={projectId} />
   );
 }
 
@@ -49,9 +51,10 @@ export function LiveSessionSection({ stageId, sessionStatus }: LiveSessionSectio
 interface LiveSessionContentProps {
   stageId: string;
   sessionStatus: SessionMapEntry;
+  projectId?: string;
 }
 
-function LiveSessionContent({ stageId, sessionStatus }: LiveSessionContentProps) {
+function LiveSessionContent({ stageId, sessionStatus, projectId }: LiveSessionContentProps) {
   const [now, setNow] = useState(Date.now());
 
   useEffect(() => {
@@ -85,13 +88,19 @@ function LiveSessionContent({ stageId, sessionStatus }: LiveSessionContentProps)
 
       <div className="flex items-center justify-between">
         <code className="text-xs text-zinc-400">{truncatedId}</code>
-        <Link
-          to={`/sessions/${encodeURIComponent(stageId)}`}
-          className="inline-flex items-center gap-1 text-xs font-medium text-blue-400 hover:text-blue-300"
-        >
-          View Session
-          <ExternalLink size={12} />
-        </Link>
+        {projectId ? (
+          <Link
+            to={`/sessions/${encodeURIComponent(projectId)}/${sessionStatus.sessionId}`}
+            className="inline-flex items-center gap-1 text-xs font-medium text-blue-400 hover:text-blue-300"
+          >
+            View Session
+            <ExternalLink size={12} />
+          </Link>
+        ) : (
+          <span className="text-xs text-zinc-500">
+            Session {truncatedId}
+          </span>
+        )}
       </div>
     </div>
   );

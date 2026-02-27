@@ -26,6 +26,10 @@ describe('formatDuration', () => {
     expect(formatDuration(3_661_000)).toBe('1h 1m');
   });
 
+  it('handles multi-hour durations', () => {
+    expect(formatDuration(90_000_000)).toBe('25h 0m');
+  });
+
   it('treats negative values as 0s', () => {
     expect(formatDuration(-5000)).toBe('0s');
   });
@@ -68,9 +72,25 @@ describe('LiveSessionSection', () => {
     expect(result).not.toBeNull();
   });
 
+  it('renders a non-null element when session is starting', () => {
+    const starting: SessionMapEntry = {
+      status: 'starting' as const,
+      waitingType: null,
+      sessionId: 'abc123456789xyz',
+      spawnedAt: Date.now() - 5_000,
+    };
+    const result = LiveSessionSection({ stageId: 'stage-1', sessionStatus: starting });
+    expect(result).not.toBeNull();
+  });
+
   // ---------------------------------------------------------------------------
   // Behavioral tests — verify LiveSessionContent receives correct props
   // ---------------------------------------------------------------------------
+
+  // Note: These tests inspect React element internals (type.name, props).
+  // This is fragile — minification or wrapping in React.memo/HOC would break them.
+  // Preferred approach would be @testing-library/react render + DOM queries,
+  // but these tests follow the project's existing lightweight pattern.
 
   it('passes sessionId to LiveSessionContent for truncation', () => {
     const active: SessionMapEntry = {
@@ -92,22 +112,19 @@ describe('LiveSessionSection', () => {
     expect(truncated).toBe('abc123456789');
   });
 
-  it('passes correct stageId for link generation', () => {
+  it('passes correct stageId and projectId for link generation', () => {
     const active: SessionMapEntry = {
       status: 'active',
       waitingType: null,
       sessionId: 'test-session-001',
       spawnedAt: Date.now() - 30_000,
     };
-    const result = LiveSessionSection({ stageId: 'my-stage', sessionStatus: active });
+    const result = LiveSessionSection({ stageId: 'my-stage', sessionStatus: active, projectId: 'proj-1' });
     expect(result).not.toBeNull();
 
-    // LiveSessionContent receives stageId and uses it to build link path
+    // LiveSessionContent receives stageId and projectId for building /sessions/:projectId/:sessionId
     expect(result?.props?.stageId).toBe('my-stage');
-
-    // The link would be built as /sessions/${encodeURIComponent(stageId)}
-    const expectedPath = `/sessions/${encodeURIComponent(result?.props?.stageId)}`;
-    expect(expectedPath).toBe('/sessions/my-stage');
+    expect(result?.props?.projectId).toBe('proj-1');
   });
 
   it('passes session status with user_input waiting type to indicator', () => {
