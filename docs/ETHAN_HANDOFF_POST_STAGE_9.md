@@ -35,7 +35,7 @@ The `worktree-stage-10d` branch contains ALL of 10b + 10c + 10d stacked on top o
 
 ## 2. Stage 9 — Session Display & Live Updates
 
-### Status: In Progress, Functional but Sketchy
+### Status: Done — Functional but Sketchy
 
 The web UI is working and displays the kanban board, detail drawers, and session viewer. The most recent work has been on **getting new messages to show up consistently** via SSE (Server-Sent Events) with incremental parsing.
 
