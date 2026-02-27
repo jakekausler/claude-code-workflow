@@ -232,7 +232,7 @@ graph TB
         CLI["CLI Commands<br/>sync, board, next, graph, validate"]
         SQLite["SQLite DB<br/>repos, epics, tickets, stages,<br/>dependencies, sessions"]
         Parser["Frontmatter Parser<br/>Zod schemas for YAML"]
-        Sync["Sync Engine<br/>filesystem → DB"]
+        Sync["Sync Engine<br/>filesystem to DB"]
         EpicFiles["Epic/Ticket/Stage Files<br/>YAML frontmatter + markdown"]
     end
 
@@ -262,9 +262,9 @@ graph TB
             EventBcast["EventBroadcaster ⓓ<br/>BroadcastAll (local) / UserScoped (hosted)"]
         end
         Routes["REST API Routes<br/>board, epics, tickets, stages,<br/>sessions, events, interaction ⓑ,<br/>orchestrator ⓒ"]
-        OrcClient["OrchestratorClient<br/>WebSocket → Orchestrator"]
-        SessionPipe["SessionPipeline<br/>JSONL → chunks + context + pricing"]
-        FileWatcher["FileWatcher<br/>~/.claude/projects → SSE"]
+        OrcClient["OrchestratorClient<br/>WebSocket to Orchestrator"]
+        SessionPipe["SessionPipeline<br/>JSONL to chunks + context + pricing"]
+        FileWatcher["FileWatcher<br/>~/.claude/projects to SSE"]
         DataService["DataService<br/>kanban-cli integration"]
     end
 
@@ -290,9 +290,9 @@ graph TB
     %% Data flow
     Jira -->|"API sync"| KanbanCLI
     GitHub -->|"PR/MR API"| Orchestrator
-    Slack <--|"Webhook"| Orchestrator
+    Orchestrator -->|"Webhook"| Slack
 
-    EpicFiles <-->|"read/write"| Sync
+    Sync -->|"read/write"| EpicFiles
     Sync --> SQLite
     CLI --> SQLite
 
@@ -303,7 +303,8 @@ graph TB
     Loop -->|"picks stages"| SQLite
     Loop -->|"spawns"| Session
     Session -->|"stdin/stdout ⓑ"| ProtocolPeer
-    ProtocolPeer <-->|"stream-JSON ⓑ"| ClaudeProc
+    ProtocolPeer -->|"stream-JSON ⓑ"| ClaudeProc
+    ClaudeProc -->|"stream-JSON ⓑ"| ProtocolPeer
     ApprovalSvc -->|"queues approvals ⓑ"| WSServer
     MsgQueue -->|"buffers messages ⓑ"| Session
     Session -->|"registers ⓒ"| SessionRegistry
@@ -311,7 +312,8 @@ graph TB
     Worktree -->|"creates branches"| Session
     ExitGates -->|"phase checks"| Loop
 
-    OrcClient <-->|"WebSocket"| WSServer
+    OrcClient -->|"WebSocket"| WSServer
+    WSServer -->|"WebSocket"| OrcClient
     Routes --> DataService
     DataService --> CLI
     Routes -->|"interaction ⓑ"| OrcClient
