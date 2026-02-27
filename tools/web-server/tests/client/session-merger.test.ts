@@ -14,6 +14,8 @@ import type {
   SessionMetrics,
   ParsedMessage,
   Process,
+  SemanticStep,
+  EnhancedAIChunk,
 } from '../../src/client/types/session.js';
 
 // ─── Mock data factories ──────────────────────────────────────────────────────
@@ -132,7 +134,7 @@ describe('mergeIncrementalUpdate', () => {
     expect(result).not.toBe(existing);
     expect(result.chunks).toHaveLength(2);
     expect(result.chunks[0]).toBe(existingAI);
-    expect(result.chunks[1]).toBe(newUser);
+    expect(result.chunks[1]).toStrictEqual(newUser);
   });
 
   it('merges boundary AI chunks when last existing and first new are both AI', () => {
@@ -256,5 +258,159 @@ describe('mergeIncrementalUpdate', () => {
     expect(merged.messages[0].uuid).toBe('m1');
     expect(merged.messages[1].uuid).toBe('m2');
     expect(merged.messages[2].uuid).toBe('m3');
+  });
+
+  it('concatenates semanticSteps from both AI chunks in boundary merge', () => {
+    const stepA: SemanticStep = { type: 'thinking', content: 'Analyzing...' };
+    const stepB: SemanticStep = { type: 'tool_call', content: 'Read file', toolName: 'Read', toolCallId: 'tc-1' };
+    const stepC: SemanticStep = { type: 'output', content: 'Done' };
+
+    const existingAI: EnhancedAIChunk = {
+      ...makeAIChunk([makeMsg({ uuid: 'e1' })]),
+      type: 'ai',
+      semanticSteps: [stepA, stepB],
+      subagents: [],
+    };
+    const newAI: EnhancedAIChunk = {
+      ...makeAIChunk([makeMsg({ uuid: 'n1' })]),
+      type: 'ai',
+      semanticSteps: [stepC],
+      subagents: [],
+    };
+
+    const existing = makeSession({ chunks: [existingAI as Chunk] });
+    const update = makeUpdate({ newChunks: [newAI as Chunk] });
+
+    const result = mergeIncrementalUpdate(existing, update);
+
+    expect(result.chunks).toHaveLength(1);
+    const merged = result.chunks[0] as EnhancedAIChunk;
+    expect(merged.semanticSteps).toHaveLength(3);
+    expect(merged.semanticSteps[0]).toBe(stepA);
+    expect(merged.semanticSteps[1]).toBe(stepB);
+    expect(merged.semanticSteps[2]).toBe(stepC);
+  });
+
+  it('preserves semanticSteps when only existing chunk has them', () => {
+    const step: SemanticStep = { type: 'thinking', content: 'Hmm' };
+    const existingAI: EnhancedAIChunk = {
+      ...makeAIChunk([makeMsg({ uuid: 'e1' })]),
+      type: 'ai',
+      semanticSteps: [step],
+      subagents: [],
+    };
+    const newAI = makeAIChunk([makeMsg({ uuid: 'n1' })]);
+
+    const existing = makeSession({ chunks: [existingAI as Chunk] });
+    const update = makeUpdate({ newChunks: [newAI] });
+
+    const result = mergeIncrementalUpdate(existing, update);
+
+    const merged = result.chunks[0] as EnhancedAIChunk;
+    expect(merged.semanticSteps).toHaveLength(1);
+    expect(merged.semanticSteps[0]).toBe(step);
+  });
+
+  it('preserves semanticSteps when only new chunk has them', () => {
+    const step: SemanticStep = { type: 'output', content: 'Result' };
+    const existingAI = makeAIChunk([makeMsg({ uuid: 'e1' })]);
+    const newAI: EnhancedAIChunk = {
+      ...makeAIChunk([makeMsg({ uuid: 'n1' })]),
+      type: 'ai',
+      semanticSteps: [step],
+      subagents: [],
+    };
+
+    const existing = makeSession({ chunks: [existingAI] });
+    const update = makeUpdate({ newChunks: [newAI as Chunk] });
+
+    const result = mergeIncrementalUpdate(existing, update);
+
+    const merged = result.chunks[0] as EnhancedAIChunk;
+    expect(merged.semanticSteps).toHaveLength(1);
+    expect(merged.semanticSteps[0]).toBe(step);
+  });
+
+  it('concatenates subagents from both AI chunks in boundary merge', () => {
+    const subagentA = {
+      id: 'sa-1', filePath: '/tmp/a.jsonl', messages: [],
+      startTime: new Date(), endTime: new Date(), durationMs: 100,
+      metrics: makeMetrics(), isParallel: false,
+    } as Process;
+    const subagentB = {
+      id: 'sa-2', filePath: '/tmp/b.jsonl', messages: [],
+      startTime: new Date(), endTime: new Date(), durationMs: 200,
+      metrics: makeMetrics(), isParallel: false,
+    } as Process;
+
+    const existingAI: EnhancedAIChunk = {
+      ...makeAIChunk([makeMsg({ uuid: 'e1' })]),
+      type: 'ai',
+      semanticSteps: [],
+      subagents: [subagentA],
+    };
+    const newAI: EnhancedAIChunk = {
+      ...makeAIChunk([makeMsg({ uuid: 'n1' })]),
+      type: 'ai',
+      semanticSteps: [],
+      subagents: [subagentB],
+    };
+
+    const existing = makeSession({ chunks: [existingAI as Chunk] });
+    const update = makeUpdate({ newChunks: [newAI as Chunk] });
+
+    const result = mergeIncrementalUpdate(existing, update);
+
+    const merged = result.chunks[0] as EnhancedAIChunk;
+    expect(merged.subagents).toHaveLength(2);
+    expect(merged.subagents[0]).toBe(subagentA);
+    expect(merged.subagents[1]).toBe(subagentB);
+  });
+
+  it('rehydrates string timestamps to Date objects in incoming chunks', () => {
+    // Simulate JSON.stringify → JSON.parse round-trip that turns Dates into strings
+    const rawAIChunk = JSON.parse(JSON.stringify(
+      makeAIChunk([makeMsg({ uuid: 'rt-1' })]),
+    )) as Chunk;
+    const rawUserChunk = JSON.parse(JSON.stringify(
+      makeUserChunk(),
+    )) as Chunk;
+
+    // Verify they are strings after round-trip
+    expect(typeof rawAIChunk.timestamp).toBe('string');
+    expect(typeof rawUserChunk.timestamp).toBe('string');
+
+    const existing = makeSession({});
+    const update = makeUpdate({ newChunks: [rawUserChunk, rawAIChunk] });
+
+    const result = mergeIncrementalUpdate(existing, update);
+
+    // After merge, timestamps should be Date instances
+    const userResult = result.chunks[0];
+    expect(userResult.timestamp).toBeInstanceOf(Date);
+    if (userResult.type === 'user') {
+      expect(userResult.message.timestamp).toBeInstanceOf(Date);
+    }
+
+    const aiResult = result.chunks[1];
+    expect(aiResult.timestamp).toBeInstanceOf(Date);
+    if (aiResult.type === 'ai') {
+      for (const msg of aiResult.messages) {
+        expect(msg.timestamp).toBeInstanceOf(Date);
+      }
+    }
+  });
+
+  it('leaves already-Date timestamps untouched during rehydration', () => {
+    const dateObj = new Date('2025-06-15T12:00:00Z');
+    const chunk = makeAIChunk([makeMsg({ uuid: 'dt-1', timestamp: dateObj })], { timestamp: dateObj });
+
+    const existing = makeSession({});
+    const update = makeUpdate({ newChunks: [chunk] });
+
+    const result = mergeIncrementalUpdate(existing, update);
+
+    expect(result.chunks[0].timestamp).toBeInstanceOf(Date);
+    expect((result.chunks[0].timestamp as Date).toISOString()).toBe('2025-06-15T12:00:00.000Z');
   });
 });

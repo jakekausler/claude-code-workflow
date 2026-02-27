@@ -1,4 +1,4 @@
-import type { Chunk, SessionMetrics, Process } from '../types/session.js';
+import type { Chunk, SessionMetrics, Process, EnhancedAIChunk } from '../types/session.js';
 
 // ─── SSE update payload shape ─────────────────────────────────────────────────
 
@@ -43,6 +43,43 @@ function mergeMetrics(
   };
 }
 
+// ─── Date rehydration ────────────────────────────────────────────────────────
+
+/**
+ * After JSON.stringify → JSON.parse round-trip (SSE transport), Date objects
+ * become ISO-8601 strings.  This function reconstructs the Date instances
+ * that downstream code (grouping, sorting, display) relies on.
+ */
+function rehydrateChunkDates(chunks: Chunk[]): Chunk[] {
+  return chunks.map((chunk) => {
+    const timestamp =
+      typeof chunk.timestamp === 'string'
+        ? new Date(chunk.timestamp)
+        : chunk.timestamp;
+
+    if (chunk.type === 'ai' || chunk.type === 'system') {
+      const messages = chunk.messages.map((msg) => {
+        if (typeof msg.timestamp === 'string') {
+          return { ...msg, timestamp: new Date(msg.timestamp) };
+        }
+        return msg;
+      });
+      return { ...chunk, timestamp, messages };
+    }
+
+    if (chunk.type === 'user') {
+      const message =
+        typeof chunk.message.timestamp === 'string'
+          ? { ...chunk.message, timestamp: new Date(chunk.message.timestamp) }
+          : chunk.message;
+      return { ...chunk, timestamp, message };
+    }
+
+    // compact chunks — only top-level timestamp
+    return { ...chunk, timestamp };
+  });
+}
+
 // ─── Boundary chunk merging ───────────────────────────────────────────────────
 
 /**
@@ -61,13 +98,26 @@ function mergeBoundaryChunks(
   const firstNew = newChunks[0];
 
   if (lastExisting.type === 'ai' && firstNew.type === 'ai') {
-    // Merge the first new AI chunk into the last existing AI chunk
-    // Only merge messages — semanticSteps from the incoming chunk are intentionally
-    // omitted because transformChunksToConversation() re-derives display items
-    // from the full chunk array on every render cycle.
-    const mergedBoundaryChunk = {
+    // Merge the first new AI chunk into the last existing AI chunk.
+    // Concatenate messages, semanticSteps, and subagents from both chunks
+    // so that the merged chunk retains the full set of data from both halves.
+    const existingEnhanced = lastExisting as Partial<EnhancedAIChunk>;
+    const newEnhanced = firstNew as Partial<EnhancedAIChunk>;
+    const mergedBoundaryChunk: Chunk = {
       ...lastExisting,
       messages: [...lastExisting.messages, ...firstNew.messages],
+      ...((existingEnhanced.semanticSteps || newEnhanced.semanticSteps) && {
+        semanticSteps: [
+          ...(existingEnhanced.semanticSteps ?? []),
+          ...(newEnhanced.semanticSteps ?? []),
+        ],
+      }),
+      ...((existingEnhanced.subagents || newEnhanced.subagents) && {
+        subagents: [
+          ...(existingEnhanced.subagents ?? []),
+          ...(newEnhanced.subagents ?? []),
+        ],
+      }),
     };
 
     return [
@@ -99,7 +149,8 @@ export function mergeIncrementalUpdate<T extends MergeableSession>(
     return existing;
   }
 
-  const mergedChunks = mergeBoundaryChunks(existing.chunks, update.newChunks);
+  const rehydrated = rehydrateChunkDates(update.newChunks);
+  const mergedChunks = mergeBoundaryChunks(existing.chunks, rehydrated);
 
   return {
     ...existing,
