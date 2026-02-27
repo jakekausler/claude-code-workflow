@@ -62,14 +62,14 @@ export function useInteractionSSE() {
       const store = useInteractionStore.getState();
       switch (_channel) {
         case 'approval-requested': {
-          const p = payload as PendingApprovalUI;
+          const p = payload as unknown as PendingApprovalUI;
           if (p.requestId && p.stageId) {
             store.addApproval(p);
           }
           break;
         }
         case 'question-requested': {
-          const p = payload as PendingQuestionUI;
+          const p = payload as unknown as PendingQuestionUI;
           if (p.requestId && p.stageId) {
             store.addQuestion(p);
           }

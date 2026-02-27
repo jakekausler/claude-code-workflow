@@ -176,7 +176,7 @@ export function StageDetailContent({ stageId }: StageDetailContentProps) {
           <LiveSessionSection
             stageId={stageId}
             sessionStatus={sessionStatus}
-            projectId={sessions.find((s) => s.isCurrent)?.projectId}
+            projectId={sessions.find((s) => s.isCurrent)?.projectId ?? undefined}
           />
 
           {/* Session link — only rendered when the stage has a linked session */}
