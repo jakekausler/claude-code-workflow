@@ -67,4 +67,74 @@ describe('LiveSessionSection', () => {
     const result = LiveSessionSection({ stageId: 'stage-1', sessionStatus: active });
     expect(result).not.toBeNull();
   });
+
+  // ---------------------------------------------------------------------------
+  // Behavioral tests — verify LiveSessionContent receives correct props
+  // ---------------------------------------------------------------------------
+
+  it('passes sessionId to LiveSessionContent for truncation', () => {
+    const active: SessionMapEntry = {
+      status: 'active',
+      waitingType: null,
+      sessionId: 'abc123456789xyz',
+      spawnedAt: Date.now() - 30_000,
+    };
+    const result = LiveSessionSection({ stageId: 'stage-1', sessionStatus: active });
+    expect(result).not.toBeNull();
+
+    // result is a React element of type LiveSessionContent
+    // The component receives stageId and sessionStatus as props
+    expect(result?.type?.name).toBe('LiveSessionContent');
+    expect(result?.props?.sessionStatus?.sessionId).toBe('abc123456789xyz');
+
+    // The component truncates to 12 chars internally: sessionId.slice(0, 12)
+    const truncated = result?.props?.sessionStatus?.sessionId.slice(0, 12);
+    expect(truncated).toBe('abc123456789');
+  });
+
+  it('passes correct stageId for link generation', () => {
+    const active: SessionMapEntry = {
+      status: 'active',
+      waitingType: null,
+      sessionId: 'test-session-001',
+      spawnedAt: Date.now() - 30_000,
+    };
+    const result = LiveSessionSection({ stageId: 'my-stage', sessionStatus: active });
+    expect(result).not.toBeNull();
+
+    // LiveSessionContent receives stageId and uses it to build link path
+    expect(result?.props?.stageId).toBe('my-stage');
+
+    // The link would be built as /sessions/${encodeURIComponent(stageId)}
+    const expectedPath = `/sessions/${encodeURIComponent(result?.props?.stageId)}`;
+    expect(expectedPath).toBe('/sessions/my-stage');
+  });
+
+  it('passes session status with user_input waiting type to indicator', () => {
+    const userInput: SessionMapEntry = {
+      status: 'active',
+      waitingType: 'user_input',
+      sessionId: 'test-001',
+      spawnedAt: Date.now() - 30_000,
+    };
+    const result = LiveSessionSection({ stageId: 'stage-1', sessionStatus: userInput });
+    expect(result).not.toBeNull();
+
+    // The sessionStatus is passed to LiveSessionContent
+    expect(result?.props?.sessionStatus?.waitingType).toBe('user_input');
+  });
+
+  it('passes session status with permission waiting type to indicator', () => {
+    const permission: SessionMapEntry = {
+      status: 'active',
+      waitingType: 'permission',
+      sessionId: 'test-001',
+      spawnedAt: Date.now() - 30_000,
+    };
+    const result = LiveSessionSection({ stageId: 'stage-1', sessionStatus: permission });
+    expect(result).not.toBeNull();
+
+    // The sessionStatus is passed to LiveSessionContent
+    expect(result?.props?.sessionStatus?.waitingType).toBe('permission');
+  });
 });

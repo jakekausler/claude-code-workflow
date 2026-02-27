@@ -1,4 +1,6 @@
 import { PendingBadge } from '../interaction/PendingBadge.js';
+import { SessionStatusIndicator } from './SessionStatusIndicator.js';
+import type { SessionMapEntry } from '../../store/board-store.js';
 
 interface Badge {
   label: string;
@@ -15,9 +17,20 @@ interface BoardCardProps {
   isSelected?: boolean;
   onClick: () => void;
   pendingCount?: number;
+  sessionStatus?: Pick<SessionMapEntry, 'status' | 'waitingType'> | null;
 }
 
 export type { Badge };
+
+/** Whether the card should show a highlight ring for attention-needed states. */
+function needsHighlight(
+  sessionStatus: Pick<SessionMapEntry, 'status' | 'waitingType'> | null | undefined,
+): boolean {
+  return (
+    sessionStatus?.waitingType === 'user_input' ||
+    sessionStatus?.waitingType === 'permission'
+  );
+}
 
 export function BoardCard({
   id,
@@ -29,7 +42,10 @@ export function BoardCard({
   isSelected,
   onClick,
   pendingCount = 0,
+  sessionStatus,
 }: BoardCardProps) {
+  const highlight = needsHighlight(sessionStatus);
+
   return (
     <div
       role="button"
@@ -45,19 +61,23 @@ export function BoardCard({
       className={`cursor-pointer rounded-lg border bg-white p-3 shadow-sm transition-shadow hover:shadow-md ${
         isSelected
           ? 'border-blue-500 ring-2 ring-blue-200'
-          : 'border-slate-200'
+          : highlight
+            ? 'border-yellow-400 ring-2 ring-yellow-300'
+            : 'border-slate-200'
       }`}
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
-            {statusDot && (
+            {sessionStatus ? (
+              <SessionStatusIndicator status={sessionStatus} compact />
+            ) : statusDot ? (
               <span
                 aria-hidden="true"
                 className="inline-block h-2 w-2 shrink-0 rounded-full"
                 style={{ backgroundColor: statusDot }}
               />
-            )}
+            ) : null}
             <span className="text-xs font-medium text-slate-500">{id}</span>
           </div>
           <div className="flex items-center gap-2 mt-0.5">

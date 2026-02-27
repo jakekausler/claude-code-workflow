@@ -2,6 +2,7 @@ import { useMemo, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useBoard, useEpics, useTickets } from '../api/hooks.js';
 import { useBoardStore } from '../store/board-store.js';
+import type { SessionMapEntry } from '../store/board-store.js';
 import { useDrawerStore, type DrawerEntry } from '../store/drawer-store.js';
 import { FilterBar } from '../components/board/FilterBar.js';
 import { BoardLayout } from '../components/board/BoardLayout.js';
@@ -42,6 +43,7 @@ function statusSortKey(status: string): number {
 
 export function Board() {
   const { selectedRepo, selectedEpic, selectedTicket } = useBoardStore();
+  const sessionMap = useBoardStore((s) => s.sessionMap);
   const { open, stack } = useDrawerStore();
   const currentDrawerId = stack.length > 0 ? stack[stack.length - 1].id : null;
 
@@ -152,7 +154,7 @@ export function Board() {
           }
           return (
             <BoardColumn key={col.slug} title={col.title} color={col.color} count={col.items.length}>
-              {col.items.map((item) => renderCard(item, open, currentDrawerId))}
+              {col.items.map((item) => renderCard(item, open, currentDrawerId, sessionMap))}
             </BoardColumn>
           );
         })}
@@ -165,9 +167,10 @@ function renderCard(
   item: BoardItem,
   open: (entry: DrawerEntry) => void,
   currentDrawerId: string | null,
+  sessionMap: Map<string, SessionMapEntry>,
 ) {
   if (item.type === 'stage') {
-    return renderStageCard(item, open, currentDrawerId);
+    return renderStageCard(item, open, currentDrawerId, sessionMap);
   }
   return renderTicketCard(item, open, currentDrawerId);
 }
@@ -176,11 +179,14 @@ function renderStageCard(
   stage: BoardStageItem,
   open: (entry: DrawerEntry) => void,
   currentDrawerId: string | null,
+  sessionMap: Map<string, SessionMapEntry>,
 ) {
   const badges: { label: string; color: string }[] = [];
   if (stage.blocked_by && stage.blocked_by.length > 0) {
     badges.push({ label: `Blocked by ${stage.blocked_by.length}`, color: '#ef4444' });
   }
+
+  const sessionStatus = sessionMap.get(stage.id) ?? null;
 
   return (
     <BoardCard
@@ -189,7 +195,8 @@ function renderStageCard(
       title={stage.title}
       subtitle={`${stage.epic} / ${stage.ticket}`}
       badges={badges.length > 0 ? badges : undefined}
-      statusDot={stage.session_active ? '#22c55e' : undefined}
+      statusDot={!sessionStatus && stage.session_active ? '#22c55e' : undefined}
+      sessionStatus={sessionStatus}
       isSelected={currentDrawerId === stage.id}
       onClick={() => open({ type: 'stage', id: stage.id })}
     />
