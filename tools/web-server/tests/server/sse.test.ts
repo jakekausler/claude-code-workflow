@@ -253,7 +253,7 @@ describe('OrchestratorClient → SSE broadcast', () => {
     }));
   });
 
-  it('broadcasts both stage-transition and board-update on session-ended', () => {
+  it('broadcasts stage-transition, board-update, and session-status on session-ended', () => {
     const entry = {
       stageId: 'stage-1',
       sessionId: 'sess-abc',
@@ -266,7 +266,7 @@ describe('OrchestratorClient → SSE broadcast', () => {
 
     mockClient.emit('session-ended', entry);
 
-    expect(broadcastSpy).toHaveBeenCalledTimes(2);
+    expect(broadcastSpy).toHaveBeenCalledTimes(3);
     expect(broadcastSpy).toHaveBeenCalledWith('stage-transition', expect.objectContaining({
       stageId: 'stage-1',
       type: 'session_ended',
@@ -274,6 +274,11 @@ describe('OrchestratorClient → SSE broadcast', () => {
     expect(broadcastSpy).toHaveBeenCalledWith('board-update', expect.objectContaining({
       type: 'session_ended',
       stageId: 'stage-1',
+    }));
+    expect(broadcastSpy).toHaveBeenCalledWith('session-status', expect.objectContaining({
+      stageId: 'stage-1',
+      status: 'ended',
+      waitingType: null,
     }));
   });
 });

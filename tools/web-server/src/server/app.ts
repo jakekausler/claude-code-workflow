@@ -18,7 +18,15 @@ import { sessionRoutes } from './routes/sessions.js';
 import { repoRoutes } from './routes/repos.js';
 import { eventRoutes, broadcastEvent } from './routes/events.js';
 import { interactionRoutes } from './routes/interaction.js';
-import { orchestratorRoutes } from './routes/orchestrator.js';
+import { orchestratorRoutes, computeWaitingType } from './routes/orchestrator.js';
+
+interface SessionStatusSSE {
+  stageId: string;
+  sessionId?: string;
+  status: 'starting' | 'active' | 'ended';
+  waitingType: 'user_input' | 'permission' | null;
+  spawnedAt?: number;
+}
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -118,6 +126,9 @@ export async function createServer(
   if (orchestratorClient) {
     const oc = orchestratorClient;
 
+    // Map requestId → stageId so approval-cancelled can resolve the stageId
+    const requestStageMap = new Map<string, string>();
+
     oc.on('session-registered', (entry: SessionInfo) => {
       broadcastEvent('stage-transition', {
         stageId: entry.stageId,
@@ -125,6 +136,14 @@ export async function createServer(
         type: 'session_started',
         timestamp: entry.spawnedAt,
       });
+      const sseEvent: SessionStatusSSE = {
+        stageId: entry.stageId,
+        sessionId: entry.sessionId,
+        status: 'starting',
+        waitingType: null,
+        spawnedAt: entry.spawnedAt,
+      };
+      broadcastEvent('session-status', sseEvent);
     });
 
     oc.on('session-status', (entry: SessionInfo) => {
@@ -134,6 +153,14 @@ export async function createServer(
         sessionId: entry.sessionId,
         status: entry.status,
       });
+      const pending = oc.getPendingForStage(entry.stageId);
+      const waitingType = computeWaitingType(pending);
+      const sseEvent: SessionStatusSSE = {
+        stageId: entry.stageId,
+        status: entry.status,
+        waitingType,
+      };
+      broadcastEvent('session-status', sseEvent);
     });
 
     oc.on('session-ended', (entry: SessionInfo) => {
@@ -147,18 +174,55 @@ export async function createServer(
         type: 'session_ended',
         stageId: entry.stageId,
       });
+      const sseEvent: SessionStatusSSE = {
+        stageId: entry.stageId,
+        status: 'ended',
+        waitingType: null,
+      };
+      broadcastEvent('session-status', sseEvent);
+      // Clean up requestStageMap entries for this stage
+      for (const [reqId, sid] of requestStageMap) {
+        if (sid === entry.stageId) requestStageMap.delete(reqId);
+      }
     });
 
     oc.on('approval-requested', (data) => {
       broadcastEvent('approval-requested', data);
+      requestStageMap.set(data.requestId, data.stageId);
+      const sseEvent: SessionStatusSSE = {
+        stageId: data.stageId,
+        status: 'active',
+        waitingType: 'permission',
+      };
+      broadcastEvent('session-status', sseEvent);
     });
 
     oc.on('question-requested', (data) => {
       broadcastEvent('question-requested', data);
+      requestStageMap.set(data.requestId, data.stageId);
+      const sseEvent: SessionStatusSSE = {
+        stageId: data.stageId,
+        status: 'active',
+        waitingType: 'user_input',
+      };
+      broadcastEvent('session-status', sseEvent);
     });
 
     oc.on('approval-cancelled', (data) => {
       broadcastEvent('approval-cancelled', data);
+      // Resolve stageId from the local map and recompute waitingType
+      const stageId = requestStageMap.get(data.requestId);
+      requestStageMap.delete(data.requestId);
+      if (stageId) {
+        const pending = oc.getPendingForStage(stageId);
+        const waitingType = computeWaitingType(pending);
+        const sseEvent: SessionStatusSSE = {
+          stageId,
+          status: 'active',
+          waitingType,
+        };
+        broadcastEvent('session-status', sseEvent);
+      }
     });
 
     oc.on('message-queued', (data) => {

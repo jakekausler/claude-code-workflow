@@ -1,5 +1,6 @@
 import type { FastifyPluginCallback } from 'fastify';
 import fp from 'fastify-plugin';
+import type { PendingItem } from '../services/orchestrator-client.js';
 
 export interface SessionStatusResponse {
   stageId: string;
@@ -8,11 +9,6 @@ export interface SessionStatusResponse {
   waitingType: 'user_input' | 'permission' | null;
   spawnedAt: number;
   lastActivity: number;
-}
-
-interface PendingItem {
-  type?: string;
-  [key: string]: unknown;
 }
 
 /**
@@ -25,12 +21,11 @@ interface PendingItem {
  * Priority: user_input (questions) takes precedence over permission (approvals)
  * when both types are pending.
  */
-function computeWaitingType(pending: PendingItem[]): SessionStatusResponse['waitingType'] {
+export function computeWaitingType(pending: PendingItem[]): SessionStatusResponse['waitingType'] {
   if (pending.length === 0) return null;
 
   for (const item of pending) {
-    const typed = item as { type?: string };
-    if (typed.type === 'question') return 'user_input';
+    if (item.type === 'question') return 'user_input';
   }
 
   // Default to permission if there are pending items but no questions
