@@ -8,6 +8,10 @@ export interface FileChangeEvent {
   sessionId: string;
   filePath: string;
   isSubagent: boolean;
+  /** Byte offset before this change (for incremental parsing) */
+  previousOffset: number;
+  /** Current file size after this change (available for diagnostics; not used by incremental parser) */
+  currentSize: number;
 }
 
 export interface FileWatcherOptions {
@@ -116,9 +120,13 @@ export class FileWatcher extends EventEmitter {
 
     const timer = setTimeout(async () => {
       this.debounceTimers.delete(filePath);
+      // Capture previous offset before updating
+      const previousOffset = this.getOffset(filePath);
+      let currentSize = previousOffset;
       // Stat the file to get its current size and update offset
       try {
         const fileStat = await stat(filePath);
+        currentSize = fileStat.size;
         this.setOffset(filePath, fileStat.size);
       } catch {
         // File may have been deleted; offset will remain unchanged
@@ -128,6 +136,8 @@ export class FileWatcher extends EventEmitter {
         sessionId: parsed.sessionId,
         filePath,
         isSubagent: parsed.isSubagent,
+        previousOffset,
+        currentSize,
       } satisfies FileChangeEvent);
     }, this.options.debounceMs);
 
@@ -259,6 +269,8 @@ export class FileWatcher extends EventEmitter {
           sessionId: parsed.sessionId,
           filePath: fullPath,
           isSubagent: parsed.isSubagent,
+          previousOffset: currentOffset,
+          currentSize: fileSize,
         } satisfies FileChangeEvent);
         // Update offset after emitting so the file isn't re-emitted on next scan
         this.setOffset(fullPath, fileSize);

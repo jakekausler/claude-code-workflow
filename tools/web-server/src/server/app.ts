@@ -100,12 +100,8 @@ export async function createServer(
     // Per-session SSE broadcast debouncing (300ms window)
     const sseDebounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
-    // Invalidate cache on file changes
+    // Invalidate cache + incremental parse on file changes
     fw.on('file-change', (event: FileChangeEvent) => {
-      sessionPipeline?.invalidateSession(
-        join(claudeProjectsDir, event.projectId),
-        event.sessionId,
-      );
       // Debounce SSE broadcast per session to coalesce rapid changes
       const key = `${event.projectId}/${event.sessionId}`;
       const existing = sseDebounceTimers.get(key);
@@ -114,11 +110,66 @@ export async function createServer(
       }
       const timer = setTimeout(() => {
         sseDebounceTimers.delete(key);
-        broadcastEvent('session-update', {
-          projectId: event.projectId,
-          sessionId: event.sessionId,
-          isSubagent: event.isSubagent,
-        });
+        const fullProjectDir = join(claudeProjectsDir, event.projectId);
+
+        void (async () => {
+          try {
+            // Subagent files fall back to full refresh (incremental subagent
+            // parsing would require cross-file context we don't maintain yet)
+            if (event.isSubagent || !sessionPipeline) {
+              sessionPipeline?.invalidateSession(fullProjectDir, event.sessionId);
+              broadcastEvent('session-update', {
+                projectId: event.projectId,
+                sessionId: event.sessionId,
+                type: 'full-refresh',
+              });
+              return;
+            }
+
+            const update = await sessionPipeline.parseIncremental(
+              fullProjectDir,
+              event.sessionId,
+              event.previousOffset,
+            );
+
+            if (update.requiresFullRefresh) {
+              broadcastEvent('session-update', {
+                projectId: event.projectId,
+                sessionId: event.sessionId,
+                type: 'full-refresh',
+              });
+            } else if (update.newChunks.length === 0) {
+              // No meaningful new data, skip broadcast
+            } else {
+              broadcastEvent('session-update', {
+                projectId: event.projectId,
+                sessionId: event.sessionId,
+                type: 'incremental',
+                newChunks: update.newChunks,
+                metrics: update.metrics,
+                isOngoing: update.isOngoing,
+                newOffset: update.newOffset,
+              });
+            }
+
+            // Always invalidate cache after broadcasting so next full page
+            // load gets a fresh parse (the incremental data was a one-shot
+            // push to connected SSE clients)
+            sessionPipeline.invalidateSession(fullProjectDir, event.sessionId);
+          } catch (err) {
+            // On any error, fall back to full refresh
+            console.error('Incremental parse failed, falling back to full refresh:', err);
+            sessionPipeline?.invalidateSession(
+              join(claudeProjectsDir, event.projectId),
+              event.sessionId,
+            );
+            broadcastEvent('session-update', {
+              projectId: event.projectId,
+              sessionId: event.sessionId,
+              type: 'full-refresh',
+            });
+          }
+        })();
       }, 300);
       sseDebounceTimers.set(key, timer);
     });
