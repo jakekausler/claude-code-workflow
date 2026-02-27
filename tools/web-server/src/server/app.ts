@@ -153,6 +153,12 @@ export async function createServer(
                 // Parse failed — broadcast without data (fallback)
               }
 
+              console.log('[SSE-DEBUG] Subagent-update broadcast:', {
+                agentId,
+                processId: subagentProcess?.id,
+                numMessages: subagentProcess?.messages?.length ?? 0,
+                isOngoing: subagentProcess?.isOngoing,
+              });
               broadcastEvent('session-update', {
                 projectId: event.projectId,
                 sessionId: event.sessionId,
@@ -188,6 +194,22 @@ export async function createServer(
                   numMessages: c.type === 'ai' ? c.messages?.length : undefined,
                 })),
               });
+              // Debug: log subagent data in incremental update
+              for (const chunk of update.newChunks) {
+                if (chunk.type === 'ai' && 'subagents' in chunk) {
+                  const enhanced = chunk as any;
+                  console.log('[SSE-DEBUG] Incremental chunk subagents:', {
+                    numSubagents: enhanced.subagents?.length ?? 0,
+                    subagents: enhanced.subagents?.map((s: any) => ({
+                      id: s.id,
+                      numMessages: s.messages?.length ?? 0,
+                      firstMsgContent: typeof s.messages?.[0]?.content === 'string'
+                        ? s.messages[0].content.substring(0, 50)
+                        : 'non-string',
+                    })),
+                  });
+                }
+              }
               broadcastEvent('session-update', {
                 projectId: event.projectId,
                 sessionId: event.sessionId,

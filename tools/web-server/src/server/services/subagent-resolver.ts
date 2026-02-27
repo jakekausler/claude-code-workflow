@@ -305,9 +305,10 @@ function detectOngoing(messages: ParsedMessage[]): boolean {
  *
  * Returns null if the file cannot be parsed, is empty, or is a
  * filtered agent (warmup, compact).  This is a lightweight alternative
- * to the full `resolveSubagents` pipeline — it skips parent-linking
- * and parallel detection since we only need the Process data for
- * incremental SSE broadcasts.
+ * to the full `resolveSubagents` pipeline — it skips parallel detection
+ * but does extract `parentTaskId` from the first user message's
+ * `sourceToolUseID` so the client can link the Process to the correct
+ * AI chunk during SSE merge.
  */
 export async function buildProcessFromFile(
   filePath: string,
@@ -316,9 +317,16 @@ export async function buildProcessFromFile(
   try {
     const { messages } = await parseSessionFile(filePath);
     if (isFilteredAgent(messages, agentId)) return null;
+
+    // Extract parentTaskId from the subagent's first user message.
+    // The first user message in a subagent file is the Task tool's
+    // instruction, and its sourceToolUseID is the Task tool_use block ID.
+    const firstUserMsg = messages.find((m) => m.type === 'user');
+    const parentTaskId = firstUserMsg?.sourceToolUseID;
+
     return buildProcess(
       { agentId, filePath, messages },
-      {}, // No parent linking info available in this context
+      { parentTaskId },
     );
   } catch {
     return null;

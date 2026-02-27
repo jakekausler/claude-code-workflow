@@ -232,9 +232,9 @@ export function mergeSubagentUpdate<T extends MergeableSession>(
       .flat(),
   });
 
-  // 1. Update chunk-level subagents — find the AI chunk containing this subagent
+  // 1. Update chunk-level subagents — find the AI chunk already containing this subagent
   let chunksChanged = false;
-  const updatedChunks = existing.chunks.map((chunk) => {
+  let finalChunks = existing.chunks.map((chunk) => {
     if (chunk.type !== 'ai') return chunk;
 
     const enhanced = chunk as Partial<EnhancedAIChunk>;
@@ -250,6 +250,27 @@ export function mergeSubagentUpdate<T extends MergeableSession>(
     return { ...chunk, subagents: newSubagents };
   });
 
+  // 1b. If the subagent wasn't in any chunk yet (new subagent), find the chunk
+  //     whose semantic steps reference the Task tool call that spawned it.
+  if (!chunksChanged) {
+    finalChunks = existing.chunks.map((chunk) => {
+      if (chunk.type !== 'ai') return chunk;
+      const enhanced = chunk as Partial<EnhancedAIChunk>;
+
+      const hasMatchingStep = enhanced.semanticSteps?.some(
+        (step) =>
+          step.type === 'subagent' &&
+          (step.subagentId === rehydrated.id ||
+            step.subagentId === rehydrated.parentTaskId),
+      );
+      if (!hasMatchingStep) return chunk;
+
+      chunksChanged = true;
+      const existingSubagents = enhanced.subagents ?? [];
+      return { ...chunk, subagents: [...existingSubagents, rehydrated] };
+    });
+  }
+
   // 2. Update session-level subagents array (update existing or append)
   const existingIdx = existing.subagents.findIndex((s) => s.id === rehydrated.id);
   let updatedSubagents: Process[];
@@ -262,7 +283,7 @@ export function mergeSubagentUpdate<T extends MergeableSession>(
 
   return {
     ...existing,
-    chunks: chunksChanged ? updatedChunks : existing.chunks,
+    chunks: chunksChanged ? finalChunks : existing.chunks,
     subagents: updatedSubagents,
   };
 }

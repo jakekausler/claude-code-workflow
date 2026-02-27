@@ -75,6 +75,18 @@ function extractLastUsage(messages: ParsedMessage[]): UsageMetadata | null {
 }
 
 export function SubagentItem({ process, depth = 0 }: Props) {
+  console.log('[SSE-DEBUG] SubagentItem render:', {
+    processId: process.id,
+    numMessages: process.messages?.length ?? 0,
+    messagesRef: process.messages === (window as any).__lastSubagentMsgs
+      ? 'SAME_REF_AS_LAST'
+      : 'different_ref',
+    firstMsgContent: typeof process.messages?.[0]?.content === 'string'
+      ? process.messages[0].content.substring(0, 50)
+      : JSON.stringify(process.messages?.[0]?.content)?.substring(0, 50),
+  });
+  (window as any).__lastSubagentMsgs = process.messages;
+
   const expanded = useSessionViewStore((s) => s.expandedSubagents.has(process.id));
   const toggleSubagent = useSessionViewStore((s) => s.toggleSubagent);
   const showTrace = useSessionViewStore((s) => s.expandedSubagentTraces.has(process.id));
