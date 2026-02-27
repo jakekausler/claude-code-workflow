@@ -1,8 +1,7 @@
+import type { SessionMapEntry } from '../../store/board-store.js';
+
 export interface SessionStatusProps {
-  status: {
-    status: 'starting' | 'active' | 'ended';
-    waitingType: 'user_input' | 'permission' | 'idle' | null;
-  } | null;
+  status: Pick<SessionMapEntry, 'status' | 'waitingType'> | null;
   compact?: boolean;
 }
 
@@ -12,8 +11,8 @@ interface IndicatorConfig {
 }
 
 function getIndicatorConfig(
-  sessionStatus: 'starting' | 'active' | 'ended',
-  waitingType: 'user_input' | 'permission' | 'idle' | null,
+  sessionStatus: 'starting' | 'active',
+  waitingType: SessionMapEntry['waitingType'],
 ): IndicatorConfig {
   if (waitingType === 'user_input') {
     return { dotClass: 'bg-yellow-500', label: 'Needs input' };

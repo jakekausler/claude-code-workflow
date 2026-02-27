@@ -54,3 +54,9 @@ export const useBoardStore = create<BoardState>((set, get) => ({
 
   setOrchestratorConnected: (connected) => set({ orchestratorConnected: connected }),
 }));
+
+/** Zustand selector — drives React re-renders when the entry changes. */
+export function selectSessionStatus(stageId: string) {
+  return (state: BoardState): SessionMapEntry | null =>
+    state.sessionMap.get(stageId) ?? null;
+}

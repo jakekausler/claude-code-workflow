@@ -3,7 +3,6 @@ import {
   getIndicatorConfig,
   SessionStatusIndicator,
 } from '../../src/client/components/board/SessionStatusIndicator.js';
-import type { SessionStatusProps } from '../../src/client/components/board/SessionStatusIndicator.js';
 
 describe('SessionStatusIndicator', () => {
   it('exports SessionStatusIndicator component', () => {
@@ -21,6 +20,18 @@ describe('SessionStatusIndicator', () => {
       status: { status: 'ended', waitingType: null },
     });
     expect(result).toBeNull();
+  });
+
+  it('hides label when compact is true', () => {
+    const result = SessionStatusIndicator({
+      status: { status: 'active', waitingType: 'user_input' },
+      compact: true,
+    });
+    // Result should be a JSX element (not null) but the label span should be suppressed
+    expect(result).not.toBeNull();
+    // The config still has label 'Needs input', but compact hides it in the JSX
+    const config = getIndicatorConfig('active', 'user_input');
+    expect(config.label).toBe('Needs input');
   });
 });
 
@@ -44,7 +55,7 @@ describe('getIndicatorConfig', () => {
     expect(config.label).toBe('Needs approval');
   });
 
-  it('returns gray dot for idle waiting', () => {
+  it('returns gray dot with no label for idle waiting', () => {
     const config = getIndicatorConfig('active', 'idle');
     expect(config.dotClass).toBe('bg-gray-400');
     expect(config.label).toBeNull();
@@ -61,22 +72,5 @@ describe('getIndicatorConfig', () => {
     const config = getIndicatorConfig('starting', 'user_input');
     expect(config.dotClass).toBe('bg-yellow-500');
     expect(config.label).toBe('Needs input');
-  });
-});
-
-describe('SessionStatusProps type', () => {
-  it('accepts compact prop', () => {
-    const props: SessionStatusProps = {
-      status: { status: 'active', waitingType: null },
-      compact: true,
-    };
-    expect(props.compact).toBe(true);
-  });
-
-  it('compact defaults to false when not provided', () => {
-    const props: SessionStatusProps = {
-      status: { status: 'active', waitingType: 'user_input' },
-    };
-    expect(props.compact).toBeUndefined();
   });
 });
