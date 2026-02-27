@@ -36,7 +36,7 @@ describe('FileWatcher', () => {
         events.push(event);
       });
 
-      watcher.start();
+      await watcher.start();
 
       // Write a JSONL file after starting the watcher
       const filePath = join(projectDir, 'session-abc.jsonl');
@@ -67,7 +67,7 @@ describe('FileWatcher', () => {
         events.push(event);
       });
 
-      watcher.start();
+      await watcher.start();
 
       // Write a non-JSONL file
       writeFileSync(join(projectDir, 'notes.txt'), 'hello');
@@ -93,7 +93,7 @@ describe('FileWatcher', () => {
         events.push(event);
       });
 
-      watcher.start();
+      await watcher.start();
 
       const filePath = join(projectDir, 'session.jsonl');
       writeFileSync(filePath, '{"line":1}\n');
@@ -287,7 +287,7 @@ describe('FileWatcher', () => {
         events.push(event);
       });
 
-      watcher.start();
+      await watcher.start();
       watcher.stop();
 
       // Write file after stop
@@ -300,16 +300,16 @@ describe('FileWatcher', () => {
   });
 
   describe('non-existent root directory', () => {
-    it('handles non-existent root directory gracefully', () => {
+    it('handles non-existent root directory gracefully', async () => {
       const nonExistentDir = join(tempDir, 'does-not-exist');
 
       watcher = new FileWatcher({ rootDir: nonExistentDir });
 
       // Should not throw
-      expect(() => watcher.start()).not.toThrow();
+      await expect(watcher.start()).resolves.toBeUndefined();
     });
 
-    it('emits a warning when root directory does not exist', () => {
+    it('emits a warning when root directory does not exist', async () => {
       const nonExistentDir = join(tempDir, 'does-not-exist');
 
       watcher = new FileWatcher({ rootDir: nonExistentDir });
@@ -319,7 +319,7 @@ describe('FileWatcher', () => {
         warnings.push(msg);
       });
 
-      watcher.start();
+      await watcher.start();
 
       expect(warnings).toHaveLength(1);
       expect(warnings[0]).toContain('does-not-exist');
@@ -351,9 +351,9 @@ describe('FileWatcher', () => {
         events.push(event);
       });
 
-      watcher.start();
+      await watcher.start();
       // Calling start() again should not throw and should cleanly restart
-      watcher.start();
+      await watcher.start();
 
       writeFileSync(join(projectDir, 'session.jsonl'), '{"x":1}\n');
 

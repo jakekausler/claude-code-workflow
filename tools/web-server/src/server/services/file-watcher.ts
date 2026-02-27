@@ -1,7 +1,8 @@
-import { watch, existsSync } from 'fs';
-import { readdir, stat } from 'fs/promises';
+import type { FSWatcher } from 'fs';
 import { join } from 'path';
 import { EventEmitter } from 'events';
+import type { FileSystemProvider } from '../deployment/types.js';
+import { DirectFileSystemProvider } from '../deployment/local/direct-fs-provider.js';
 
 export interface FileChangeEvent {
   projectId: string;
@@ -14,25 +15,29 @@ export interface FileWatcherOptions {
   rootDir: string; // ~/.claude/projects
   debounceMs?: number; // default 100
   catchUpIntervalMs?: number; // default 30000
+  fileSystem?: FileSystemProvider;
 }
 
 export class FileWatcher extends EventEmitter {
-  private watcher: ReturnType<typeof watch> | null = null;
+  private watcher: FSWatcher | null = null;
   private catchUpTimer: ReturnType<typeof setInterval> | null = null;
   private fileOffsets = new Map<string, number>();
   private debounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
-  private options: Required<FileWatcherOptions>;
+  private options: Required<Omit<FileWatcherOptions, 'fileSystem'>>;
+  private fileSystem: FileSystemProvider;
 
   constructor(options: FileWatcherOptions) {
     super();
+    const { fileSystem, ...rest } = options;
+    this.fileSystem = fileSystem ?? new DirectFileSystemProvider();
     this.options = {
       debounceMs: 100,
       catchUpIntervalMs: 30000,
-      ...options,
+      ...rest,
     };
   }
 
-  start(): void {
+  async start(): Promise<void> {
     // Guard against double-start: tear down existing watcher before re-initialising
     if (this.watcher) {
       this.stop();
@@ -40,21 +45,24 @@ export class FileWatcher extends EventEmitter {
 
     const { rootDir } = this.options;
 
-    if (!existsSync(rootDir)) {
+    const exists = await this.fileSystem.exists(rootDir);
+    if (!exists) {
       this.emit('warning', `Root directory does not exist: ${rootDir}. File watcher is not active.`);
       return;
     }
 
     try {
-      this.watcher = watch(rootDir, { recursive: true }, (eventType, filename) => {
-        this.handleChange(eventType, filename);
+      this.watcher = this.fileSystem.watch(rootDir, { recursive: true });
+
+      this.watcher.on('change', (eventType, filename) => {
+        this.handleChange(eventType as string, filename as string | null);
       });
 
       this.watcher.on('error', (err) => {
         this.emit('error', err);
       });
     } catch {
-      // Root directory may have disappeared between existsSync and watch
+      // Root directory may have disappeared between exists check and watch
       return;
     }
 
@@ -177,16 +185,29 @@ export class FileWatcher extends EventEmitter {
   async catchUpScan(): Promise<void> {
     const { rootDir } = this.options;
 
-    if (!existsSync(rootDir)) {
+    const exists = await this.fileSystem.exists(rootDir);
+    if (!exists) {
       return;
     }
 
-    let projectDirs: string[];
+    let entryNames: string[];
     try {
-      const entries = await readdir(rootDir, { withFileTypes: true });
-      projectDirs = entries.filter((e) => e.isDirectory()).map((e) => e.name);
+      entryNames = await this.fileSystem.readdir(rootDir);
     } catch {
       return;
+    }
+
+    // Filter to directories only
+    const projectDirs: string[] = [];
+    for (const name of entryNames) {
+      try {
+        const entryStat = await this.fileSystem.stat(join(rootDir, name));
+        if (entryStat.isDirectory) {
+          projectDirs.push(name);
+        }
+      } catch {
+        // Skip entries we can't stat
+      }
     }
 
     for (const projectDir of projectDirs) {
@@ -208,45 +229,44 @@ export class FileWatcher extends EventEmitter {
       return;
     }
 
-    let entries;
+    let entryNames: string[];
     try {
-      entries = await readdir(dirPath, { withFileTypes: true });
+      entryNames = await this.fileSystem.readdir(dirPath);
     } catch {
       return;
     }
 
-    for (const entry of entries) {
-      const fullPath = join(dirPath, entry.name);
+    for (const name of entryNames) {
+      const fullPath = join(dirPath, name);
 
-      if (entry.isDirectory()) {
-        const nextSubPath = subPath ? join(subPath, entry.name) : entry.name;
+      let entryStat: { size: number; mtimeMs: number; isDirectory: boolean };
+      try {
+        entryStat = await this.fileSystem.stat(fullPath);
+      } catch {
+        continue;
+      }
+
+      if (entryStat.isDirectory) {
+        const nextSubPath = subPath ? join(subPath, name) : name;
         await this.scanDirectory(fullPath, projectId, nextSubPath, depth + 1);
         continue;
       }
 
-      if (!entry.name.endsWith('.jsonl')) {
+      if (!name.endsWith('.jsonl')) {
         continue;
       }
 
       const relativePath = subPath
-        ? join(projectId, subPath, entry.name)
-        : join(projectId, entry.name);
+        ? join(projectId, subPath, name)
+        : join(projectId, name);
 
       const parsed = this.parseFilePath(relativePath);
       if (!parsed) {
         continue;
       }
 
-      let fileSize: number;
-      try {
-        const fileStat = await stat(fullPath);
-        fileSize = fileStat.size;
-      } catch {
-        continue;
-      }
-
       const currentOffset = this.getOffset(fullPath);
-      if (fileSize > currentOffset) {
+      if (entryStat.size > currentOffset) {
         this.emit('file-change', {
           projectId: parsed.projectId,
           sessionId: parsed.sessionId,

@@ -19,15 +19,18 @@ const orchestratorClient = new OrchestratorClient(orchestratorWsUrl);
 const db = new KanbanDatabase(dbPath);
 const dataService = new DataService({ db });
 
-const claudeProjectsDir =
-  process.env.CLAUDE_PROJECTS_DIR ?? join(os.homedir(), '.claude', 'projects');
-const sessionPipeline = new SessionPipeline();
-const fileWatcher = new FileWatcher({ rootDir: claudeProjectsDir });
-
 // Create deployment context based on DEPLOYMENT_MODE env var
 const deploymentContext = process.env.DEPLOYMENT_MODE === 'hosted'
   ? (() => { throw new Error('Hosted mode not yet implemented'); })()
   : new LocalDeploymentContext();
+
+const claudeProjectsDir =
+  process.env.CLAUDE_PROJECTS_DIR ?? join(os.homedir(), '.claude', 'projects');
+const sessionPipeline = new SessionPipeline();
+const fileWatcher = new FileWatcher({
+  rootDir: claudeProjectsDir,
+  fileSystem: deploymentContext.getFileAccess(),
+});
 
 const app = await createServer({
   dataService,
