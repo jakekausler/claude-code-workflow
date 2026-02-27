@@ -32,35 +32,12 @@ export function SessionDetail() {
       if (event.sessionId !== sessionId || event.projectId !== projectId) return;
 
       if (event.type === 'incremental') {
-        // TEMPORARY DEBUG LOG — remove after diagnosing SSE rendering issue
-        console.log('[SSE-DEBUG] Client received incremental event:', {
-          numNewChunks: event.newChunks?.length,
-          chunks: event.newChunks?.map((c: any, i: number) => ({
-            index: i,
-            type: c.type,
-            hasSemanticSteps: 'semanticSteps' in c,
-            numSteps: c.semanticSteps?.length ?? 0,
-          })),
-        });
         // Merge new chunks directly into React Query cache — no refetch needed
         queryClient.setQueryData<ParsedSession>(
           ['session', projectId, sessionId],
           (old) => {
             if (!old) return old;
-            const merged = mergeIncrementalUpdate(old, event);
-            // TEMPORARY DEBUG LOG — remove after diagnosing SSE rendering issue
-            console.log('[SSE-DEBUG] After merge:', {
-              totalChunks: merged.chunks.length,
-              lastChunk: (() => {
-                const last = merged.chunks[merged.chunks.length - 1];
-                return {
-                  type: last?.type,
-                  hasSemanticSteps: last ? 'semanticSteps' in last : false,
-                  numSteps: (last as any)?.semanticSteps?.length ?? 0,
-                };
-              })(),
-            });
-            return merged;
+            return mergeIncrementalUpdate(old, event);
           },
         );
       } else if (event.type === 'full-refresh') {

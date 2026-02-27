@@ -35,13 +35,6 @@ export function buildDisplayItems(
   precedingSlash?: SlashItem,
   now?: Date,
 ): { items: AIGroupDisplayItem[]; linkedTools: Map<string, LinkedToolItemData> } {
-  console.log('[SSE-DEBUG] buildDisplayItems:', {
-    numSteps: steps.length,
-    numMessages: messages.length,
-    stepTypes: steps.map(s => s.type),
-    msgToolCalls: messages.flatMap(m => m.toolCalls ?? []).length,
-    msgToolResults: messages.flatMap(m => m.toolResults ?? []).length,
-  });
   const linkedTools = linkToolCallsToResults(steps, messages);
   const timestamp = now ?? new Date();
 
@@ -78,13 +71,6 @@ export function buildDisplayItems(
         break;
 
       case 'tool_call': {
-        if (step.type === 'tool_call') {
-          console.log('[SSE-DEBUG] tool_call step:', {
-            toolCallId: step.toolCallId,
-            foundInLinked: linkedTools.has(step.toolCallId ?? ''),
-            linkedToolsSize: linkedTools.size,
-          });
-        }
         const tool = linkedTools.get(step.toolCallId ?? '');
         if (!tool) break;
         // Skip Task calls that have subagents

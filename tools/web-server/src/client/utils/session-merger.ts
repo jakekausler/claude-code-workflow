@@ -223,15 +223,6 @@ export function mergeSubagentUpdate<T extends MergeableSession>(
 
   const rehydrated = rehydrateProcessDates(process);
 
-  console.log('[SSE-DEBUG] mergeSubagentUpdate:', {
-    processId: rehydrated.id,
-    numMessages: rehydrated.messages?.length ?? 0,
-    existingChunkSubagents: existing.chunks
-      .filter(c => c.type === 'ai' && 'subagents' in c)
-      .map(c => (c as any).subagents?.map((s: any) => ({ id: s.id, numMsgs: s.messages?.length })))
-      .flat(),
-  });
-
   // 1. Update chunk-level subagents — find the AI chunk already containing this subagent
   let chunksChanged = false;
   let finalChunks = existing.chunks.map((chunk) => {

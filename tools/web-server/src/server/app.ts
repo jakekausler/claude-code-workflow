@@ -204,12 +204,6 @@ export async function createServer(
                 // Do NOT update cache so the next event retries.
               }
 
-              console.log('[SSE-DEBUG] Subagent-update broadcast:', {
-                agentId,
-                processId: subagentProcess?.id,
-                numMessages: subagentProcess?.messages?.length ?? 0,
-                isOngoing: subagentProcess?.isOngoing,
-              });
               broadcastEvent('session-update', {
                 projectId: event.projectId,
                 sessionId: event.sessionId,
@@ -234,33 +228,6 @@ export async function createServer(
             } else if (update.newChunks.length === 0) {
               // No meaningful new data, skip broadcast
             } else {
-              // TEMPORARY DEBUG LOG — remove after diagnosing SSE rendering issue
-              console.log('[SSE-DEBUG] Broadcasting incremental update:', {
-                numChunks: update.newChunks.length,
-                chunks: update.newChunks.map((c, i) => ({
-                  index: i,
-                  type: c.type,
-                  hasSemanticSteps: 'semanticSteps' in c,
-                  numSteps: (c as any).semanticSteps?.length ?? 0,
-                  numMessages: c.type === 'ai' ? c.messages?.length : undefined,
-                })),
-              });
-              // Debug: log subagent data in incremental update
-              for (const chunk of update.newChunks) {
-                if (chunk.type === 'ai' && 'subagents' in chunk) {
-                  const enhanced = chunk as any;
-                  console.log('[SSE-DEBUG] Incremental chunk subagents:', {
-                    numSubagents: enhanced.subagents?.length ?? 0,
-                    subagents: enhanced.subagents?.map((s: any) => ({
-                      id: s.id,
-                      numMessages: s.messages?.length ?? 0,
-                      firstMsgContent: typeof s.messages?.[0]?.content === 'string'
-                        ? s.messages[0].content.substring(0, 50)
-                        : 'non-string',
-                    })),
-                  });
-                }
-              }
               broadcastEvent('session-update', {
                 projectId: event.projectId,
                 sessionId: event.sessionId,
