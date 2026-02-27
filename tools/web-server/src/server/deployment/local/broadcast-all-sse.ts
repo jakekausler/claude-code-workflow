@@ -9,6 +9,10 @@ import type { EventBroadcaster } from '../types.js';
 export class BroadcastAllSSE implements EventBroadcaster {
   private clients = new Set<FastifyReply>();
 
+  get clientCount(): number {
+    return this.clients.size;
+  }
+
   addClient(reply: FastifyReply, _scope?: { userId: string }): void {
     this.clients.add(reply);
     reply.raw.on('close', () => {

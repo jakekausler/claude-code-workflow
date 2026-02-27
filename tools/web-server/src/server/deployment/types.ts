@@ -47,6 +47,7 @@ export interface AuthProvider {
  * Hosted mode: broadcasts to user-scoped client sets.
  */
 export interface EventBroadcaster {
+  readonly clientCount: number;
   addClient(reply: FastifyReply, scope?: { userId: string }): void;
   removeClient(reply: FastifyReply): void;
   broadcast(event: string, data: unknown, scope?: { userId?: string }): void;

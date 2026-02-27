@@ -6,6 +6,7 @@ import { DataService } from './services/data-service.js';
 import { OrchestratorClient } from './services/orchestrator-client.js';
 import { SessionPipeline } from './services/session-pipeline.js';
 import { FileWatcher } from './services/file-watcher.js';
+import { LocalDeploymentContext } from './deployment/index.js';
 
 const port = parseInt(process.env.PORT || '3100', 10);
 const host = process.env.HOST || '0.0.0.0';
@@ -23,12 +24,18 @@ const claudeProjectsDir =
 const sessionPipeline = new SessionPipeline();
 const fileWatcher = new FileWatcher({ rootDir: claudeProjectsDir });
 
+// Create deployment context based on DEPLOYMENT_MODE env var
+const deploymentContext = process.env.DEPLOYMENT_MODE === 'hosted'
+  ? (() => { throw new Error('Hosted mode not yet implemented'); })()
+  : new LocalDeploymentContext();
+
 const app = await createServer({
   dataService,
   orchestratorClient,
   claudeProjectsDir,
   sessionPipeline,
   fileWatcher,
+  deploymentContext,
 });
 
 await app.listen({ port, host });

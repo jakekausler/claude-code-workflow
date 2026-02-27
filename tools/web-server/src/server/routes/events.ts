@@ -1,38 +1,46 @@
 import type { FastifyPluginCallback, FastifyReply } from 'fastify';
 import fp from 'fastify-plugin';
+import type { EventBroadcaster } from '../deployment/index.js';
 
 export interface SSEClient {
   reply: FastifyReply;
   timer: ReturnType<typeof setInterval>;
 }
 
-const clients = new Set<SSEClient>();
+/**
+ * Mutable broadcaster reference. Set via `setBroadcaster()` during server
+ * startup so that `broadcastEvent()` delegates to the deployment-context's
+ * EventBroadcaster instead of managing its own client Set.
+ *
+ * Falls back to a no-op when no broadcaster has been configured (e.g. in
+ * unit tests that call `broadcastEvent` before the server boots).
+ */
+let broadcaster: EventBroadcaster | null = null;
+
+/**
+ * Wire the module-level `broadcastEvent` to an EventBroadcaster.
+ * Called once from `createServer()` after the deployment context is created.
+ */
+export function setBroadcaster(b: EventBroadcaster): void {
+  broadcaster = b;
+}
 
 export function broadcastEvent(channel: string, data: unknown): void {
-  const safeChannel = channel.replace(/[\n\r]/g, '');
-  const payload = `event: ${safeChannel}\ndata: ${JSON.stringify(data)}\n\n`;
-  const dead: SSEClient[] = [];
-  for (const client of clients) {
-    try {
-      client.reply.raw.write(payload);
-    } catch {
-      dead.push(client);
-    }
-  }
-  for (const client of dead) {
-    clearInterval(client.timer);
-    clients.delete(client);
+  if (broadcaster) {
+    broadcaster.broadcast(channel, data);
   }
 }
 
 export function getClientCount(): number {
-  return clients.size;
+  return broadcaster?.clientCount ?? 0;
 }
 
 const KEEPALIVE_MS = 30_000;
 
 const eventsPlugin: FastifyPluginCallback = (app, _opts, done) => {
   app.get('/api/events', (request, reply) => {
+    const eventBroadcaster = app.deploymentContext?.getEventBroadcaster();
+
     reply.hijack();
     reply.raw.writeHead(200, {
       'Content-Type': 'text/event-stream',
@@ -50,16 +58,16 @@ const eventsPlugin: FastifyPluginCallback = (app, _opts, done) => {
         reply.raw.write(':ping\n\n');
       } catch {
         clearInterval(timer);
-        clients.delete(client);
+        eventBroadcaster?.removeClient(reply);
       }
     }, KEEPALIVE_MS);
 
-    const client: SSEClient = { reply, timer };
-    clients.add(client);
+    // Register with the EventBroadcaster for broadcast delivery
+    eventBroadcaster?.addClient(reply);
 
     request.raw.on('close', () => {
       clearInterval(timer);
-      clients.delete(client);
+      eventBroadcaster?.removeClient(reply);
     });
 
     // Keep the connection open — do not call reply.send()

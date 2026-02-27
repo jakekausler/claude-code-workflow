@@ -9,6 +9,8 @@ import type { DataService } from './services/data-service.js';
 import type { OrchestratorClient, SessionInfo } from './services/orchestrator-client.js';
 import type { SessionPipeline } from './services/session-pipeline.js';
 import { type FileWatcher, type FileChangeEvent } from './services/file-watcher.js';
+import type { DeploymentContext } from './deployment/index.js';
+import { LocalDeploymentContext } from './deployment/index.js';
 import { boardRoutes } from './routes/board.js';
 import { epicRoutes } from './routes/epics.js';
 import { ticketRoutes } from './routes/tickets.js';
@@ -16,7 +18,7 @@ import { stageRoutes } from './routes/stages.js';
 import { graphRoutes } from './routes/graph.js';
 import { sessionRoutes } from './routes/sessions.js';
 import { repoRoutes } from './routes/repos.js';
-import { eventRoutes, broadcastEvent } from './routes/events.js';
+import { eventRoutes, broadcastEvent, setBroadcaster } from './routes/events.js';
 import { interactionRoutes } from './routes/interaction.js';
 import { orchestratorRoutes, computeWaitingType } from './routes/orchestrator.js';
 
@@ -35,6 +37,7 @@ declare module 'fastify' {
     orchestratorClient: OrchestratorClient | null;
     sessionPipeline: SessionPipeline | null;
     fileWatcher: FileWatcher | null;
+    deploymentContext: DeploymentContext;
   }
 }
 
@@ -50,6 +53,7 @@ export interface ServerOptions {
   orchestratorClient?: OrchestratorClient;
   sessionPipeline?: SessionPipeline;
   fileWatcher?: FileWatcher;
+  deploymentContext?: DeploymentContext;
 }
 
 export async function createServer(
@@ -76,6 +80,16 @@ export async function createServer(
       cb(new Error('Not allowed by CORS'), false);
     },
   });
+
+  // Deployment context — provides auth, filesystem, and event broadcast abstractions
+  const deploymentContext = options.deploymentContext ?? new LocalDeploymentContext();
+  app.decorate('deploymentContext', deploymentContext);
+
+  // Wire the module-level broadcastEvent() to the deployment context's EventBroadcaster
+  setBroadcaster(deploymentContext.getEventBroadcaster());
+
+  // Register auth plugin (no-op for local mode)
+  await app.register(deploymentContext.getAuthProvider().requireAuth());
 
   // DataService decoration — available to all route plugins via app.dataService
   const dataService = options.dataService ?? null;
