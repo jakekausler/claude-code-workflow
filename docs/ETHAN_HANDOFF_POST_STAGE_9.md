@@ -99,7 +99,7 @@ This is NOT where stage sessions normally appear (they'll be embedded in drawers
 
 ### Gold Standard: claude-devtools
 
-**When things don't work in the session viewer, treat the [`claude-devtools`](https://github.com/anthropics/claude-devtools) repository as the source of truth.** Our session parsing pipeline (JSONL parsing, chunk building, tool rendering, subagent resolution, context tracking) was heavily based on their implementation. If something is broken:
+**When things don't work in the session viewer, treat the [`claude-devtools`](https://github.com/matt1398/claude-devtools) repository as the source of truth.** Our session parsing pipeline (JSONL parsing, chunk building, tool rendering, subagent resolution, context tracking) was heavily based on their implementation. If something is broken:
 
 1. Find the equivalent code in claude-devtools
 2. Compare their approach with ours
@@ -144,7 +144,7 @@ However, **unit tests and integration tests with mocked orchestrators can be run
 
 ### Gold Standard: vibe-kanban
 
-**When things aren't working with Claude session interaction (10b/10c), treat the [`vibe-kanban`](https://github.com/vibe-kanban/vibe-kanban) repository as the source of truth** for how to interact with Claude sessions. Their implementation is the reference for:
+**When things aren't working with Claude session interaction (10b/10c), treat the [`vibe-kanban`](https://github.com/BloopAI/vibe-kanban) repository as the source of truth** for how to interact with Claude sessions. Their implementation is the reference for:
 - WebSocket relay to Claude's stdin/stdout
 - Stream-JSON protocol handling
 - Session state management
