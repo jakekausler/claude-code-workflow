@@ -114,8 +114,15 @@ export class FileWatcher extends EventEmitter {
       clearTimeout(existing);
     }
 
-    const timer = setTimeout(() => {
+    const timer = setTimeout(async () => {
       this.debounceTimers.delete(filePath);
+      // Stat the file to get its current size and update offset
+      try {
+        const fileStat = await stat(filePath);
+        this.setOffset(filePath, fileStat.size);
+      } catch {
+        // File may have been deleted; offset will remain unchanged
+      }
       this.emit('file-change', {
         projectId: parsed.projectId,
         sessionId: parsed.sessionId,
@@ -253,6 +260,8 @@ export class FileWatcher extends EventEmitter {
           filePath: fullPath,
           isSubagent: parsed.isSubagent,
         } satisfies FileChangeEvent);
+        // Update offset after emitting so the file isn't re-emitted on next scan
+        this.setOffset(fullPath, fileSize);
       }
     }
   }

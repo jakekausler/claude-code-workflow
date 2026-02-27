@@ -97,18 +97,30 @@ export async function createServer(
     app.addHook('onReady', async () => fw.start());
     app.addHook('onClose', async () => fw.stop());
 
+    // Per-session SSE broadcast debouncing (300ms window)
+    const sseDebounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
     // Invalidate cache on file changes
     fw.on('file-change', (event: FileChangeEvent) => {
       sessionPipeline?.invalidateSession(
         join(claudeProjectsDir, event.projectId),
         event.sessionId,
       );
-      // Push SSE event to connected browsers
-      broadcastEvent('session-update', {
-        projectId: event.projectId,
-        sessionId: event.sessionId,
-        isSubagent: event.isSubagent,
-      });
+      // Debounce SSE broadcast per session to coalesce rapid changes
+      const key = `${event.projectId}/${event.sessionId}`;
+      const existing = sseDebounceTimers.get(key);
+      if (existing) {
+        clearTimeout(existing);
+      }
+      const timer = setTimeout(() => {
+        sseDebounceTimers.delete(key);
+        broadcastEvent('session-update', {
+          projectId: event.projectId,
+          sessionId: event.sessionId,
+          isSubagent: event.isSubagent,
+        });
+      }, 300);
+      sseDebounceTimers.set(key, timer);
     });
   }
 
