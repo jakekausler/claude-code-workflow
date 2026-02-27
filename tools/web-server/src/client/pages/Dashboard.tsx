@@ -9,6 +9,8 @@ import { useBoardStore } from '../store/board-store.js';
 import { ActiveSessionsList } from '../components/dashboard/ActiveSessionsList.js';
 import { formatSessionEvent, type ActivityFeedItem } from '../utils/activity-formatters.js';
 
+const MAX_FEED_ITEMS = 50;
+
 export function Dashboard() {
   const { data: stats, isLoading: statsLoading, error: statsError } = useStats();
   const { data: board, error: boardError } = useBoard({ column: 'backlog' });
@@ -18,7 +20,6 @@ export function Dashboard() {
   const queryClient = useQueryClient();
 
   // Activity feed: session lifecycle events from SSE
-  const MAX_FEED_ITEMS = 50;
   const [sessionEvents, setSessionEvents] = useState<ActivityFeedItem[]>([]);
 
   const handleSSE = useCallback(
@@ -30,7 +31,10 @@ export function Dashboard() {
       // Capture session lifecycle events for the activity feed
       const feedItem = formatSessionEvent(channel, data);
       if (feedItem) {
-        setSessionEvents((prev) => [feedItem, ...prev].slice(0, MAX_FEED_ITEMS));
+        setSessionEvents((prev) => {
+          const deduped = prev.filter((e) => e.id !== feedItem.id);
+          return [feedItem, ...deduped].slice(0, MAX_FEED_ITEMS);
+        });
       }
     },
     [queryClient],
