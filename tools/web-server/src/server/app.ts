@@ -102,6 +102,11 @@ export async function createServer(
     const sseDebounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
     const sseDebounceOffsets = new Map<string, number>();
 
+    // Track last-parsed file size per subagent file to avoid re-parsing unchanged files.
+    // Without this, rapid file-change events (even when the file hasn't grown) cause
+    // repeated full JSONL parsing, which can exhaust the heap under heavy subagent activity.
+    const subagentLastParsedSize = new Map<string, number>();
+
     // Invalidate cache + incremental parse on file changes
     fw.on('file-change', (event: FileChangeEvent) => {
       // Debounce SSE broadcast per session to coalesce rapid changes
@@ -138,6 +143,16 @@ export async function createServer(
             // parse the subagent file, and broadcast its Process data so
             // connected clients can merge it without a full refetch.
             if (event.isSubagent) {
+              // Skip re-parsing if the file hasn't grown since the last successful parse.
+              // This prevents redundant full-file parses when multiple events fire for the
+              // same unchanged file (e.g. during debounce coalescing or catch-up scans),
+              // which was the primary cause of OOM under heavy subagent activity.
+              const fileSize = event.currentSize;
+              const lastParsedSize = subagentLastParsedSize.get(event.filePath);
+              if (lastParsedSize !== undefined && fileSize <= lastParsedSize) {
+                return;
+              }
+
               sessionPipeline.invalidateSession(fullProjectDir, event.sessionId);
 
               // Extract the agent ID from the file path.
@@ -149,8 +164,12 @@ export async function createServer(
               let subagentProcess = null;
               try {
                 subagentProcess = await buildProcessFromFile(event.filePath, agentId);
+                // Record the size we successfully parsed so subsequent events for the
+                // same (or smaller) size are skipped.
+                subagentLastParsedSize.set(event.filePath, fileSize);
               } catch {
-                // Parse failed — broadcast without data (fallback)
+                // Parse failed — broadcast without data (fallback).
+                // Do NOT update subagentLastParsedSize so the next event retries.
               }
 
               console.log('[SSE-DEBUG] Subagent-update broadcast:', {
