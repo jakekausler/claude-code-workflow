@@ -1,3 +1,4 @@
+// Note: Uses light theme classes to match Dashboard.tsx (not dark theme like stage detail components)
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Monitor } from 'lucide-react';
@@ -38,6 +39,7 @@ function ActiveSessionsListContent({ sessions }: ActiveSessionsListProps) {
   const [now, setNow] = useState(Date.now());
 
   useEffect(() => {
+    // 10s interval: dashboard overview doesn't need per-second precision (cf. LiveSessionSection's 1s)
     const interval = setInterval(() => {
       setNow(Date.now());
     }, 10_000);
@@ -56,7 +58,7 @@ function ActiveSessionsListContent({ sessions }: ActiveSessionsListProps) {
           {sessions.size}
         </span>
       </div>
-      <div className="space-y-2">
+      <div className="max-h-40 space-y-2 overflow-y-auto">
         {entries.map(([stageId, entry]) => {
           const elapsed = now - entry.spawnedAt;
           return (

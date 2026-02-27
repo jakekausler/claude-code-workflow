@@ -12,26 +12,57 @@ function makeEntry(overrides: Partial<SessionMapEntry> = {}): SessionMapEntry {
   };
 }
 
+/**
+ * Recursively collects all string text from a React element tree.
+ * Handles strings, numbers, arrays, and nested elements.
+ */
+function collectText(node: unknown): string {
+  if (node == null || typeof node === 'boolean') return '';
+  if (typeof node === 'string') return node;
+  if (typeof node === 'number') return String(node);
+  if (Array.isArray(node)) return node.map(collectText).join('');
+  if (typeof node === 'object' && 'props' in (node as Record<string, unknown>)) {
+    const el = node as { props?: { children?: unknown } };
+    return collectText(el.props?.children);
+  }
+  return '';
+}
+
 describe('ActiveSessionsList', () => {
   it('exports ActiveSessionsList as a function', () => {
     expect(ActiveSessionsList).toBeDefined();
     expect(typeof ActiveSessionsList).toBe('function');
   });
 
-  it('returns non-null with empty map (shows "no active sessions")', () => {
+  it('renders "No active sessions" text for empty map', () => {
     const result = ActiveSessionsList({ sessions: new Map() });
-    // Should still render a container (with the "no active sessions" message)
     expect(result).not.toBeNull();
+
+    // The empty state renders a <p> with "No active sessions"
+    const text = collectText(result);
+    expect(text).toContain('No active sessions');
   });
 
-  it('returns non-null when sessions exist', () => {
+  it('renders count badge showing 0 for empty map', () => {
+    const result = ActiveSessionsList({ sessions: new Map() });
+    expect(result).not.toBeNull();
+
+    const text = collectText(result);
+    // Badge text is "0" in the empty case
+    expect(text).toContain('0');
+  });
+
+  it('delegates to ActiveSessionsListContent when sessions exist', () => {
     const sessions = new Map<string, SessionMapEntry>();
     sessions.set('stage-1', makeEntry());
     const result = ActiveSessionsList({ sessions });
     expect(result).not.toBeNull();
+
+    // Non-empty case delegates to the inner component
+    expect((result as { type?: { name?: string } })?.type?.name).toBe('ActiveSessionsListContent');
   });
 
-  it('receives sessions prop with correct stage IDs', () => {
+  it('passes sessions map to ActiveSessionsListContent with correct stage IDs', () => {
     const sessions = new Map<string, SessionMapEntry>();
     sessions.set('stage-alpha', makeEntry({ sessionId: 'sess-aaa' }));
     sessions.set('stage-beta', makeEntry({ sessionId: 'sess-bbb' }));
@@ -39,19 +70,26 @@ describe('ActiveSessionsList', () => {
     const result = ActiveSessionsList({ sessions });
     expect(result).not.toBeNull();
 
-    // The component should render something for each session
-    // We verify by checking the props contain the sessions map with correct keys
-    expect(sessions.has('stage-alpha')).toBe(true);
-    expect(sessions.has('stage-beta')).toBe(true);
-    expect(sessions.size).toBe(2);
+    // Verify the delegated component receives the sessions prop
+    const props = (result as { props?: { sessions?: Map<string, SessionMapEntry> } })?.props;
+    expect(props?.sessions).toBe(sessions);
+    expect(props?.sessions?.has('stage-alpha')).toBe(true);
+    expect(props?.sessions?.has('stage-beta')).toBe(true);
+    expect(props?.sessions?.size).toBe(2);
   });
 
-  it('handles a single session', () => {
+  it('passes correct count via sessions.size for badge rendering', () => {
     const sessions = new Map<string, SessionMapEntry>();
-    sessions.set('stage-only', makeEntry({ status: 'starting', sessionId: 'sess-one' }));
+    sessions.set('stage-a', makeEntry());
+    sessions.set('stage-b', makeEntry());
+    sessions.set('stage-c', makeEntry());
 
     const result = ActiveSessionsList({ sessions });
     expect(result).not.toBeNull();
+
+    // ActiveSessionsListContent receives 3 sessions for badge rendering
+    const props = (result as { props?: { sessions?: Map<string, SessionMapEntry> } })?.props;
+    expect(props?.sessions?.size).toBe(3);
   });
 
   it('handles sessions with various waiting types', () => {
@@ -62,5 +100,17 @@ describe('ActiveSessionsList', () => {
 
     const result = ActiveSessionsList({ sessions });
     expect(result).not.toBeNull();
+
+    // All three entries are passed through to the content component
+    const props = (result as { props?: { sessions?: Map<string, SessionMapEntry> } })?.props;
+    expect(props?.sessions?.get('stage-input')?.waitingType).toBe('user_input');
+    expect(props?.sessions?.get('stage-perm')?.waitingType).toBe('permission');
+    expect(props?.sessions?.get('stage-idle')?.waitingType).toBe('idle');
+  });
+
+  it('renders "Active Sessions" heading in empty state', () => {
+    const result = ActiveSessionsList({ sessions: new Map() });
+    const text = collectText(result);
+    expect(text).toContain('Active Sessions');
   });
 });
