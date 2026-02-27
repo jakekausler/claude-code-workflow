@@ -170,6 +170,12 @@ export class SessionPipeline {
     // Enhance AI chunks with semantic steps
     enhanceAIChunks(newChunks, toolExecutions);
 
+    // Resolve subagents for new messages and link to chunks
+    const subagents = await resolveSubagents(newMessages, { projectDir, sessionId });
+    if (subagents.length > 0) {
+      linkSubagentsToChunks(newChunks, subagents);
+    }
+
     const { totalCost } = calculateSessionCost(newMessages);
     const metrics = computeMetrics(newMessages, toolExecutions, totalCost);
     const isOngoing = detectOngoing(newMessages);

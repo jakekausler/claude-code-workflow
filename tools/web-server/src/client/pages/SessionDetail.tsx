@@ -11,7 +11,7 @@ import { formatDuration, formatCost, formatTokenCount } from '../utils/session-f
 import { useSessionViewStore } from '../store/session-store.js';
 import { transformChunksToConversation } from '../utils/group-transformer.js';
 import { processSessionContextWithPhases } from '../utils/context-tracker.js';
-import { mergeIncrementalUpdate, type SSESessionUpdate } from '../utils/session-merger.js';
+import { mergeIncrementalUpdate, mergeSubagentUpdate, type SSESessionUpdate } from '../utils/session-merger.js';
 import type { ParsedSession } from '../types/session.js';
 
 export function SessionDetail() {
@@ -32,12 +32,35 @@ export function SessionDetail() {
       if (event.sessionId !== sessionId || event.projectId !== projectId) return;
 
       if (event.type === 'incremental') {
+        // TEMPORARY DEBUG LOG — remove after diagnosing SSE rendering issue
+        console.log('[SSE-DEBUG] Client received incremental event:', {
+          numNewChunks: event.newChunks?.length,
+          chunks: event.newChunks?.map((c: any, i: number) => ({
+            index: i,
+            type: c.type,
+            hasSemanticSteps: 'semanticSteps' in c,
+            numSteps: c.semanticSteps?.length ?? 0,
+          })),
+        });
         // Merge new chunks directly into React Query cache — no refetch needed
         queryClient.setQueryData<ParsedSession>(
           ['session', projectId, sessionId],
           (old) => {
             if (!old) return old;
-            return mergeIncrementalUpdate(old, event);
+            const merged = mergeIncrementalUpdate(old, event);
+            // TEMPORARY DEBUG LOG — remove after diagnosing SSE rendering issue
+            console.log('[SSE-DEBUG] After merge:', {
+              totalChunks: merged.chunks.length,
+              lastChunk: (() => {
+                const last = merged.chunks[merged.chunks.length - 1];
+                return {
+                  type: last?.type,
+                  hasSemanticSteps: last ? 'semanticSteps' in last : false,
+                  numSteps: (last as any)?.semanticSteps?.length ?? 0,
+                };
+              })(),
+            });
+            return merged;
           },
         );
       } else if (event.type === 'full-refresh') {
@@ -45,10 +68,16 @@ export function SessionDetail() {
         void queryClient.invalidateQueries({
           queryKey: ['session', projectId, sessionId],
         });
+      } else if (event.type === 'subagent-update') {
+        // Merge updated subagent Process into React Query cache
+        queryClient.setQueryData<ParsedSession>(
+          ['session', projectId, sessionId],
+          (old) => {
+            if (!old) return old;
+            return mergeSubagentUpdate(old, event);
+          },
+        );
       }
-      // 'subagent-update' events are intentionally ignored — subagent file
-      // changes only affect subagent display data, and the server-side cache
-      // is already invalidated for the next full page load.
       // Other unknown event types are silently ignored (safe no-op)
     },
     [queryClient, projectId, sessionId],

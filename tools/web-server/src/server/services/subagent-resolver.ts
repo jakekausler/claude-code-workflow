@@ -299,3 +299,28 @@ function detectOngoing(messages: ParsedMessage[]): boolean {
   }
   return false;
 }
+
+/**
+ * Parse a single subagent JSONL file and build a Process object.
+ *
+ * Returns null if the file cannot be parsed, is empty, or is a
+ * filtered agent (warmup, compact).  This is a lightweight alternative
+ * to the full `resolveSubagents` pipeline — it skips parent-linking
+ * and parallel detection since we only need the Process data for
+ * incremental SSE broadcasts.
+ */
+export async function buildProcessFromFile(
+  filePath: string,
+  agentId: string,
+): Promise<Process | null> {
+  try {
+    const { messages } = await parseSessionFile(filePath);
+    if (isFilteredAgent(messages, agentId)) return null;
+    return buildProcess(
+      { agentId, filePath, messages },
+      {}, // No parent linking info available in this context
+    );
+  } catch {
+    return null;
+  }
+}

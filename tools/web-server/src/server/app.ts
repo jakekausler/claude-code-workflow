@@ -1,7 +1,7 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
 import fastifyStatic from '@fastify/static';
-import { existsSync, readFileSync } from 'fs';
+import { appendFileSync, existsSync, readFileSync, writeFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import os from 'os';
@@ -17,6 +17,7 @@ import { graphRoutes } from './routes/graph.js';
 import { sessionRoutes } from './routes/sessions.js';
 import { repoRoutes } from './routes/repos.js';
 import { eventRoutes, broadcastEvent } from './routes/events.js';
+import { buildProcessFromFile } from './services/subagent-resolver.js';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -133,14 +134,30 @@ export async function createServer(
               return;
             }
 
-            // Subagent file changes: invalidate cache for next page load
-            // but do NOT broadcast full-refresh (which triggers a GET from every client)
+            // Subagent file changes: invalidate cache for next page load,
+            // parse the subagent file, and broadcast its Process data so
+            // connected clients can merge it without a full refetch.
             if (event.isSubagent) {
               sessionPipeline.invalidateSession(fullProjectDir, event.sessionId);
+
+              // Extract the agent ID from the file path.
+              // event.filePath is the full absolute path to the .jsonl file.
+              const agentFilename = event.filePath.split('/').pop() ?? '';
+              const agentIdMatch = agentFilename.match(/^agent-(.+)\.jsonl$/);
+              const agentId = agentIdMatch ? agentIdMatch[1] : event.sessionId;
+
+              let subagentProcess = null;
+              try {
+                subagentProcess = await buildProcessFromFile(event.filePath, agentId);
+              } catch {
+                // Parse failed — broadcast without data (fallback)
+              }
+
               broadcastEvent('session-update', {
                 projectId: event.projectId,
                 sessionId: event.sessionId,
                 type: 'subagent-update',
+                ...(subagentProcess && { subagentProcess }),
               });
               return;
             }
@@ -160,6 +177,17 @@ export async function createServer(
             } else if (update.newChunks.length === 0) {
               // No meaningful new data, skip broadcast
             } else {
+              // TEMPORARY DEBUG LOG — remove after diagnosing SSE rendering issue
+              console.log('[SSE-DEBUG] Broadcasting incremental update:', {
+                numChunks: update.newChunks.length,
+                chunks: update.newChunks.map((c, i) => ({
+                  index: i,
+                  type: c.type,
+                  hasSemanticSteps: 'semanticSteps' in c,
+                  numSteps: (c as any).semanticSteps?.length ?? 0,
+                  numMessages: c.type === 'ai' ? c.messages?.length : undefined,
+                })),
+              });
               broadcastEvent('session-update', {
                 projectId: event.projectId,
                 sessionId: event.sessionId,
@@ -229,6 +257,42 @@ export async function createServer(
       });
     });
   }
+
+  // --- Frontend remote logging ---
+  const FRONTEND_LOG_PATH = '/tmp/claude-code-workflow.frontend.log';
+
+  app.post<{ Body: { level: string; args: unknown[]; timestamp: string } }>(
+    '/api/log',
+    async (request, reply) => {
+      const { level, args, timestamp } = request.body ?? {};
+      const formattedArgs = (args ?? [])
+        .map((a: unknown) => {
+          if (typeof a === 'string') return a;
+          try {
+            return JSON.stringify(a);
+          } catch {
+            return String(a);
+          }
+        })
+        .join(' ');
+      const line = `[${timestamp}] [${String(level).toUpperCase()}] ${formattedArgs}\n`;
+      try {
+        appendFileSync(FRONTEND_LOG_PATH, line);
+      } catch {
+        // Ignore write errors (e.g. permission issues)
+      }
+      return reply.status(200).send({ ok: true });
+    },
+  );
+
+  app.post('/api/log/clear', async (_request, reply) => {
+    try {
+      writeFileSync(FRONTEND_LOG_PATH, '');
+    } catch {
+      // Ignore write errors
+    }
+    return reply.status(200).send({ ok: true });
+  });
 
   // --- API routes ---
   app.get('/api/health', async () => ({

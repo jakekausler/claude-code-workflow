@@ -11,6 +11,8 @@ export interface SSESessionUpdate {
   metrics?: SessionMetrics;
   isOngoing?: boolean;
   newOffset?: number;
+  /** Only present when type === 'subagent-update' — the parsed Process for the changed subagent file */
+  subagentProcess?: Process;
 }
 
 // ─── Generic constraint for mergeable session data ────────────────────────────
@@ -78,6 +80,31 @@ function rehydrateChunkDates(chunks: Chunk[]): Chunk[] {
     // compact chunks — only top-level timestamp
     return { ...chunk, timestamp };
   });
+}
+
+// ─── Process date rehydration ────────────────────────────────────────────────
+
+/**
+ * Rehydrate Date fields on a Process object after JSON round-trip.
+ * Converts ISO-8601 strings back to Date instances for startTime, endTime,
+ * and each message's timestamp.
+ */
+function rehydrateProcessDates(process: Process): Process {
+  const startTime =
+    typeof process.startTime === 'string'
+      ? new Date(process.startTime)
+      : process.startTime;
+  const endTime =
+    typeof process.endTime === 'string'
+      ? new Date(process.endTime)
+      : process.endTime;
+  const messages = process.messages.map((msg) => {
+    if (typeof msg.timestamp === 'string') {
+      return { ...msg, timestamp: new Date(msg.timestamp) };
+    }
+    return msg;
+  });
+  return { ...process, startTime, endTime, messages };
 }
 
 // ─── Boundary chunk merging ───────────────────────────────────────────────────
@@ -157,5 +184,61 @@ export function mergeIncrementalUpdate<T extends MergeableSession>(
     chunks: mergedChunks,
     metrics: mergeMetrics(existing.metrics, update.metrics),
     isOngoing: update.isOngoing ?? existing.isOngoing,
+  };
+}
+
+// ─── Subagent update merge ──────────────────────────────────────────────────
+
+/**
+ * Merge a subagent-update SSE event into an existing parsed session.
+ *
+ * Updates the Process in:
+ *   1. The chunk-level `subagents` array (on the AI chunk that spawned the subagent)
+ *   2. The session-level `subagents` array
+ *
+ * Returns the same reference if no subagentProcess is present.
+ * Uses immutable update pattern — never mutates the input.
+ */
+export function mergeSubagentUpdate<T extends MergeableSession>(
+  existing: T,
+  update: SSESessionUpdate,
+): T {
+  const process = update.subagentProcess;
+  if (!process) return existing;
+
+  const rehydrated = rehydrateProcessDates(process);
+
+  // 1. Update chunk-level subagents — find the AI chunk containing this subagent
+  let chunksChanged = false;
+  const updatedChunks = existing.chunks.map((chunk) => {
+    if (chunk.type !== 'ai') return chunk;
+
+    const enhanced = chunk as Partial<EnhancedAIChunk>;
+    if (!enhanced.subagents?.length) return chunk;
+
+    const idx = enhanced.subagents.findIndex((s) => s.id === rehydrated.id);
+    if (idx < 0) return chunk;
+
+    // Found the chunk — replace the subagent at this index
+    chunksChanged = true;
+    const newSubagents = [...enhanced.subagents];
+    newSubagents[idx] = rehydrated;
+    return { ...chunk, subagents: newSubagents };
+  });
+
+  // 2. Update session-level subagents array (update existing or append)
+  const existingIdx = existing.subagents.findIndex((s) => s.id === rehydrated.id);
+  let updatedSubagents: Process[];
+  if (existingIdx >= 0) {
+    updatedSubagents = [...existing.subagents];
+    updatedSubagents[existingIdx] = rehydrated;
+  } else {
+    updatedSubagents = [...existing.subagents, rehydrated];
+  }
+
+  return {
+    ...existing,
+    chunks: chunksChanged ? updatedChunks : existing.chunks,
+    subagents: updatedSubagents,
   };
 }
