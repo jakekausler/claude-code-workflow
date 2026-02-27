@@ -1,6 +1,5 @@
 import type { FastifyPluginCallback } from 'fastify';
 import fp from 'fastify-plugin';
-import { readdir, stat } from 'fs/promises';
 import { join, resolve } from 'path';
 import type { StageSessionRow, TicketSessionRow } from '../../../../kanban-cli/dist/db/repositories/index.js';
 
@@ -29,9 +28,11 @@ const sessionsPlugin: FastifyPluginCallback = (app, _opts, done) => {
       return reply.status(400).send({ error: 'Invalid project ID' });
     }
 
+    const fs = app.deploymentContext.getFileAccess();
+
     let files: string[];
     try {
-      files = await readdir(projectDir);
+      files = await fs.readdir(projectDir);
     } catch {
       // Directory does not exist — return empty list, not 404
       return reply.send([]);
@@ -42,11 +43,11 @@ const sessionsPlugin: FastifyPluginCallback = (app, _opts, done) => {
     const sessions = await Promise.all(
       jsonlFiles.map(async (f) => {
         const filePath = join(projectDir, f);
-        const st = await stat(filePath);
+        const st = await fs.stat(filePath);
         return {
           sessionId: f.replace(/\.jsonl$/, ''),
           filePath,
-          lastModified: st.mtime.toISOString(),
+          lastModified: new Date(st.mtimeMs).toISOString(),
           fileSize: st.size,
         };
       }),
