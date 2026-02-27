@@ -206,24 +206,28 @@ export type MessageCategory = 'user' | 'system' | 'hardNoise' | 'ai';
 
 export interface UserChunk {
   type: 'user';
+  id: string;
   message: ParsedMessage;
   timestamp: Date;
 }
 
 export interface AIChunk {
   type: 'ai';
+  id: string;
   messages: ParsedMessage[];
   timestamp: Date;
 }
 
 export interface SystemChunk {
   type: 'system';
+  id: string;
   messages: ParsedMessage[];
   timestamp: Date;
 }
 
 export interface CompactChunk {
   type: 'compact';
+  id: string;
   summary: string;
   timestamp: Date;
 }

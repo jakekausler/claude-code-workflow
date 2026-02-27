@@ -434,12 +434,64 @@ describe('ChunkBuilder', () => {
       // Should still produce chunks from the valid entries
       expect(chunks.length).toBeGreaterThan(0);
     });
+
+    it('assigns stable id fields based on first message uuid', () => {
+      const now = new Date();
+      const messages: ParsedMessage[] = [
+        {
+          uuid: 'user-uuid-1',
+          type: 'user',
+          isMeta: false,
+          content: 'Hello',
+          timestamp: now,
+          isSidechain: false,
+          toolCalls: [],
+          toolResults: [],
+        },
+        {
+          uuid: 'assistant-uuid-1',
+          type: 'assistant',
+          isMeta: false,
+          content: [{ type: 'text', text: 'Hi' }],
+          timestamp: now,
+          isSidechain: false,
+          toolCalls: [],
+          toolResults: [],
+        },
+        {
+          uuid: 'cmd-uuid-1',
+          type: 'user',
+          isMeta: false,
+          content: '<local-command-stdout>output</local-command-stdout>',
+          timestamp: now,
+          isSidechain: false,
+          toolCalls: [],
+          toolResults: [],
+        },
+      ] as ParsedMessage[];
+      const chunks = buildChunks(messages);
+      expect(chunks).toHaveLength(3);
+      expect(chunks[0].id).toBe('user-user-uuid-1');
+      expect(chunks[1].id).toBe('ai-assistant-uuid-1');
+      expect(chunks[2].id).toBe('system-cmd-uuid-1');
+    });
+
+    it('produces stable ids across repeated builds of same messages', async () => {
+      const { messages } = await parseSessionFile(join(fixturesDir, 'simple-conversation.jsonl'));
+      const chunks1 = buildChunks(messages);
+      const chunks2 = buildChunks(messages);
+      expect(chunks1.length).toBe(chunks2.length);
+      for (let i = 0; i < chunks1.length; i++) {
+        expect(chunks1[i].id).toBe(chunks2[i].id);
+      }
+    });
   });
 
   describe('extractSemanticSteps', () => {
     it('extracts text output steps', () => {
       const chunk: AIChunk = {
         type: 'ai',
+        id: 'ai-a1',
         messages: [
           {
             uuid: 'a1',
@@ -463,6 +515,7 @@ describe('ChunkBuilder', () => {
     it('extracts thinking steps', () => {
       const chunk: AIChunk = {
         type: 'ai',
+        id: 'ai-a1',
         messages: [
           {
             uuid: 'a1',
@@ -486,6 +539,7 @@ describe('ChunkBuilder', () => {
     it('extracts tool_call steps with duration from executions', () => {
       const chunk: AIChunk = {
         type: 'ai',
+        id: 'ai-a1',
         messages: [
           {
             uuid: 'a1',
@@ -521,6 +575,7 @@ describe('ChunkBuilder', () => {
     it('extracts subagent steps for Task tool calls', () => {
       const chunk: AIChunk = {
         type: 'ai',
+        id: 'ai-a1',
         messages: [
           {
             uuid: 'a1',
@@ -561,6 +616,7 @@ describe('ChunkBuilder', () => {
     it('extracts tool_result steps', () => {
       const chunk: AIChunk = {
         type: 'ai',
+        id: 'ai-tr1',
         messages: [
           {
             uuid: 'tr1',
@@ -593,6 +649,7 @@ describe('ChunkBuilder', () => {
       // If an interruption message somehow reached the AI chunk, it would be treated as output
       const chunk: AIChunk = {
         type: 'ai',
+        id: 'ai-a1',
         messages: [
           {
             uuid: 'a1',
@@ -616,7 +673,7 @@ describe('ChunkBuilder', () => {
     });
 
     it('returns empty array for chunk with no content', () => {
-      const chunk: AIChunk = { type: 'ai', messages: [], timestamp: new Date() };
+      const chunk: AIChunk = { type: 'ai', id: 'ai-empty', messages: [], timestamp: new Date() };
       expect(extractSemanticSteps(chunk, [])).toEqual([]);
     });
 

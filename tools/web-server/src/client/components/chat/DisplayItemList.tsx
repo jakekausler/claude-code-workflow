@@ -8,19 +8,24 @@ interface Props {
   items: AIGroupDisplayItem[];
 }
 
-function displayItemKey(item: AIGroupDisplayItem, index: number): string {
+function displayItemKey(item: AIGroupDisplayItem): string {
   switch (item.type) {
     case 'tool': return `tool-${item.tool.id}`;
     case 'subagent': return `sub-${item.subagent.id}`;
-    default: return `${item.type}-${index}`;
+    case 'thinking': return `thinking-${item.timestamp instanceof Date ? item.timestamp.getTime() : item.timestamp}`;
+    case 'output': return `output-${item.timestamp instanceof Date ? item.timestamp.getTime() : item.timestamp}`;
+    case 'subagent_input': return `input-${item.timestamp instanceof Date ? item.timestamp.getTime() : item.timestamp}`;
+    case 'compact_boundary': return `compact-${item.phaseNumber}`;
+    case 'slash': return `slash-${item.slash.id}`;
+    case 'teammate_message': return `tm-${item.teammateMessage.teammateId}-${item.teammateMessage.timestamp instanceof Date ? item.teammateMessage.timestamp.getTime() : item.teammateMessage.timestamp}`;
   }
 }
 
 export function DisplayItemList({ items }: Props) {
   return (
     <div className="space-y-1">
-      {items.map((item, i) => (
-        <DisplayItemRenderer key={displayItemKey(item, i)} item={item} />
+      {items.map((item) => (
+        <DisplayItemRenderer key={displayItemKey(item)} item={item} />
       ))}
     </div>
   );

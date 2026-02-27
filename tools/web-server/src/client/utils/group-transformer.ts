@@ -77,7 +77,7 @@ function createUserGroup(chunk: UserChunk, index: number): UserGroup {
   }
 
   return {
-    id: `user-${msg.uuid}`,
+    id: chunk.id,
     message: msg,
     timestamp: msg.timestamp,
     content: {
@@ -105,7 +105,7 @@ function createSystemGroup(chunk: SystemChunk): SystemGroup {
   commandOutput = commandOutput.trim();
 
   return {
-    id: `system-${firstMsg.uuid}`,
+    id: chunk.id,
     message: firstMsg,
     timestamp: firstMsg.timestamp,
     commandOutput,
@@ -142,7 +142,7 @@ function createAIGroup(chunk: AIChunk, turnIndex: number): AIGroup {
   const subagentCount = subagents.length;
 
   return {
-    id: `ai-${turnIndex}-${toDate(startTime).getTime()}`,
+    id: chunk.id,
     turnIndex,
     startTime,
     endTime,
@@ -186,7 +186,7 @@ function createCompactGroup(chunk: CompactChunk): CompactGroup {
   };
 
   return {
-    id: `compact-${toDate(chunk.timestamp).getTime()}`,
+    id: chunk.id,
     timestamp: chunk.timestamp,
     summary: chunk.summary,
     message: syntheticMessage,

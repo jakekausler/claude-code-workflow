@@ -64,8 +64,8 @@ export function ChatHistory({ items, contextStats, totalPhases }: Props) {
       className="flex-1 overflow-y-auto px-4 py-6"
       onScroll={handleScroll}
     >
-      {items.map((item, i) => (
-        <ItemRenderer key={itemKey(item, i)} item={item} contextStats={contextStats} totalPhases={totalPhases} />
+      {items.map((item) => (
+        <ItemRenderer key={itemKey(item)} item={item} contextStats={contextStats} totalPhases={totalPhases} />
       ))}
     </div>
   );
@@ -75,8 +75,8 @@ export function ChatHistory({ items, contextStats, totalPhases }: Props) {
 // Item-based rendering
 // ---------------------------------------------------------------------------
 
-function itemKey(item: ChatItem, index: number): string {
-  return `${item.type}-${item.group.id}-${index}`;
+function itemKey(item: ChatItem): string {
+  return item.group.id;
 }
 
 function ItemRenderer({ item, contextStats, totalPhases }: {

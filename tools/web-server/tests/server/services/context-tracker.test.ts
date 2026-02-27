@@ -209,6 +209,7 @@ describe('ContextTracker', () => {
         createAIChunk([createAssistantMsg('First response', 100, 50)]),
         {
           type: 'compact',
+          id: `compact-${Math.random()}`,
           summary: 'Previous conversation was about...',
           timestamp: new Date(),
         } as CompactChunk,
@@ -263,6 +264,7 @@ describe('ContextTracker', () => {
     it('system chunks produce zero perTurn entries and do not affect phases', () => {
       const systemChunk: SystemChunk = {
         type: 'system',
+        id: 'system-s1',
         messages: [
           {
             uuid: 's1',
@@ -541,12 +543,14 @@ describe('ContextTracker', () => {
         createAIChunk([createAssistantMsg('First response', 100, 50)]),
         {
           type: 'compact',
+          id: `compact-${Math.random()}`,
           summary: 'Compaction 1',
           timestamp: new Date(),
         } as CompactChunk,
         // Second compaction immediately — no turns between compactions
         {
           type: 'compact',
+          id: `compact-${Math.random()}`,
           summary: 'Compaction 2',
           timestamp: new Date(),
         } as CompactChunk,
@@ -571,10 +575,12 @@ describe('ContextTracker', () => {
 
 // Helper factories
 function createUserChunk(content: string): UserChunk {
+  const uuid = `u${Math.random()}`;
   return {
     type: 'user',
+    id: `user-${uuid}`,
     message: {
-      uuid: `u${Math.random()}`,
+      uuid,
       parentUuid: null,
       type: 'user',
       timestamp: new Date(),
@@ -589,7 +595,7 @@ function createUserChunk(content: string): UserChunk {
 }
 
 function createAIChunk(messages: ParsedMessage[]): AIChunk {
-  return { type: 'ai', messages, timestamp: new Date() };
+  return { type: 'ai', id: `ai-${messages[0]?.uuid ?? Math.random()}`, messages, timestamp: new Date() };
 }
 
 function createAssistantMsg(

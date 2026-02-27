@@ -53,18 +53,22 @@ function makeMsg(overrides: Partial<ParsedMessage> = {}): ParsedMessage {
 }
 
 function makeUserChunk(overrides: Partial<{ timestamp: Date }> = {}): Chunk {
+  const msg = makeMsg({ type: 'user', role: 'user', content: 'user message' });
   const chunk: Chunk = {
     type: 'user',
-    message: makeMsg({ type: 'user', role: 'user', content: 'user message' }),
+    id: `user-${msg.uuid}`,
+    message: msg,
     timestamp: overrides.timestamp ?? new Date('2025-01-01T00:00:00Z'),
   };
   return chunk;
 }
 
 function makeAIChunk(messages: ParsedMessage[] = [], overrides: Partial<{ timestamp: Date }> = {}): Chunk {
+  const msgs = messages.length > 0 ? messages : [makeMsg()];
   const chunk: Chunk = {
     type: 'ai',
-    messages: messages.length > 0 ? messages : [makeMsg()],
+    id: `ai-${msgs[0]?.uuid ?? 'unknown'}`,
+    messages: msgs,
     timestamp: overrides.timestamp ?? new Date('2025-01-01T00:00:01Z'),
   };
   return chunk;

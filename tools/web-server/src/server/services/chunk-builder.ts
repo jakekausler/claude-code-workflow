@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import type {
   ParsedMessage,
   MessageCategory,
@@ -150,7 +151,8 @@ export function buildChunks(messages: ParsedMessage[]): Chunk[] {
 
   function flushAiBuffer(): void {
     if (aiBuffer.length > 0) {
-      chunks.push({ type: 'ai', messages: [...aiBuffer], timestamp: aiBuffer[0].timestamp });
+      const id = `ai-${aiBuffer[0]?.uuid ?? randomUUID()}`;
+      chunks.push({ type: 'ai', id, messages: [...aiBuffer], timestamp: aiBuffer[0].timestamp });
       aiBuffer = [];
     }
   }
@@ -160,7 +162,8 @@ export function buildChunks(messages: ParsedMessage[]): Chunk[] {
     if (msg.isCompactSummary) {
       flushAiBuffer();
       const summary = typeof msg.content === 'string' ? msg.content : '';
-      chunks.push({ type: 'compact', summary, timestamp: msg.timestamp });
+      const id = `compact-${msg.uuid ?? randomUUID()}`;
+      chunks.push({ type: 'compact', id, summary, timestamp: msg.timestamp });
       continue;
     }
 
@@ -172,11 +175,11 @@ export function buildChunks(messages: ParsedMessage[]): Chunk[] {
         break;
       case 'user':
         flushAiBuffer();
-        chunks.push({ type: 'user', message: msg, timestamp: msg.timestamp });
+        chunks.push({ type: 'user', id: `user-${msg.uuid}`, message: msg, timestamp: msg.timestamp });
         break;
       case 'system':
         flushAiBuffer();
-        chunks.push({ type: 'system', messages: [msg], timestamp: msg.timestamp });
+        chunks.push({ type: 'system', id: `system-${msg.uuid}`, messages: [msg], timestamp: msg.timestamp });
         break;
       case 'ai':
         aiBuffer.push(msg);

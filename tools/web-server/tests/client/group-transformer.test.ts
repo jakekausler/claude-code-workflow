@@ -22,33 +22,39 @@ function makeMsg(overrides: Partial<ParsedMessage> = {}): ParsedMessage {
 }
 
 function makeUserChunk(content: string = 'Hello', overrides: Partial<UserChunk> = {}): UserChunk {
+  const msg = makeMsg({ content, type: 'user' });
   return {
     type: 'user',
-    message: makeMsg({ content, type: 'user' }),
+    id: `user-${msg.uuid}`,
+    message: msg,
     timestamp: new Date('2025-01-01T00:00:00Z'),
     ...overrides,
   };
 }
 
 function makeAIChunk(overrides: Partial<AIChunk> = {}): AIChunk {
+  const msgs = overrides.messages ?? [
+    makeMsg({
+      type: 'assistant',
+      content: [{ type: 'text', text: 'Response' }],
+      usage: { input_tokens: 100, output_tokens: 50, cache_read_input_tokens: 20 },
+    }),
+  ];
   return {
     type: 'ai',
-    messages: [
-      makeMsg({
-        type: 'assistant',
-        content: [{ type: 'text', text: 'Response' }],
-        usage: { input_tokens: 100, output_tokens: 50, cache_read_input_tokens: 20 },
-      }),
-    ],
+    id: `ai-${msgs[0]?.uuid ?? 'unknown'}`,
+    messages: msgs,
     timestamp: new Date('2025-01-01T00:00:01Z'),
     ...overrides,
   };
 }
 
 function makeSystemChunk(content: string = 'system output'): SystemChunk {
+  const msg = makeMsg({ type: 'system', content });
   return {
     type: 'system',
-    messages: [makeMsg({ type: 'system', content })],
+    id: `system-${msg.uuid}`,
+    messages: [msg],
     timestamp: new Date('2025-01-01T00:00:00Z'),
   };
 }
@@ -56,6 +62,7 @@ function makeSystemChunk(content: string = 'system output'): SystemChunk {
 function makeCompactChunk(summary: string = 'Conversation compacted'): CompactChunk {
   return {
     type: 'compact',
+    id: `compact-${Math.random().toString(36).slice(2, 8)}`,
     summary,
     timestamp: new Date('2025-01-01T01:00:00Z'),
   };
