@@ -2,8 +2,9 @@
 
 ## Quick Start
 
+### 1. Clone and Build
+
 ```bash
-# Clone and build
 git clone git@github.com:jakekausler/claude-code-workflow.git
 cd claude-code-workflow
 
@@ -12,13 +13,58 @@ cd tools/kanban-cli && npm install && npm run build && cd ../..
 cd tools/web-server && npm install && npm run build && cd ../..
 cd tools/orchestrator && npm install && npm run build && cd ../..
 cd tools/mcp-server && npm install && npm run build && cd ../..
-
-# Start the web server (dev mode)
-cd tools/web-server && npm run dev
-# Accessible at http://192.168.2.148:3100
 ```
 
-**IMPORTANT**: Before running the orchestrator or expecting Claude sessions to follow the workflow pipeline, you MUST have the project's agents and skills installed in your global `~/.claude/` directory. There are 16 agent configs in `~/.claude/agents/` and 11 skill directories in `~/.claude/skills/`. See issue #38 for details — there's no automated install script yet, so you'll need to copy them manually or work from Jake's machine.
+### 2. Install Agents and Skills
+
+**IMPORTANT**: Before running the orchestrator or expecting Claude sessions to follow the workflow pipeline, you MUST have the project's agents and skills installed in your global `~/.claude/` directory. See issue #38 for the long-term automated solution.
+
+```bash
+# Copy agents (16 agent configs)
+mkdir -p ~/.claude/agents
+cp agents/*.md ~/.claude/agents/
+
+# Copy skills (11 skill directories)
+mkdir -p ~/.claude/skills
+cp -r skills/* ~/.claude/skills/
+```
+
+### 3. Seed a Test Repo
+
+```bash
+# Creates /tmp/kanban-test-repo with 3 epics, 6 tickets, 30 stages in diverse states
+bash tools/kanban-cli/scripts/seed-test-repo.sh
+
+# Sync the test repo into SQLite
+cd tools/kanban-cli
+npx tsx src/cli/index.ts sync --repo /tmp/kanban-test-repo --pretty
+
+# Verify it looks right
+npx tsx src/cli/index.ts board --repo /tmp/kanban-test-repo --pretty
+```
+
+### 4. Run Dev Servers
+
+```bash
+# Web server (Fastify + Vite dev mode) — accessible at http://192.168.2.148:3100
+cd tools/web-server && npm run dev
+
+# Orchestrator (in a separate terminal)
+cd tools/orchestrator && npm run dev
+
+# MCP server (if needed for Claude Code integration)
+cd tools/mcp-server && npm run dev
+```
+
+### 5. Run Tests
+
+```bash
+# Per-tool (lint + test)
+cd tools/kanban-cli && npm run verify
+cd tools/web-server && npm run verify
+cd tools/orchestrator && npm run verify
+cd tools/mcp-server && npm run verify
+```
 
 ---
 
