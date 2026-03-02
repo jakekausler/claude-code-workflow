@@ -189,6 +189,28 @@ fi
 
 echo ""
 
+# ─── Set up .mcp.json ─────────────────────────────────────────────────────────
+
+MCP_JSON_EXAMPLE="$REPO_ROOT/.mcp.json.example"
+MCP_JSON_DEST="$REPO_ROOT/.mcp.json"
+
+echo ".mcp.json → $MCP_JSON_DEST"
+
+if [[ -e "$MCP_JSON_DEST" ]]; then
+  log_skip ".mcp.json (already exists)"
+elif [[ ! -f "$MCP_JSON_EXAMPLE" ]]; then
+  log_skip ".mcp.json (no .mcp.json.example found at $MCP_JSON_EXAMPLE)"
+else
+  if dry "Would copy: $MCP_JSON_EXAMPLE → $MCP_JSON_DEST"; then
+    : # dry run, nothing to do
+  else
+    cp "$MCP_JSON_EXAMPLE" "$MCP_JSON_DEST"
+    log_ok ".mcp.json (created from .mcp.json.example — customize as needed)"
+  fi
+fi
+
+echo ""
+
 # ─── Summary ─────────────────────────────────────────────────────────────────
 
 echo "Done."
