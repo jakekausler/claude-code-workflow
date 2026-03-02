@@ -1,8 +1,10 @@
-import { useMemo, useEffect } from 'react';
+import { useMemo, useEffect, useCallback } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Loader2, AlertCircle, Lock } from 'lucide-react';
 import { ChatHistory } from './ChatHistory.js';
 import { ContextAccordion } from './context/ContextAccordion.js';
 import { useSessionDetail } from '../../api/hooks.js';
+import { useSSE } from '../../api/use-sse.js';
 import { transformChunksToConversation } from '../../utils/group-transformer.js';
 import { processSessionContextWithPhases } from '../../utils/context-tracker.js';
 import { useSessionViewStore } from '../../store/session-store.js';
@@ -20,11 +22,28 @@ export function EmbeddedSessionViewer({
 }: EmbeddedSessionViewerProps) {
   const { data: session, isLoading, error } = useSessionDetail(projectId, sessionId);
   const resetView = useSessionViewStore((s) => s.resetView);
+  const queryClient = useQueryClient();
 
   // Reset view state when session changes
   useEffect(() => {
     resetView();
   }, [sessionId, resetView]);
+
+  // Invalidate React Query cache when the underlying session file is re-parsed,
+  // so stale token counts are not shown after a session update.
+  const handleSSE = useCallback(
+    (_channel: string, data: unknown) => {
+      const event = data as { sessionId?: string; projectId?: string };
+      if (event.sessionId === sessionId && event.projectId === projectId) {
+        void queryClient.invalidateQueries({
+          queryKey: ['session', projectId, sessionId],
+        });
+      }
+    },
+    [queryClient, projectId, sessionId],
+  );
+
+  useSSE(['session-update'], handleSSE);
 
   const chunks = session?.chunks ?? [];
 
