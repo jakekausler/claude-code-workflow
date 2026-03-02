@@ -87,8 +87,10 @@ const program = new Command()
       });
       await orchestrator.start();
 
-      // If start() returns (e.g., --once mode completed), exit normally
+      // If start() returns (e.g., --once mode completed), clean up and exit.
+      // Without this, cron scheduler setIntervals keep the process alive indefinitely.
       logger.info('Orchestrator finished');
+      await orchestrator.stop();
     } catch (err) {
       console.error('Fatal error:', err instanceof Error ? err.message : String(err));
       process.exit(1);
