@@ -56,6 +56,12 @@ export async function handleSlackNotify(
     return successResult('Slack notification skipped: mock mode but no state available');
   }
 
+  // DISABLE_SLACK guard: skip real HTTP call in test environments
+  if (process.env.DISABLE_SLACK === 'true') {
+    console.warn('[slack] DISABLE_SLACK=true: skipping real Slack webhook call');
+    return successResult('Slack notification skipped: DISABLE_SLACK is set');
+  }
+
   // Real mode: resolve webhook URL (per-repo override > global default)
   const resolvedWebhookUrl = args.webhook_url || deps.webhookUrl;
   if (!resolvedWebhookUrl) {
