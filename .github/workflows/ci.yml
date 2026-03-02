@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  verify:
+    name: Verify ${{ matrix.tool }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        tool:
+          - kanban-cli
+          - web-server
+          - orchestrator
+          - mcp-server
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Cache node_modules
+        uses: actions/cache@v4
+        with:
+          path: tools/${{ matrix.tool }}/node_modules
+          key: ${{ runner.os }}-${{ matrix.tool }}-${{ hashFiles(format('tools/{0}/package-lock.json', matrix.tool)) }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.tool }}-
+
+      - name: Install dependencies
+        working-directory: tools/${{ matrix.tool }}
+        run: npm ci
+
+      - name: Lint, typecheck, and test
+        working-directory: tools/${{ matrix.tool }}
+        run: npm run verify
