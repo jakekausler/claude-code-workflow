@@ -134,6 +134,49 @@ describe('ToolExecutionBuilder', () => {
       expect(executions[0].durationMs).toBeUndefined();
     });
 
+    it('selects the correct result by toolUseId when message has multiple tool results', () => {
+      // Scenario: a message has sourceToolUseID='call-B' but toolResults[0] belongs to 'call-A'.
+      // Without the fix, toolResults[0] (call-A's result) would be mis-attributed to call-B.
+      const messages: ParsedMessage[] = [
+        {
+          uuid: 'a1',
+          parentUuid: 'u1',
+          type: 'assistant',
+          timestamp: new Date('2026-02-25T10:00:01Z'),
+          isSidechain: false,
+          isMeta: false,
+          content: [],
+          toolCalls: [
+            { id: 'call-A', name: 'Bash', input: { command: 'echo a' }, isTask: false },
+            { id: 'call-B', name: 'Read', input: { path: '/x' }, isTask: false },
+          ],
+          toolResults: [],
+        },
+        {
+          uuid: 'tr1',
+          parentUuid: 'a1',
+          type: 'user',
+          timestamp: new Date('2026-02-25T10:00:02Z'),
+          isSidechain: false,
+          isMeta: true,
+          sourceToolUseID: 'call-B',
+          content: [],
+          toolCalls: [],
+          // toolResults[0] belongs to call-A, but sourceToolUseID points to call-B
+          toolResults: [
+            { toolUseId: 'call-A', content: 'output-a', isError: false },
+            { toolUseId: 'call-B', content: 'output-b', isError: false },
+          ],
+        },
+      ] as ParsedMessage[];
+
+      const executions = buildToolExecutions(messages);
+      const execB = executions.find((e) => e.toolCallId === 'call-B');
+      expect(execB).toBeDefined();
+      expect(execB!.isOrphaned).toBe(false);
+      expect(execB!.result?.content).toBe('output-b');
+    });
+
     it('results are sorted by start time', () => {
       const messages: ParsedMessage[] = [
         {

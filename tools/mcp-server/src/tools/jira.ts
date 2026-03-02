@@ -20,6 +20,10 @@ export async function handleJiraGetTicket(
     if (!ticket) return errorResult(`Ticket not found: ${args.key}`);
     return successResult(ticket);
   }
+  if (process.env.DISABLE_JIRA === 'true') {
+    console.warn('[jira] DISABLE_JIRA=true: skipping real Jira API call');
+    return successResult('Jira operation skipped: DISABLE_JIRA is set');
+  }
   return errorResult('Real Jira integration not yet configured');
 }
 
@@ -30,6 +34,10 @@ export async function handleJiraSearch(
   if (isMockMode() && deps.mockState) {
     const tickets = deps.mockState.searchTickets(args.jql);
     return successResult(tickets);
+  }
+  if (process.env.DISABLE_JIRA === 'true') {
+    console.warn('[jira] DISABLE_JIRA=true: skipping real Jira API call');
+    return successResult('Jira operation skipped: DISABLE_JIRA is set');
   }
   return errorResult('Real Jira integration not yet configured');
 }
@@ -43,6 +51,10 @@ export async function handleJiraTransition(
     if (!result) return errorResult(`Ticket not found: ${args.key}`);
     return successResult(result);
   }
+  if (process.env.DISABLE_JIRA === 'true') {
+    console.warn('[jira] DISABLE_JIRA=true: skipping real Jira API call');
+    return successResult('Jira operation skipped: DISABLE_JIRA is set');
+  }
   return errorResult('Real Jira integration not yet configured');
 }
 
@@ -55,6 +67,10 @@ export async function handleJiraAssign(
     if (!success) return errorResult(`Ticket not found: ${args.key}`);
     return successResult({ success: true, key: args.key, assignee: args.assignee ?? null });
   }
+  if (process.env.DISABLE_JIRA === 'true') {
+    console.warn('[jira] DISABLE_JIRA=true: skipping real Jira API call');
+    return successResult('Jira operation skipped: DISABLE_JIRA is set');
+  }
   return errorResult('Real Jira integration not yet configured');
 }
 
@@ -66,6 +82,10 @@ export async function handleJiraComment(
     const comment = deps.mockState.addTicketComment(args.key, { body: args.body });
     if (!comment) return errorResult(`Ticket not found: ${args.key}`);
     return successResult(comment);
+  }
+  if (process.env.DISABLE_JIRA === 'true') {
+    console.warn('[jira] DISABLE_JIRA=true: skipping real Jira API call');
+    return successResult('Jira operation skipped: DISABLE_JIRA is set');
   }
   return errorResult('Real Jira integration not yet configured');
 }
@@ -83,6 +103,10 @@ export async function handleJiraSync(
       dry_run: args.dryRun ?? false,
       confirmation_needed: false,
     });
+  }
+  if (process.env.DISABLE_JIRA === 'true') {
+    console.warn('[jira] DISABLE_JIRA=true: skipping real Jira API call');
+    return successResult('Jira operation skipped: DISABLE_JIRA is set');
   }
   return errorResult('Real Jira integration not yet configured');
 }

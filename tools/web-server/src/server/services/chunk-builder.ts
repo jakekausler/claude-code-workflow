@@ -31,6 +31,11 @@ export function classifyMessage(msg: ParsedMessage): MessageCategory {
 
   // 2. Synthetic assistant messages → hardNoise
   if (msg.type === 'assistant' && msg.model === '<synthetic>') {
+    console.warn('[chunk-builder] synthetic message dropped', {
+      uuid: msg.uuid,
+      toolCallsCount: msg.toolCalls.length,
+      toolResultsCount: msg.toolResults.length,
+    });
     return 'hardNoise';
   }
 

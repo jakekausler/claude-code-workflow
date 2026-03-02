@@ -38,7 +38,10 @@ export function buildToolExecutions(messages: ParsedMessage[]): ToolExecution[] 
     // Check sourceToolUseID first (most reliable)
     if (msg.sourceToolUseID && callMap.has(msg.sourceToolUseID)) {
       const call = callMap.get(msg.sourceToolUseID)!;
-      const result: ToolResult | undefined = msg.toolResults[0] ?? undefined;
+      const result: ToolResult | undefined =
+        msg.toolResults.find((r) => r.toolUseId === msg.sourceToolUseID) ??
+        msg.toolResults[0] ??
+        undefined;
       matchedCallIds.add(msg.sourceToolUseID);
       executions.push({
         toolCallId: msg.sourceToolUseID,
