@@ -390,6 +390,39 @@ describe('Slack tools', () => {
     });
   });
 
+  describe('handleSlackNotify — DISABLE_SLACK guard', () => {
+    let mockFetch: ReturnType<typeof vi.fn>;
+    let savedDisableSlack: string | undefined;
+
+    beforeEach(() => {
+      delete process.env.KANBAN_MOCK;
+      savedDisableSlack = process.env.DISABLE_SLACK;
+      process.env.DISABLE_SLACK = 'true';
+      mockFetch = vi.fn();
+    });
+
+    afterEach(() => {
+      if (savedDisableSlack === undefined) {
+        delete process.env.DISABLE_SLACK;
+      } else {
+        process.env.DISABLE_SLACK = savedDisableSlack;
+      }
+    });
+
+    it('returns success without making an HTTP call when DISABLE_SLACK=true', async () => {
+      const deps: SlackToolDeps = {
+        mockState: null,
+        webhookUrl: 'https://hooks.slack.com/services/T000/B000/xxx',
+        fetch: mockFetch as unknown as typeof globalThis.fetch,
+      };
+      const result = await handleSlackNotify({ message: 'test' }, deps);
+      expect(mockFetch).not.toHaveBeenCalled();
+      expect(result.isError).toBeUndefined();
+      const data = parseResult(result);
+      expect(data).toContain('DISABLE_SLACK');
+    });
+  });
+
   describe('registerSlackTools', () => {
     it('registers 1 tool on the server without error', () => {
       const server = new McpServer({ name: 'test-server', version: '0.0.1' });
