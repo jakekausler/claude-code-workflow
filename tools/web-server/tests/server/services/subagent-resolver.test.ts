@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import { mkdtempSync, mkdirSync, writeFileSync, cpSync, rmSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
@@ -158,7 +158,7 @@ describe('SubagentResolver', () => {
       expect(result[0].description).toBe('Search files');
     });
 
-    it('uses positional fallback for unmatched agents', async () => {
+    it('omits unmatched agents and emits a warning', async () => {
       const tmpDir = createTempProject();
       const subagentDir = join(tmpDir, 'test-session', 'subagents');
       mkdirSync(subagentDir, { recursive: true });
@@ -167,7 +167,7 @@ describe('SubagentResolver', () => {
         join(subagentDir, 'agent-abc123.jsonl'),
       );
 
-      // Parent has a task call but NO toolUseResult linking
+      // Parent has a task call but NO toolUseResult linking and no description match
       const parentMessages: ParsedMessage[] = [
         {
           uuid: 'a1',
@@ -190,12 +190,16 @@ describe('SubagentResolver', () => {
         },
       ] as ParsedMessage[];
 
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       const result = await resolveSubagents(parentMessages, {
         projectDir: tmpDir,
         sessionId: 'test-session',
       });
-      expect(result).toHaveLength(1);
-      expect(result[0].parentTaskId).toBe('toolu_unlinked');
+      expect(result).toHaveLength(0);
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Could not resolve subagent abc123'),
+      );
+      warnSpy.mockRestore();
     });
 
     it('detects parallel subagents (start times within 100ms)', async () => {
@@ -385,7 +389,43 @@ describe('SubagentResolver', () => {
         .concat('\n');
       writeFileSync(join(subagentDir, 'agent-ongoing1.jsonl'), ongoingAgent);
 
-      const result = await resolveSubagents([], {
+      // Provide a parent message with a result-based link so ongoing1 is matched via Phase A
+      const parentMessages: ParsedMessage[] = [
+        {
+          uuid: 'p1',
+          parentUuid: null,
+          type: 'assistant',
+          timestamp: new Date('2026-02-25T09:59:59Z'),
+          isSidechain: false,
+          isMeta: false,
+          content: [],
+          toolCalls: [
+            {
+              id: 'toolu_ongoing_task',
+              name: 'Task',
+              input: { description: 'Read file' },
+              isTask: true,
+              taskDescription: 'Read file',
+            },
+          ],
+          toolResults: [],
+        },
+        {
+          uuid: 'p2',
+          parentUuid: 'p1',
+          type: 'tool',
+          timestamp: new Date('2026-02-25T10:00:02Z'),
+          isSidechain: false,
+          isMeta: false,
+          content: '',
+          toolCalls: [],
+          toolResults: [],
+          sourceToolUseID: 'toolu_ongoing_task',
+          toolUseResult: { agentId: 'ongoing1' },
+        },
+      ] as unknown as ParsedMessage[];
+
+      const result = await resolveSubagents(parentMessages, {
         projectDir: tmpDir,
         sessionId: 'test-session',
       });

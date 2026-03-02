@@ -116,34 +116,14 @@ export async function resolveSubagents(
     }
   }
 
-  // Phase C: Positional fallback -- match remaining by chronological order.
-  // TODO: This timing-based fallback is risky — it can produce incorrect links when
-  // multiple unmatched subagents exist, because positional order is not a reliable
-  // proxy for task identity. Replace with structural matching (e.g. subagent init
-  // message containing the task call ID) once that data is available in JSONL.
+  // Phase C: Emit warnings for any subagents that could not be matched.
+  // The timing-based positional fallback was removed because it silently picked
+  // the wrong subagent when two processes started within the same timing window.
   const stillUnmatchedAgents = agents.filter((a) => !matchedAgentIds.has(a.agentId));
-  const stillUnmatchedTasks = unmatchedTasks.filter((t) => !matchedTaskIds.has(t.callId));
-
-  // Sort both by timestamp
-  stillUnmatchedAgents.sort((a, b) => {
-    const aTime = a.messages[0]?.timestamp?.getTime() ?? 0;
-    const bTime = b.messages[0]?.timestamp?.getTime() ?? 0;
-    return aTime - bTime;
-  });
-  stillUnmatchedTasks.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
-
-  for (let i = 0; i < stillUnmatchedAgents.length; i++) {
-    const agent = stillUnmatchedAgents[i];
-    // Guard: skip agents that were already linked in a previous phase to prevent
-    // duplicate Process entries in the output array.
-    if (matchedAgentIds.has(agent.agentId)) continue;
-    const task = stillUnmatchedTasks[i]; // May be undefined if more agents than tasks
-    processes.push(
-      buildProcess(agent, {
-        parentTaskId: task?.callId,
-        description: task?.description,
-        subagentType: task?.subagentType,
-      }),
+  for (const agent of stillUnmatchedAgents) {
+    console.warn(
+      `[subagent-resolver] Could not resolve subagent ${agent.agentId} to any task call. ` +
+        `It will be omitted from the process list.`,
     );
   }
 
