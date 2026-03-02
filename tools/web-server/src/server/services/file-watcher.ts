@@ -273,6 +273,9 @@ export class FileWatcher extends EventEmitter {
           filePath: fullPath,
           isSubagent: parsed.isSubagent,
         } satisfies FileChangeEvent);
+        // Atomically advance the offset only after a successful emit so
+        // subsequent catch-up scans do not re-emit the same byte range.
+        this.setOffset(fullPath, entryStat.size);
       }
     }
   }
