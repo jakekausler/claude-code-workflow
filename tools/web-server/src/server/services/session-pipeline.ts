@@ -134,6 +134,7 @@ function linkSubagentsToChunks(chunks: Chunk[], subagents: Process[]): void {
   if (subagents.length === 0) return;
 
   const linkedSubagentIds = new Set<string>();
+  const orphanedSubagents: Process[] = [];
 
   for (const chunk of chunks) {
     if (chunk.type !== 'ai') continue;
@@ -155,6 +156,10 @@ function linkSubagentsToChunks(chunks: Chunk[], subagents: Process[]): void {
 
     // Primary linking: match by parentTaskId
     for (const subagent of subagents) {
+      if (linkedSubagentIds.has(subagent.id)) {
+        orphanedSubagents.push(subagent);
+        continue;
+      }
       if (subagent.parentTaskId && chunkTaskIds.has(subagent.parentTaskId)) {
         enhanced.subagents.push(subagent);
         linkedSubagentIds.add(subagent.id);
