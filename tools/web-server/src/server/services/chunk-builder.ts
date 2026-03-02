@@ -119,6 +119,11 @@ export function classifyMessage(msg: ParsedMessage): MessageCategory {
         return 'ai';
       }
 
+      const hasToolResult = blocks.some((block) => block.type === 'tool_result');
+      if (hasToolResult) {
+        // Any message containing tool_result blocks belongs in the AI buffer
+        return 'ai';
+      }
       const hasUserContent = blocks.some(
         (block) => block.type === 'text' || block.type === 'image',
       );

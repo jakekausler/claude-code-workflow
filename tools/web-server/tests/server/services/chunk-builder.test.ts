@@ -230,7 +230,7 @@ describe('ChunkBuilder', () => {
       expect(classifyMessage(msg)).toBe('user');
     });
 
-    it('classifies non-isMeta user message with both text and tool_result blocks as "user"', () => {
+    it('classifies non-isMeta user message with both text and tool_result blocks as "ai"', () => {
       const msg = {
         type: 'user',
         isMeta: false,
@@ -241,7 +241,7 @@ describe('ChunkBuilder', () => {
         toolCalls: [],
         toolResults: [],
       } as unknown as ParsedMessage;
-      expect(classifyMessage(msg)).toBe('user');
+      expect(classifyMessage(msg)).toBe('ai');
     });
   });
 
