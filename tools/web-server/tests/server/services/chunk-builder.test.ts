@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { join } from 'path';
 import {
   classifyMessage,
@@ -96,6 +96,29 @@ describe('ChunkBuilder', () => {
         toolResults: [],
       } as unknown as ParsedMessage;
       expect(classifyMessage(msg)).toBe('hardNoise');
+    });
+
+    it('logs a console.warn when dropping a synthetic message', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      try {
+        const msg = {
+          uuid: 'syn-uuid-1',
+          type: 'assistant',
+          model: '<synthetic>',
+          content: [],
+          toolCalls: [{ id: 'tc1', name: 'Task', input: {}, isTask: true }],
+          toolResults: [],
+        } as unknown as ParsedMessage;
+
+        classifyMessage(msg);
+
+        expect(warnSpy).toHaveBeenCalledTimes(1);
+        const [label, meta] = warnSpy.mock.calls[0];
+        expect(label).toContain('synthetic message dropped');
+        expect(meta).toMatchObject({ uuid: 'syn-uuid-1', toolCallsCount: 1, toolResultsCount: 0 });
+      } finally {
+        warnSpy.mockRestore();
+      }
     });
 
     it('classifies local-command-stdout as "system"', () => {

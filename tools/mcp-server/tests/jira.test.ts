@@ -271,6 +271,66 @@ describe('Jira tools', () => {
     });
   });
 
+  describe('DISABLE_JIRA guard', () => {
+    let savedDisableJira: string | undefined;
+
+    beforeEach(() => {
+      delete process.env.KANBAN_MOCK;
+      savedDisableJira = process.env.DISABLE_JIRA;
+      process.env.DISABLE_JIRA = 'true';
+    });
+
+    afterEach(() => {
+      if (savedDisableJira === undefined) {
+        delete process.env.DISABLE_JIRA;
+      } else {
+        process.env.DISABLE_JIRA = savedDisableJira;
+      }
+    });
+
+    it('handleJiraGetTicket returns success with DISABLE_JIRA message', async () => {
+      const result = await handleJiraGetTicket({ key: 'PROJ-101' }, deps);
+      expect(result.isError).toBeUndefined();
+      const data = parseResult(result);
+      expect(data).toContain('DISABLE_JIRA');
+    });
+
+    it('handleJiraSearch returns success with DISABLE_JIRA message', async () => {
+      const result = await handleJiraSearch({ jql: 'test' }, deps);
+      expect(result.isError).toBeUndefined();
+      const data = parseResult(result);
+      expect(data).toContain('DISABLE_JIRA');
+    });
+
+    it('handleJiraTransition returns success with DISABLE_JIRA message', async () => {
+      const result = await handleJiraTransition({ key: 'PROJ-101', targetStatus: 'Done' }, deps);
+      expect(result.isError).toBeUndefined();
+      const data = parseResult(result);
+      expect(data).toContain('DISABLE_JIRA');
+    });
+
+    it('handleJiraAssign returns success with DISABLE_JIRA message', async () => {
+      const result = await handleJiraAssign({ key: 'PROJ-101', assignee: 'x' }, deps);
+      expect(result.isError).toBeUndefined();
+      const data = parseResult(result);
+      expect(data).toContain('DISABLE_JIRA');
+    });
+
+    it('handleJiraComment returns success with DISABLE_JIRA message', async () => {
+      const result = await handleJiraComment({ key: 'PROJ-101', body: 'test' }, deps);
+      expect(result.isError).toBeUndefined();
+      const data = parseResult(result);
+      expect(data).toContain('DISABLE_JIRA');
+    });
+
+    it('handleJiraSync returns success with DISABLE_JIRA message', async () => {
+      const result = await handleJiraSync({ ticketId: 'T-1', repoPath: '/tmp' }, deps);
+      expect(result.isError).toBeUndefined();
+      const data = parseResult(result);
+      expect(data).toContain('DISABLE_JIRA');
+    });
+  });
+
   describe('registerJiraTools', () => {
     it('registers all 6 tools on the server without error', () => {
       const server = new McpServer({ name: 'test-server', version: '0.0.1' });
