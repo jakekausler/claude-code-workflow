@@ -15,11 +15,72 @@
  */
 
 import { spawn } from 'node:child_process';
-import { writeFileSync, unlinkSync, rmSync, mkdtempSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { writeFileSync, unlinkSync, rmSync, mkdtempSync, readdirSync, existsSync } from 'node:fs';
+import { tmpdir, homedir } from 'node:os';
 import path from 'node:path';
 
-const AT_PATH = '/home/jakekausler/.claude/plugins/cache/claude-code-marketplace/atlassian-tools/1.4.0';
+// ─── atlassian-tools path resolution ─────────────────────────────────────────
+
+/**
+ * Resolve the atlassian-tools installation directory.
+ *
+ * Resolution order:
+ *   1. ATLASSIAN_TOOLS_PATH environment variable (explicit override)
+ *   2. Auto-detect from ~/.claude/plugins/cache/claude-code-marketplace/atlassian-tools/
+ *      — picks the highest semver version found
+ *
+ * Exits with AT_PATH_NOT_FOUND if the plugin cannot be located.
+ */
+function resolveAtlassianToolsPath(): string {
+  const envPath = process.env.ATLASSIAN_TOOLS_PATH;
+  if (envPath) {
+    if (!existsSync(envPath)) {
+      process.stderr.write(JSON.stringify({
+        error: `ATLASSIAN_TOOLS_PATH is set to '${envPath}' but that directory does not exist`,
+        code: 'AT_PATH_NOT_FOUND',
+      }));
+      process.exit(1);
+    }
+    return envPath;
+  }
+
+  const cacheDir = path.join(
+    homedir(),
+    '.claude', 'plugins', 'cache', 'claude-code-marketplace', 'atlassian-tools',
+  );
+  if (existsSync(cacheDir)) {
+    let versions: string[] = [];
+    try {
+      versions = readdirSync(cacheDir).filter((v) => /^\d+\.\d+\.\d+/.test(v));
+    } catch {
+      // ignore read errors, fall through to not-found
+    }
+    if (versions.length > 0) {
+      versions.sort((a, b) => {
+        const pa = a.split('.').map(Number);
+        const pb = b.split('.').map(Number);
+        for (let i = 0; i < 3; i++) {
+          const diff = (pb[i] ?? 0) - (pa[i] ?? 0);
+          if (diff !== 0) return diff;
+        }
+        return 0;
+      });
+      return path.join(cacheDir, versions[0]);
+    }
+  }
+
+  process.stderr.write(JSON.stringify({
+    error:
+      'atlassian-tools plugin not found. ' +
+      'Install it from the claude-code-marketplace plugin registry, ' +
+      'or set the ATLASSIAN_TOOLS_PATH environment variable to point to your installation directory.',
+    code: 'AT_PATH_NOT_FOUND',
+  }));
+  process.exit(1);
+  throw new Error('unreachable');
+}
+
+const AT_PATH = resolveAtlassianToolsPath();
 
 // ─── Stdin helpers ────────────────────────────────────────────────────────────
 
