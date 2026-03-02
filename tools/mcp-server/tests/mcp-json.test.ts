@@ -3,12 +3,23 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 /**
- * Tests that .mcp.json at the project root is valid and has the expected
+ * Tests that the MCP config at the project root is valid and has the expected
  * structure for Claude Code to discover the kanban MCP server.
+ *
+ * Resolution order:
+ *   1. .mcp.json       — local config created by running scripts/install.sh (gitignored)
+ *   2. .mcp.json.example — committed template; always present in the repo
+ *
+ * A fresh clone (before running install.sh) will test .mcp.json.example.
+ * After running install.sh, .mcp.json is created and takes precedence.
  */
 describe('.mcp.json', () => {
   const projectRoot = path.resolve(import.meta.dirname, '..', '..', '..');
-  const mcpJsonPath = path.join(projectRoot, '.mcp.json');
+  const mcpJsonPath = (() => {
+    const localPath = path.join(projectRoot, '.mcp.json');
+    const examplePath = path.join(projectRoot, '.mcp.json.example');
+    return fs.existsSync(localPath) ? localPath : examplePath;
+  })();
 
   it('exists at the project root', () => {
     expect(fs.existsSync(mcpJsonPath)).toBe(true);
