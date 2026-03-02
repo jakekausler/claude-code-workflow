@@ -172,7 +172,13 @@ function linkSubagentsToChunks(chunks: Chunk[], subagents: Process[]): void {
 
       const startTime = chunk.messages[0]?.timestamp;
       const endTime = chunk.messages[chunk.messages.length - 1]?.timestamp;
-      if (!startTime || !endTime) continue;
+      if (!startTime || !endTime) {
+        console.warn(
+          '[session-pipeline] chunk missing timestamp — skipping timing-based subagent link for chunk',
+          { chunkType: chunk.type, messageCount: chunk.messages.length },
+        );
+        continue;
+      }
 
       if (subagent.startTime >= startTime && subagent.startTime <= endTime) {
         const enhanced = chunk as EnhancedAIChunk;
