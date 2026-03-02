@@ -267,15 +267,22 @@ export class FileWatcher extends EventEmitter {
 
       const currentOffset = this.getOffset(fullPath);
       if (entryStat.size > currentOffset) {
-        this.emit('file-change', {
-          projectId: parsed.projectId,
-          sessionId: parsed.sessionId,
-          filePath: fullPath,
-          isSubagent: parsed.isSubagent,
-        } satisfies FileChangeEvent);
-        // Atomically advance the offset only after a successful emit so
-        // subsequent catch-up scans do not re-emit the same byte range.
-        this.setOffset(fullPath, entryStat.size);
+        try {
+          this.emit('file-change', {
+            projectId: parsed.projectId,
+            sessionId: parsed.sessionId,
+            filePath: fullPath,
+            isSubagent: parsed.isSubagent,
+          } satisfies FileChangeEvent);
+          // Atomically advance the offset only after a successful emit so
+          // subsequent catch-up scans do not re-emit the same byte range.
+          this.setOffset(fullPath, entryStat.size);
+        } catch (err) {
+          console.warn(
+            `[FileWatcher] Parse/emit failed for ${fullPath} at offset ${currentOffset}; retaining offset for retry.`,
+            err,
+          );
+        }
       }
     }
   }
