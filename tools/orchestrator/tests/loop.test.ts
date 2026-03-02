@@ -115,6 +115,10 @@ function makeMockDeps(): {
     spawn: ReturnType<typeof vi.fn>;
     getActiveSessions: ReturnType<typeof vi.fn>;
     killAll: ReturnType<typeof vi.fn>;
+    getPeer: ReturnType<typeof vi.fn>;
+    getApprovalService: ReturnType<typeof vi.fn>;
+    getMessageQueue: ReturnType<typeof vi.fn>;
+    buildSpawnArgs: ReturnType<typeof vi.fn>;
   };
   logger: {
     info: ReturnType<typeof vi.fn>;
@@ -159,6 +163,17 @@ function makeMockDeps(): {
     spawn: vi.fn(async (): Promise<SessionResult> => ({ exitCode: 0, durationMs: 1000 })),
     getActiveSessions: vi.fn(() => []),
     killAll: vi.fn(),
+    getPeer: vi.fn(() => undefined),
+    getApprovalService: vi.fn(() => ({
+      on: vi.fn(), emit: vi.fn(),
+      handleControlRequest: vi.fn(), handleCancelRequest: vi.fn(),
+      handleResult: vi.fn(), setCurrentStageId: vi.fn(),
+    })),
+    getMessageQueue: vi.fn(() => ({
+      queue: vi.fn(), take: vi.fn(() => undefined),
+      peek: vi.fn(() => undefined), has: vi.fn(() => false), delete: vi.fn(),
+    })),
+    buildSpawnArgs: vi.fn(() => []),
   };
 
   const loggerMock = {

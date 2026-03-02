@@ -115,7 +115,7 @@ export class ProtocolPeer {
             break;
           }
           case 'result': {
-            handler.handleResult(msg as ResultMessage);
+            handler.handleResult(msg as unknown as ResultMessage);
             break;
           }
           // All other message types (assistant, system, etc.) are streaming
