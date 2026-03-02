@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process';
 import * as path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { FrontmatterData } from './locking.js';
 import { defaultReadFrontmatter, defaultWriteFrontmatter } from './locking.js';
 import type { WorkerInfo } from './types.js';
@@ -42,12 +43,16 @@ export interface ExitGateRunner {
 }
 
 /**
- * Default sync implementation: shells out to `kanban-cli sync` as a subprocess.
+ * Default sync implementation: shells out to the local kanban-cli binary as a subprocess.
  * This avoids requiring a KanbanDatabase instance and PipelineConfig.
+ * Uses the binary resolved relative to this file's location rather than npx, since
+ * kanban-cli is a local file dependency and is not published to npm.
  */
 function defaultRunSync(repoPath: string): Promise<{ success: boolean; error?: string }> {
+  const __dirname = path.dirname(fileURLToPath(import.meta.url));
+  const kanbanCliBin = path.resolve(__dirname, '../../kanban-cli/dist/cli/index.js');
   return new Promise((resolve) => {
-    execFile('npx', ['kanban-cli', 'sync', '--repo', repoPath], { timeout: 30_000 }, (err, _stdout, stderr) => {
+    execFile('node', [kanbanCliBin, 'sync', '--repo', repoPath], { timeout: 30_000 }, (err, _stdout, stderr) => {
       if (err) {
         resolve({ success: false, error: stderr || err.message });
       } else {
