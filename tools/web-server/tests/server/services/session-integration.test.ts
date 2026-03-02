@@ -222,12 +222,9 @@ describe('Session Integration', () => {
     expect(session.metrics.duration).toBe(15_000);
     expect(session.metrics.totalCost).toBeGreaterThanOrEqual(0);
 
-    // Subagents: agent-sub1.jsonl should be discovered (legacy structure)
-    expect(session.subagents.length).toBe(1);
-    expect(session.subagents[0].id).toBe('sub1');
-    expect(session.subagents[0].metrics.inputTokens).toBe(50);
-    expect(session.subagents[0].metrics.outputTokens).toBe(25);
-    expect(session.subagents[0].durationMs).toBe(2_000);
+    // Subagents: agent-sub1.jsonl is discovered but cannot be matched to a Task call
+    // in the parent session (no toolUseResult or description link), so it is omitted.
+    expect(session.subagents.length).toBe(0);
 
     // Last message is assistant → not ongoing
     expect(session.isOngoing).toBe(false);
@@ -304,8 +301,8 @@ describe('Session Integration', () => {
       expect(body.metrics.toolCallCount).toBe(1);
       expect(body.metrics.duration).toBe(15_000);
 
-      expect(body.subagents.length).toBe(1);
-      expect(body.subagents[0].id).toBe('sub1');
+      // sub1 has no Task call link in parent — omitted by resolver
+      expect(body.subagents.length).toBe(0);
       expect(body.isOngoing).toBe(false);
     });
 
@@ -333,19 +330,15 @@ describe('Session Integration', () => {
       expect(body.turnCount).toBe(2);
     });
 
-    it('GET .../subagents/sub1 returns the resolved subagent', async () => {
+    it('GET .../subagents/sub1 returns 404 (sub1 has no Task call link in parent)', async () => {
       const response = await app.inject({
         method: 'GET',
         url: `/api/sessions/test-project/${sessionId}/subagents/sub1`,
       });
 
-      expect(response.statusCode).toBe(200);
+      expect(response.statusCode).toBe(404);
       const body = response.json();
-
-      expect(body.id).toBe('sub1');
-      expect(body.metrics.inputTokens).toBe(50);
-      expect(body.metrics.outputTokens).toBe(25);
-      expect(body.durationMs).toBe(2_000);
+      expect(body.error).toBe('Subagent not found');
     });
 
     it('GET .../subagents/nonexistent returns 404', async () => {
