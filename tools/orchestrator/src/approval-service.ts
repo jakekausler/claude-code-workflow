@@ -64,7 +64,7 @@ export class ApprovalService extends EventEmitter implements ProtocolHandler {
         createdAt: Date.now(),
       };
       this.pending.set(requestId, entry);
-      this.emit('question-requested', entry);
+      this.emit('question-requested', entry as PendingQuestion & { type: 'question' });
     } else {
       const entry: PendingEntry = {
         type: 'approval',
@@ -75,7 +75,7 @@ export class ApprovalService extends EventEmitter implements ProtocolHandler {
         createdAt: Date.now(),
       };
       this.pending.set(requestId, entry);
-      this.emit('approval-requested', entry);
+      this.emit('approval-requested', entry as PendingApproval & { type: 'approval' });
     }
   }
 

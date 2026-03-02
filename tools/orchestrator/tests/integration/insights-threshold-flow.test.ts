@@ -107,6 +107,17 @@ function makeSessionExecutor(): SessionExecutor & {
     spawn: vi.fn(async (): Promise<SessionResult> => ({ exitCode: 0, durationMs: 1000 })),
     getActiveSessions: vi.fn(() => []),
     killAll: vi.fn(),
+    getPeer: vi.fn(() => undefined),
+    getApprovalService: vi.fn(() => ({
+      on: vi.fn(), emit: vi.fn(),
+      handleControlRequest: vi.fn(), handleCancelRequest: vi.fn(),
+      handleResult: vi.fn(), setCurrentStageId: vi.fn(),
+    })) as SessionExecutor['getApprovalService'],
+    getMessageQueue: vi.fn(() => ({
+      queue: vi.fn(), take: vi.fn(() => undefined),
+      peek: vi.fn(() => undefined), has: vi.fn(() => false), delete: vi.fn(),
+    })) as SessionExecutor['getMessageQueue'],
+    buildSpawnArgs: vi.fn(() => []),
   };
 }
 

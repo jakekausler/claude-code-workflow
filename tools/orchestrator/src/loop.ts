@@ -274,7 +274,7 @@ export function createOrchestrator(config: OrchestratorConfig, deps: Orchestrato
       peer.sendUserMessage(message);
     } else {
       // Queue message if peer not yet available
-      messageQueue.enqueue(stageId, message);
+      messageQueue.queue(stageId, message);
     }
   };
 
