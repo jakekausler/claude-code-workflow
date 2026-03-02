@@ -60,9 +60,39 @@ export async function parseSessionFile(
     return { messages: [], bytesRead: 0 };
   }
 
+  // Validate startOffset is on a UTF-8 character boundary.
+  // A continuation byte has the form 10xxxxxx (byte & 0xC0 === 0x80).
+  // Walk backward up to 3 bytes to find the start of the character.
+  let safeOffset = startOffset;
+  if (startOffset > 0) {
+    const lookback = Math.min(3, startOffset);
+    const probeStart = startOffset - lookback;
+    const probeBytes = await new Promise<Buffer>((resolve, reject) => {
+      const probeStream = fs.createReadStream(filePath, { start: probeStart });
+      const chunks: Buffer[] = [];
+      probeStream.on('data', (chunk: Buffer | string) => {
+        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+        probeStream.destroy();
+      });
+      probeStream.on('close', () => resolve(Buffer.concat(chunks).subarray(0, lookback)));
+      probeStream.on('error', reject);
+    });
+
+    let adj = lookback;
+    while (adj > 0 && (probeBytes[adj - 1] & 0xc0) === 0x80) {
+      adj--;
+    }
+    safeOffset = probeStart + adj;
+    if (safeOffset !== startOffset) {
+      console.warn(
+        `session-parser: startOffset ${startOffset} lands mid-UTF-8-sequence; adjusted to ${safeOffset}`,
+      );
+    }
+  }
+
   const messages: ParsedMessage[] = [];
 
-  const stream = fs.createReadStream(filePath, { start: startOffset });
+  const stream = fs.createReadStream(filePath, { start: safeOffset });
   const rl = createInterface({ input: stream, crlfDelay: Infinity });
 
   for await (const line of rl) {
@@ -72,7 +102,7 @@ export async function parseSessionFile(
     }
   }
 
-  return { messages, bytesRead: fileSize - startOffset };
+  return { messages, bytesRead: fileSize - safeOffset };
 }
 
 /**
