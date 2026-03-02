@@ -116,7 +116,11 @@ export async function resolveSubagents(
     }
   }
 
-  // Phase C: Positional fallback -- match remaining by chronological order
+  // Phase C: Positional fallback -- match remaining by chronological order.
+  // TODO: This timing-based fallback is risky — it can produce incorrect links when
+  // multiple unmatched subagents exist, because positional order is not a reliable
+  // proxy for task identity. Replace with structural matching (e.g. subagent init
+  // message containing the task call ID) once that data is available in JSONL.
   const stillUnmatchedAgents = agents.filter((a) => !matchedAgentIds.has(a.agentId));
   const stillUnmatchedTasks = unmatchedTasks.filter((t) => !matchedTaskIds.has(t.callId));
 
@@ -130,6 +134,9 @@ export async function resolveSubagents(
 
   for (let i = 0; i < stillUnmatchedAgents.length; i++) {
     const agent = stillUnmatchedAgents[i];
+    // Guard: skip agents that were already linked in a previous phase to prevent
+    // duplicate Process entries in the output array.
+    if (matchedAgentIds.has(agent.agentId)) continue;
     const task = stillUnmatchedTasks[i]; // May be undefined if more agents than tasks
     processes.push(
       buildProcess(agent, {

@@ -85,11 +85,13 @@ export class SessionPipeline {
       mentionedFileTokens: mentionedFileTokens.length > 0 ? mentionedFileTokens : undefined,
     };
 
-    // Estimate size for cache (rough: JSON.stringify length * 2 for UTF-16)
-    // TODO: For large sessions, this synchronous JSON.stringify can be expensive.
-    // Consider a cheaper heuristic (e.g., message count * average size) if this
-    // becomes a bottleneck.
-    const sizeEstimate = JSON.stringify(session).length * 2;
+    // Fast heuristic for cache size estimation — avoids the cost of a full
+    // synchronous JSON.stringify on large sessions. Each chunk is ~50 KB on
+    // average (messages + tool calls), each subagent record ~200 KB (its own
+    // messages array), plus a fixed 100 KB base for metrics and other fields.
+    // This is intentionally approximate; the cache evicts by byte budget so
+    // a modest over- or under-estimate has no correctness impact.
+    const sizeEstimate = (session.chunks.length * 50_000) + (session.subagents.length * 200_000) + 100_000;
     this.cache.set(cacheKey, session, sizeEstimate);
     return session;
   }
