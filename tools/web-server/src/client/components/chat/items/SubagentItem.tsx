@@ -28,8 +28,28 @@ import { LinkedToolItem } from './LinkedToolItem.js';
 import { buildDisplayItemsFromMessages } from '../../../utils/display-item-builder.js';
 import { buildSummary } from '../../../utils/display-summary.js';
 import { parseModelString } from '../../../utils/model-extractor.js';
-import type { Process, ParsedMessage, UsageMetadata } from '../../../types/session.js';
-import type { AIGroupDisplayItem } from '../../../types/groups.js';
+import { getToolRenderer } from '../../tools/index.js';
+import type { Process, ParsedMessage, UsageMetadata, ToolExecution } from '../../../types/session.js';
+import type { AIGroupDisplayItem, LinkedToolItemData } from '../../../types/groups.js';
+
+/**
+ * Adapt a LinkedToolItemData to the ToolExecution shape expected by tool renderers.
+ * Mirrors the same adapter used in LinkedToolItemDisplay.
+ */
+function toToolExecution(tool: LinkedToolItemData): ToolExecution {
+  return {
+    toolCallId: tool.id,
+    toolName: tool.name,
+    input: tool.input,
+    result: tool.result
+      ? { toolUseId: tool.id, ...tool.result }
+      : undefined,
+    startTime: tool.startTime,
+    endTime: tool.endTime,
+    durationMs: tool.durationMs,
+    isOrphaned: tool.isOrphaned,
+  };
+}
 
 interface Props {
   process: Process;
@@ -413,37 +433,12 @@ function ExecutionTraceItem({ item, index, expandedItemId, onItemClick }: Execut
             )}
           </button>
           {isExpanded && (
-            <div className="px-3 py-2 border-t border-slate-200 space-y-2">
-              <div>
-                <div className="text-[10px] text-slate-400 uppercase font-semibold mb-1">
-                  Input
-                </div>
-                <pre className="text-xs text-slate-700 font-mono whitespace-pre-wrap bg-slate-50 rounded p-2 overflow-x-auto max-h-48 overflow-y-auto">
-                  {JSON.stringify(item.tool.input, null, 2)}
-                </pre>
-              </div>
-              {item.tool.result && (
-                <div>
-                  <div
-                    className={`text-[10px] uppercase font-semibold mb-1 ${
-                      isError ? 'text-red-400' : 'text-slate-400'
-                    }`}
-                  >
-                    {isError ? 'Error' : 'Result'}
-                  </div>
-                  <pre
-                    className={`text-xs font-mono whitespace-pre-wrap rounded p-2 overflow-x-auto max-h-48 overflow-y-auto ${
-                      isError
-                        ? 'text-red-700 bg-red-50'
-                        : 'text-slate-700 bg-slate-50'
-                    }`}
-                  >
-                    {typeof item.tool.result.content === 'string'
-                      ? item.tool.result.content
-                      : JSON.stringify(item.tool.result.content, null, 2)}
-                  </pre>
-                </div>
-              )}
+            <div className="px-3 py-2 border-t border-slate-200">
+              {(() => {
+                const ToolRenderer = getToolRenderer(toolName);
+                const execution = toToolExecution(item.tool);
+                return <ToolRenderer execution={execution} />;
+              })()}
             </div>
           )}
         </div>
