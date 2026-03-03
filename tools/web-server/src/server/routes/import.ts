@@ -19,8 +19,15 @@ const gitlabQuerySchema = z.object({
   token: z.string().optional(),
 });
 
+const jiraQuerySchema = z.object({
+  instanceUrl: z.string().url(),
+  projectKey: z.string().min(1),
+  email: z.string().email(),
+  apiToken: z.string().min(1),
+});
+
 const importBodySchema = z.object({
-  provider: z.enum(['github', 'gitlab']),
+  provider: z.enum(['github', 'gitlab', 'jira']),
   issues: z.array(z.object({
     id: z.number(),
     number: z.number(),
@@ -139,6 +146,58 @@ const importPlugin: FastifyPluginCallback = (app, _opts, done) => {
         state: i['state'] as string,
         labels: ((i['labels'] as string[]) ?? []),
         url: i['web_url'] as string,
+      }));
+
+      return reply.send({ issues });
+    } catch (err) {
+      return reply.status(500).send({ error: String(err) });
+    }
+  });
+
+  // GET /api/import/jira/issues
+  app.get('/api/import/jira/issues', async (request, reply) => {
+    const parseResult = jiraQuerySchema.safeParse(request.query);
+    if (!parseResult.success) {
+      return reply.status(400).send({ error: 'Invalid parameters', details: parseResult.error.issues });
+    }
+    const { instanceUrl, projectKey, email, apiToken } = parseResult.data;
+
+    const base64Auth = Buffer.from(`${email}:${apiToken}`).toString('base64');
+    const headers: Record<string, string> = {
+      'Authorization': `Basic ${base64Auth}`,
+      'Accept': 'application/json',
+    };
+
+    try {
+      const base = instanceUrl.replace(/\/$/, '');
+      const url = `${base}/rest/api/3/search?jql=project=${encodeURIComponent(projectKey)}&maxResults=50`;
+      const res = await fetch(url, { headers });
+      if (!res.ok) {
+        const msg = await res.text();
+        return reply.status(res.status).send({ error: `Jira API error: ${msg}` });
+      }
+      const raw = await res.json() as {
+        issues: Array<{
+          id: string;
+          key: string;
+          fields: {
+            summary: string;
+            description: unknown;
+            status: { name: string };
+            labels: string[];
+          };
+        }>;
+      };
+      const issues: RemoteIssue[] = raw.issues.map((issue) => ({
+        id: parseInt(issue.id),
+        number: parseInt(issue.id),
+        title: issue.fields.summary,
+        body: typeof issue.fields.description === 'string'
+          ? issue.fields.description
+          : issue.fields.description ? JSON.stringify(issue.fields.description) : null,
+        state: issue.fields.status.name,
+        labels: issue.fields.labels ?? [],
+        url: `${base}/browse/${issue.key}`,
       }));
 
       return reply.send({ issues });

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Github, GitMerge, Search, Check, AlertCircle, Loader2, Download } from 'lucide-react';
+import { Github, GitMerge, Search, Check, AlertCircle, Loader2, Download, Layers } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { apiFetch } from '../api/client.js';
 
@@ -8,6 +8,7 @@ const STORAGE_KEY = 'ccw-settings';
 interface Settings {
   github: { personalAccessToken: string; defaultOwner: string; repository: string };
   gitlab: { instanceUrl: string; accessToken: string; defaultGroup: string };
+  jira: { instanceUrl: string; projectKey: string; email: string; apiToken: string };
 }
 
 function loadSettings(): Settings {
@@ -18,6 +19,7 @@ function loadSettings(): Settings {
   return {
     github: { personalAccessToken: '', defaultOwner: '', repository: '' },
     gitlab: { instanceUrl: 'gitlab.com', accessToken: '', defaultGroup: '' },
+    jira: { instanceUrl: '', projectKey: '', email: '', apiToken: '' },
   };
 }
 
@@ -36,7 +38,7 @@ interface EpicOption { id: string; title: string }
 export function ImportIssues() {
   const settings = loadSettings();
 
-  const [provider, setProvider] = useState<'github' | 'gitlab'>('github');
+  const [provider, setProvider] = useState<'github' | 'gitlab' | 'jira'>('github');
 
   // GitHub fields
   const [ghOwner, setGhOwner] = useState(settings.github.defaultOwner);
@@ -49,6 +51,12 @@ export function ImportIssues() {
     settings.gitlab.instanceUrl ? `https://${settings.gitlab.instanceUrl}` : 'https://gitlab.com',
   );
   const [glToken, setGlToken] = useState(settings.gitlab.accessToken);
+
+  // Jira fields
+  const [jiraInstance, setJiraInstance] = useState(settings.jira.instanceUrl || '');
+  const [jiraProject, setJiraProject] = useState(settings.jira.projectKey || '');
+  const [jiraEmail, setJiraEmail] = useState(settings.jira.email || '');
+  const [jiraToken, setJiraToken] = useState(settings.jira.apiToken || '');
 
   const [fetching, setFetching] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
@@ -81,10 +89,18 @@ export function ImportIssues() {
         const params = new URLSearchParams({ owner: ghOwner, repo: ghRepo });
         if (ghToken) params.set('token', ghToken);
         url = `/api/import/github/issues?${params.toString()}`;
-      } else {
+      } else if (provider === 'gitlab') {
         const params = new URLSearchParams({ projectId: glProject, instanceUrl: glInstance });
         if (glToken) params.set('token', glToken);
         url = `/api/import/gitlab/issues?${params.toString()}`;
+      } else {
+        const params = new URLSearchParams({
+          instanceUrl: jiraInstance,
+          projectKey: jiraProject,
+          email: jiraEmail,
+          apiToken: jiraToken,
+        });
+        url = `/api/import/jira/issues?${params.toString()}`;
       }
       const res = await fetch(url);
       const data = await res.json() as { issues?: RemoteIssue[]; error?: string };
@@ -148,7 +164,7 @@ export function ImportIssues() {
       <div>
         <h1 className="text-2xl font-bold text-slate-900">Import Issues</h1>
         <p className="mt-1 text-sm text-slate-500">
-          Import GitHub or GitLab issues as tickets. Duplicate issues (same source ID) are skipped.
+          Import GitHub, GitLab, or Jira issues as tickets. Duplicate issues (same source ID) are skipped.
         </p>
       </div>
 
@@ -156,7 +172,7 @@ export function ImportIssues() {
       <div className="rounded-lg border border-slate-200 bg-white p-4 space-y-4">
         <h2 className="text-sm font-semibold text-slate-700">Provider</h2>
         <div className="flex gap-3">
-          {(['github', 'gitlab'] as const).map((p) => (
+          {(['github', 'gitlab', 'jira'] as const).map((p) => (
             <button
               key={p}
               onClick={() => setProvider(p)}
@@ -166,8 +182,8 @@ export function ImportIssues() {
                   : 'border-slate-200 text-slate-700 hover:border-slate-300 hover:bg-slate-50'
               }`}
             >
-              {p === 'github' ? <Github size={16} /> : <GitMerge size={16} />}
-              {p === 'github' ? 'GitHub' : 'GitLab'}
+              {p === 'github' ? <Github size={16} /> : p === 'gitlab' ? <GitMerge size={16} /> : <Layers size={16} />}
+              {p === 'github' ? 'GitHub' : p === 'gitlab' ? 'GitLab' : 'Jira'}
             </button>
           ))}
         </div>
@@ -238,6 +254,52 @@ export function ImportIssues() {
                 value={glToken}
                 onChange={(e) => setGlToken(e.target.value)}
                 placeholder="glpat-..."
+                className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-slate-400 focus:outline-none"
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Jira fields */}
+        {provider === 'jira' && (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Instance URL</label>
+              <input
+                type="text"
+                value={jiraInstance}
+                onChange={(e) => setJiraInstance(e.target.value)}
+                placeholder="https://yourcompany.atlassian.net"
+                className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-slate-400 focus:outline-none"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Project Key</label>
+              <input
+                type="text"
+                value={jiraProject}
+                onChange={(e) => setJiraProject(e.target.value)}
+                placeholder="e.g. PROJ"
+                className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-slate-400 focus:outline-none"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Email</label>
+              <input
+                type="text"
+                value={jiraEmail}
+                onChange={(e) => setJiraEmail(e.target.value)}
+                placeholder="you@example.com"
+                className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-slate-400 focus:outline-none"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">API Token</label>
+              <input
+                type="password"
+                value={jiraToken}
+                onChange={(e) => setJiraToken(e.target.value)}
+                placeholder="Your Jira API token"
                 className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-slate-400 focus:outline-none"
               />
             </div>
