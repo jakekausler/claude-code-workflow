@@ -1,14 +1,36 @@
 import { useState, useEffect } from 'react';
+import { ChevronDown, ChevronUp } from 'lucide-react';
 import { useCurrentUser } from '../api/hooks.js';
 import { can } from '../utils/permissions.js';
 
 const STORAGE_KEY = 'ccw-settings';
 
+// ─── Jira filter types (mirrored from server) ─────────────────────────────────
+
+interface JiraFilterConfig {
+  labels: string[];
+  statuses: string[];
+  assignee: string | null;
+  custom_fields: Record<string, unknown>;
+  logic: 'AND' | 'OR';
+  jql_override: string | null;
+}
+
+const DEFAULT_JIRA_FILTER_CONFIG: JiraFilterConfig = {
+  labels: ['claude-workflow'],
+  statuses: ['To Do', 'Ready for Dev'],
+  assignee: null,
+  custom_fields: {},
+  logic: 'AND',
+  jql_override: null,
+};
+
+// ─── App settings ─────────────────────────────────────────────────────────────
+
 interface JiraSettings {
   instanceUrl: string;
   apiToken: string;
   defaultProjectKey: string;
-  autoPullFilter: string;
 }
 
 interface GitHubSettings {
@@ -51,7 +73,6 @@ const defaultSettings: AppSettings = {
     instanceUrl: '',
     apiToken: '',
     defaultProjectKey: '',
-    autoPullFilter: '',
   },
   github: {
     personalAccessToken: '',
@@ -101,7 +122,7 @@ function saveSection<K extends keyof AppSettings>(key: K, value: AppSettings[K])
   localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
 }
 
-// --- Shared UI primitives ---
+// ─── Shared UI primitives ─────────────────────────────────────────────────────
 
 function SectionCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -219,11 +240,158 @@ function ActionButtons({
   );
 }
 
-// --- Section components ---
+// ─── Jira Filter Form ─────────────────────────────────────────────────────────
+
+/** Parse a comma-separated string into a trimmed array of non-empty strings. */
+function parseList(value: string): string[] {
+  return value.split(',').map((s) => s.trim()).filter(Boolean);
+}
+
+function JiraFilterForm({
+  initial,
+  onSaved,
+}: {
+  initial: JiraFilterConfig;
+  onSaved?: () => void;
+}) {
+  const [labels, setLabels] = useState(initial.labels.join(', '));
+  const [statuses, setStatuses] = useState(initial.statuses.join(', '));
+  const [assignee, setAssignee] = useState(initial.assignee ?? '');
+  const [logic, setLogic] = useState<'AND' | 'OR'>(initial.logic);
+  const [jqlOpen, setJqlOpen] = useState(!!initial.jql_override);
+  const [jqlOverride, setJqlOverride] = useState(initial.jql_override ?? '');
+  const [toast, setToast] = useState<string | null>(null);
+
+  async function handleSave() {
+    const config: JiraFilterConfig = {
+      labels: parseList(labels),
+      statuses: parseList(statuses),
+      assignee: assignee.trim() || null,
+      custom_fields: initial.custom_fields,
+      logic,
+      jql_override: jqlOverride.trim() || null,
+    };
+    try {
+      const res = await fetch('/api/settings/jira/filters', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(config),
+      });
+      if (!res.ok) {
+        const data = await res.json() as { error?: string };
+        setToast(`Error: ${data.error ?? res.status}`);
+      } else {
+        setToast('Saved.');
+        onSaved?.();
+      }
+    } catch (err) {
+      setToast(`Error: ${String(err)}`);
+    }
+    setTimeout(() => setToast(null), 2500);
+  }
+
+  return (
+    <div className="mt-4 rounded-md border border-slate-200 bg-slate-50 p-4 space-y-4">
+      <h3 className="text-sm font-semibold text-slate-700">Auto-pull Filters</h3>
+      <p className="text-xs text-slate-500">
+        Controls which Jira tickets are fetched on the Import Issues page. Combine dimensions with AND / OR, or override with raw JQL.
+      </p>
+
+      <FieldRow label="Labels">
+        <TextInput
+          value={labels}
+          onChange={setLabels}
+          placeholder="claude-workflow, my-label"
+        />
+        <p className="mt-1 text-xs text-slate-400">Comma-separated label names</p>
+      </FieldRow>
+
+      <FieldRow label="Statuses">
+        <TextInput
+          value={statuses}
+          onChange={setStatuses}
+          placeholder="To Do, Ready for Dev"
+        />
+        <p className="mt-1 text-xs text-slate-400">Comma-separated status names</p>
+      </FieldRow>
+
+      <FieldRow label="Assignee">
+        <TextInput
+          value={assignee}
+          onChange={setAssignee}
+          placeholder="username (leave blank for any)"
+        />
+      </FieldRow>
+
+      <FieldRow label="Combine with">
+        <div className="flex gap-3">
+          {(['AND', 'OR'] as const).map((opt) => (
+            <button
+              key={opt}
+              onClick={() => setLogic(opt)}
+              className={`rounded-md border px-4 py-1.5 text-sm font-medium transition-colors ${
+                logic === opt
+                  ? 'border-blue-600 bg-blue-600 text-white'
+                  : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
+              }`}
+            >
+              {opt}
+            </button>
+          ))}
+        </div>
+      </FieldRow>
+
+      {/* Collapsible JQL override */}
+      <div>
+        <button
+          onClick={() => setJqlOpen((v) => !v)}
+          className="flex items-center gap-1 text-xs font-medium text-slate-600 hover:text-slate-800"
+        >
+          {jqlOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+          JQL Override {jqlOpen ? '(active)' : '(optional)'}
+        </button>
+        {jqlOpen && (
+          <div className="mt-2">
+            <textarea
+              value={jqlOverride}
+              onChange={(e) => setJqlOverride(e.target.value)}
+              placeholder="project = MYPROJ AND sprint in openSprints()"
+              rows={3}
+              className="w-full rounded-md border border-slate-300 px-3 py-2 font-mono text-xs text-slate-900 placeholder-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            />
+            <p className="mt-1 text-xs text-slate-400">
+              When set, this raw JQL overrides all dimension filters above.
+            </p>
+          </div>
+        )}
+      </div>
+
+      <div className="flex items-center gap-3 border-t border-slate-100 pt-3">
+        <button
+          onClick={handleSave}
+          className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+        >
+          Save Filters
+        </button>
+        {toast && <span className="text-sm text-slate-500">{toast}</span>}
+      </div>
+    </div>
+  );
+}
+
+// ─── Section components ───────────────────────────────────────────────────────
 
 function JiraSection({ initial }: { initial: JiraSettings }) {
   const [form, setForm] = useState<JiraSettings>(initial);
   const [toast, setToast] = useState<string | null>(null);
+  const [filterConfig, setFilterConfig] = useState<JiraFilterConfig>(DEFAULT_JIRA_FILTER_CONFIG);
+
+  useEffect(() => {
+    fetch('/api/settings/jira/filters')
+      .then((r) => r.json())
+      .then((data) => setFilterConfig({ ...DEFAULT_JIRA_FILTER_CONFIG, ...(data as Partial<JiraFilterConfig>) }))
+      .catch(() => { /* keep default */ });
+  }, []);
 
   function field<K extends keyof JiraSettings>(key: K) {
     return (value: JiraSettings[K]) => setForm((prev) => ({ ...prev, [key]: value }));
@@ -251,10 +419,8 @@ function JiraSection({ initial }: { initial: JiraSettings }) {
       <FieldRow label="Default Project Key">
         <TextInput value={form.defaultProjectKey} onChange={field('defaultProjectKey')} placeholder="MYPROJ" />
       </FieldRow>
-      <FieldRow label="Auto-pull Filter">
-        <TextInput value={form.autoPullFilter} onChange={field('autoPullFilter')} placeholder="assignee = currentUser()" />
-      </FieldRow>
       <ActionButtons onSave={handleSave} onTest={handleTest} toast={toast} />
+      <JiraFilterForm initial={filterConfig} />
     </SectionCard>
   );
 }
@@ -450,7 +616,7 @@ function PreferencesSection({ initial }: { initial: PreferencesSettings }) {
   );
 }
 
-// --- Main page ---
+// ─── Main page ────────────────────────────────────────────────────────────────
 
 export function Settings() {
   const { data: me } = useCurrentUser();

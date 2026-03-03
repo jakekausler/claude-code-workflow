@@ -42,6 +42,27 @@ export interface JiraStatusMap {
 }
 
 /**
+ * Multi-dimensional filter controlling which Jira tickets are auto-pulled.
+ */
+export interface JiraFilterConfig {
+  labels: string[];
+  statuses: string[];
+  assignee: string | null;
+  custom_fields: Record<string, unknown>;
+  logic: 'AND' | 'OR';
+  jql_override: string | null;
+}
+
+export const DEFAULT_JIRA_FILTER_CONFIG: JiraFilterConfig = {
+  labels: ['claude-workflow'],
+  statuses: ['To Do', 'Ready for Dev'],
+  assignee: null,
+  custom_fields: {},
+  logic: 'AND',
+  jql_override: null,
+};
+
+/**
  * Jira integration configuration.
  * When null or undefined, Jira integration is disabled.
  */
@@ -51,6 +72,7 @@ export interface JiraConfig {
   project?: string | null;
   assignee?: string | null;
   status_map?: JiraStatusMap;
+  filters?: JiraFilterConfig;
 }
 
 /**

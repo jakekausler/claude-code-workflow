@@ -41,12 +41,22 @@ const jiraStatusMapSchema = z.object({
   all_stages_done: z.string().optional(),
 }).strict().optional();
 
+const jiraFilterConfigSchema = z.object({
+  labels: z.array(z.string()).default([]),
+  statuses: z.array(z.string()).default([]),
+  assignee: z.string().nullable().default(null),
+  custom_fields: z.record(z.unknown()).default({}),
+  logic: z.enum(['AND', 'OR']).default('AND'),
+  jql_override: z.string().nullable().default(null),
+}).optional();
+
 const jiraConfigSchema = z.object({
   reading_script: z.string().nullable().optional(),
   writing_script: z.string().nullable().optional(),
   project: z.string().nullable().optional(),
   assignee: z.string().nullable().optional(),
   status_map: jiraStatusMapSchema,
+  filters: jiraFilterConfigSchema,
 }).nullable().optional();
 
 const cronJobConfigSchema = z.object({
