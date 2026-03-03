@@ -9,6 +9,13 @@ import { GrepRenderer } from './GrepRenderer.js';
 import { SkillRenderer } from './SkillRenderer.js';
 import { WebFetchRenderer } from './WebFetchRenderer.js';
 import { NotebookEditRenderer } from './NotebookEditRenderer.js';
+import { WebSearchRenderer } from './WebSearchRenderer.js';
+import {
+  TaskCreateRenderer,
+  TaskUpdateRenderer,
+  TaskListRenderer,
+  TaskGetRenderer,
+} from './TaskRenderers.js';
 import { DefaultRenderer } from './DefaultRenderer.js';
 
 type ToolRendererComponent = ComponentType<{ execution: ToolExecution }>;
@@ -23,7 +30,11 @@ const rendererMap: Record<string, ToolRendererComponent> = {
   Skill: SkillRenderer,
   NotebookEdit: NotebookEditRenderer,
   WebFetch: WebFetchRenderer,
-  WebSearch: DefaultRenderer,
+  WebSearch: WebSearchRenderer,
+  TaskCreate: TaskCreateRenderer,
+  TaskUpdate: TaskUpdateRenderer,
+  TaskList: TaskListRenderer,
+  TaskGet: TaskGetRenderer,
 };
 
 export function getToolRenderer(toolName: string): ToolRendererComponent {
