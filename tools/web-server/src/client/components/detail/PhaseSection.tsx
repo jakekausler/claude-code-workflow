@@ -31,15 +31,11 @@ export function PhaseSection({
         )}
         <span>{title}</span>
       </summary>
-      <div className="border-t border-slate-100 px-4 py-3">
-        {content ? (
+      {content && (
+        <div className="border-t border-slate-100 px-4 py-3">
           <MarkdownContent content={content} />
-        ) : (
-          <p className="text-sm italic text-slate-400">
-            Content available in future update
-          </p>
-        )}
-      </div>
+        </div>
+      )}
     </details>
   );
 }

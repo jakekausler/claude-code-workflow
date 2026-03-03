@@ -1,9 +1,56 @@
 import type { FastifyPluginCallback } from 'fastify';
 import fp from 'fastify-plugin';
 import { z } from 'zod';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { dirname, basename, extname, join } from 'node:path';
 import matter from 'gray-matter';
 import { parseRefinementType } from './utils.js';
+
+/**
+ * Phase display name → file suffix mapping.
+ * Matches the sibling file naming convention:
+ *   STAGE-001-001-001-design.md, STAGE-001-001-001-build.md, etc.
+ */
+const PHASE_SUFFIXES: Record<string, string> = {
+  'Design': 'design',
+  'User Design Feedback': 'user-design-feedback',
+  'Build': 'build',
+  'Automatic Testing': 'automatic-testing',
+  'Manual Testing': 'manual-testing',
+  'Finalize': 'finalize',
+  'PR Created': 'pr-created',
+  'Addressing Comments': 'addressing-comments',
+};
+
+/**
+ * Discover and read sibling phase files for a stage.
+ * Returns a map of phase display name → markdown content.
+ */
+function readPhaseContents(filePath: string): Record<string, string> {
+  const dir = dirname(filePath);
+  const ext = extname(filePath);
+  const base = basename(filePath, ext); // e.g. "STAGE-001-001-001"
+
+  const result: Record<string, string> = {};
+
+  for (const [phaseName, suffix] of Object.entries(PHASE_SUFFIXES)) {
+    const siblingPath = join(dir, `${base}-${suffix}${ext}`);
+    if (existsSync(siblingPath)) {
+      try {
+        const raw = readFileSync(siblingPath, 'utf-8');
+        const parsed = matter(raw);
+        const content = parsed.content.trim();
+        if (content) {
+          result[phaseName] = content;
+        }
+      } catch {
+        // Skip unreadable sibling files
+      }
+    }
+  }
+
+  return result;
+}
 
 /** Fields already exposed as structured properties in the stage detail response. */
 const KNOWN_FRONTMATTER_KEYS = new Set([
@@ -99,10 +146,11 @@ const stagePlugin: FastifyPluginCallback = (app, _opts, done) => {
       resolved: d.resolved !== 0,
     });
 
-    // Read markdown body, checklists, and extra frontmatter fields from the stage file
+    // Read markdown body, checklists, extra frontmatter fields, and phase sibling contents
     let body = '';
     let checklists: Array<{ title: string; items: Array<{ text: string; checked: boolean }> }> = [];
     let frontmatterFields: Record<string, unknown> = {};
+    let phaseContents: Record<string, string> = {};
     if (stage.file_path && existsSync(stage.file_path)) {
       try {
         const raw = readFileSync(stage.file_path, 'utf-8');
@@ -117,6 +165,8 @@ const stagePlugin: FastifyPluginCallback = (app, _opts, done) => {
             frontmatterFields[key] = value;
           }
         }
+        // Discover and read sibling phase files
+        phaseContents = readPhaseContents(stage.file_path);
       } catch {
         // If file read or parse fails, return empty defaults
       }
@@ -146,6 +196,7 @@ const stagePlugin: FastifyPluginCallback = (app, _opts, done) => {
       body,
       checklists,
       frontmatter_fields: frontmatterFields,
+      phase_contents: phaseContents,
     });
   });
 
