@@ -30,3 +30,6 @@ export type {
 // Executor
 export { createJiraExecutor, JiraScriptError, JiraTimeoutError, JiraValidationError } from './executor.js';
 export type { JiraExecutorOptions } from './executor.js';
+
+// Filter / JQL
+export { buildJqlFromFilter } from './filter.js';

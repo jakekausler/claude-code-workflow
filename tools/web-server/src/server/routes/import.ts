@@ -3,6 +3,7 @@ import fp from 'fastify-plugin';
 import { z } from 'zod';
 import { existsSync, readdirSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
 import { join, dirname } from 'path';
+import os from 'os';
 import matter from 'gray-matter';
 import type { RoleService } from '../deployment/hosted/rbac/role-service.js';
 import { requireRole } from '../deployment/hosted/rbac/rbac-middleware.js';
@@ -10,6 +11,77 @@ import { requireRole } from '../deployment/hosted/rbac/rbac-middleware.js';
 export interface ImportRouteOptions {
   roleService?: RoleService;
 }
+
+// ─── Jira filter types (inlined — web-server has no dep on kanban-cli) ────────
+
+export interface JiraFilterConfig {
+  labels: string[];
+  statuses: string[];
+  assignee: string | null;
+  custom_fields: Record<string, unknown>;
+  logic: 'AND' | 'OR';
+  jql_override: string | null;
+}
+
+const DEFAULT_JIRA_FILTER_CONFIG: JiraFilterConfig = {
+  labels: ['claude-workflow'],
+  statuses: ['To Do', 'Ready for Dev'],
+  assignee: null,
+  custom_fields: {},
+  logic: 'AND',
+  jql_override: null,
+};
+
+/**
+ * Build a JQL query string from a JiraFilterConfig.
+ * If jql_override is set it is returned as-is.
+ */
+function buildJqlFromFilter(filter: JiraFilterConfig): string {
+  if (filter.jql_override) return filter.jql_override;
+
+  const clauses: string[] = [];
+
+  if (filter.labels.length > 0) {
+    clauses.push(`labels in (${filter.labels.map((l) => `"${l}"`).join(', ')})`);
+  }
+  if (filter.statuses.length > 0) {
+    clauses.push(`status in (${filter.statuses.map((s) => `"${s}"`).join(', ')})`);
+  }
+  if (filter.assignee) {
+    clauses.push(`assignee = "${filter.assignee}"`);
+  }
+  for (const [k, v] of Object.entries(filter.custom_fields)) {
+    clauses.push(`cf[${k}] = "${String(v)}"`);
+  }
+
+  return clauses.join(` ${filter.logic} `) || 'ORDER BY created DESC';
+}
+
+// ─── Settings persistence ─────────────────────────────────────────────────────
+
+const SETTINGS_DIR = join(os.homedir(), '.config', 'kanban-workflow');
+const JIRA_FILTER_SETTINGS_PATH = join(SETTINGS_DIR, 'jira-filters.json');
+
+function loadJiraFilterConfig(): JiraFilterConfig {
+  try {
+    if (existsSync(JIRA_FILTER_SETTINGS_PATH)) {
+      const raw = readFileSync(JIRA_FILTER_SETTINGS_PATH, 'utf-8');
+      return { ...DEFAULT_JIRA_FILTER_CONFIG, ...(JSON.parse(raw) as Partial<JiraFilterConfig>) };
+    }
+  } catch {
+    // fall through to default
+  }
+  return { ...DEFAULT_JIRA_FILTER_CONFIG };
+}
+
+function saveJiraFilterConfig(config: JiraFilterConfig): void {
+  if (!existsSync(SETTINGS_DIR)) {
+    mkdirSync(SETTINGS_DIR, { recursive: true });
+  }
+  writeFileSync(JIRA_FILTER_SETTINGS_PATH, JSON.stringify(config, null, 2), 'utf-8');
+}
+
+// ─── Zod schemas ──────────────────────────────────────────────────────────────
 
 const githubQuerySchema = z.object({
   owner: z.string().min(1),
@@ -32,6 +104,15 @@ const jiraQuerySchema = z.object({
   apiToken: z.string().min(1),
 });
 
+const jiraFilterBodySchema = z.object({
+  labels: z.array(z.string()).default([]),
+  statuses: z.array(z.string()).default([]),
+  assignee: z.string().nullable().default(null),
+  custom_fields: z.record(z.string(), z.unknown()).default({}),
+  logic: z.enum(['AND', 'OR']).default('AND'),
+  jql_override: z.string().nullable().default(null),
+});
+
 const importBodySchema = z.object({
   provider: z.enum(['github', 'gitlab', 'jira']),
   issues: z.array(z.object({
@@ -45,6 +126,8 @@ const importBodySchema = z.object({
   })),
   epicId: z.string().optional(),
 });
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 export interface RemoteIssue {
   id: number;
@@ -80,6 +163,8 @@ function findExistingSourceIds(ticketsDir: string, provider: string): Set<string
   }
   return sourceIds;
 }
+
+// ─── Routes ───────────────────────────────────────────────────────────────────
 
 const importPlugin: FastifyPluginCallback<ImportRouteOptions> = (app, opts, done) => {
   const { roleService } = opts;
@@ -172,7 +257,7 @@ const importPlugin: FastifyPluginCallback<ImportRouteOptions> = (app, opts, done
     }
   });
 
-  // GET /api/import/jira/issues
+  // GET /api/import/jira/issues — applies saved JiraFilterConfig to build the JQL query
   app.get('/api/import/jira/issues', fetchOpts, async (request, reply) => {
     const parseResult = jiraQuerySchema.safeParse(request.query);
     if (!parseResult.success) {
@@ -188,7 +273,15 @@ const importPlugin: FastifyPluginCallback<ImportRouteOptions> = (app, opts, done
 
     try {
       const base = instanceUrl.replace(/\/$/, '');
-      const url = `${base}/rest/api/3/search?jql=project=${encodeURIComponent(projectKey)}&maxResults=50`;
+
+      // Build JQL from saved filter config, scoped to the project
+      const filterConfig = loadJiraFilterConfig();
+      const filterJql = buildJqlFromFilter(filterConfig);
+      const jql = filterJql === 'ORDER BY created DESC'
+        ? `project=${encodeURIComponent(projectKey)}`
+        : `project=${encodeURIComponent(projectKey)} AND (${filterJql})`;
+
+      const url = `${base}/rest/api/3/search?jql=${encodeURIComponent(jql)}&maxResults=50`;
       const res = await fetch(url, { headers });
       if (!res.ok) {
         const msg = await res.text();
@@ -221,6 +314,26 @@ const importPlugin: FastifyPluginCallback<ImportRouteOptions> = (app, opts, done
       return reply.send({ issues });
     } catch (err) {
       return reply.status(500).send({ error: String(err) });
+    }
+  });
+
+  // GET /api/settings/jira/filters — return current JiraFilterConfig
+  app.get('/api/settings/jira/filters', async (_request, reply) => {
+    return reply.send(loadJiraFilterConfig());
+  });
+
+  // PUT /api/settings/jira/filters — save JiraFilterConfig
+  app.put('/api/settings/jira/filters', async (request, reply) => {
+    const parseResult = jiraFilterBodySchema.safeParse(request.body);
+    if (!parseResult.success) {
+      return reply.status(400).send({ error: 'Invalid filter config', details: parseResult.error.issues });
+    }
+    const config: JiraFilterConfig = parseResult.data;
+    try {
+      saveJiraFilterConfig(config);
+      return reply.send(config);
+    } catch (err) {
+      return reply.status(500).send({ error: `Failed to save filter config: ${String(err)}` });
     }
   });
 
