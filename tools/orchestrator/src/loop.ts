@@ -24,6 +24,7 @@ import type { LearningsResult } from './insights-threshold.js';
 import { SessionRegistry } from './session-registry.js';
 import { createWsServer } from './ws-server.js';
 import type { WsServerHandle } from './ws-server.js';
+import { slackNotify } from './slack-notify.js';
 
 export interface Orchestrator {
   start(): Promise<void>;
@@ -168,7 +169,19 @@ function buildCronScheduler(
       enabled: pollConfig.enabled,
       intervalMs: pollConfig.interval_seconds * 1000,
       async execute(): Promise<void> {
-        await poller.poll(config.repoPath);
+        const pollResults = await poller.poll(config.repoPath);
+        if (config.slackWebhookUrl) {
+          for (const r of pollResults) {
+            if (r.action === 'new_comments') {
+              slackNotify({
+                title: 'MR Comments Need Addressing',
+                message: `New review comments on stage \`${r.stageId}\` — ${r.newUnresolvedCount ?? 0} unresolved thread(s)`,
+                stage: r.stageId,
+                url: r.prUrl,
+              }, config.slackWebhookUrl).catch(() => {});
+            }
+          }
+        }
         await chainManager.checkParentChains(config.repoPath);
       },
     });
@@ -266,6 +279,24 @@ export function createOrchestrator(config: OrchestratorConfig, deps: Orchestrato
   // Get shared approval service and message queue from session executor
   const approvalService = sessionExecutor.getApprovalService();
   const messageQueue = sessionExecutor.getMessageQueue();
+
+  // Wire Slack notifications for user-input events
+  if (config.slackWebhookUrl) {
+    approvalService.on('question-requested', (entry) => {
+      slackNotify({
+        title: 'User Input Required',
+        message: `Claude is waiting for a response in stage \`${entry.stageId}\``,
+        stage: entry.stageId,
+      }, config.slackWebhookUrl!).catch(() => {});
+    });
+    approvalService.on('approval-requested', (entry) => {
+      slackNotify({
+        title: 'Tool Approval Required',
+        message: `Claude is requesting approval to use \`${entry.toolName}\` in stage \`${entry.stageId}\``,
+        stage: entry.stageId,
+      }, config.slackWebhookUrl!).catch(() => {});
+    });
+  }
 
   // Create callbacks for inbound WS messages
   const onSendMessage = (stageId: string, message: string) => {
@@ -388,6 +419,20 @@ export function createOrchestrator(config: OrchestratorConfig, deps: Orchestrato
       } catch (err) {
         logger.error('Exit gate failed', { stageId, error: (err as Error).message });
       }
+    }
+
+    // Notify Slack when a PR is created
+    if (statusAfter === 'PR Created' && config.slackWebhookUrl) {
+      try {
+        const fm = await readFrontmatter(workerInfo.stageFilePath);
+        slackNotify({
+          title: 'MR Created',
+          message: `A merge request was created for stage \`${stageId}\``,
+          stage: stageId,
+          ticket: fm.data.ticket as string | undefined,
+          url: fm.data.pr_url as string | undefined,
+        }, config.slackWebhookUrl).catch(() => {});
+      } catch { /* non-fatal */ }
     }
 
     // Check for queued follow-up messages and log them

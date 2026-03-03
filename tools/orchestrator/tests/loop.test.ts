@@ -1,11 +1,17 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { PipelineConfig, CronConfig } from 'kanban-cli';
+
+// Mock slackNotify so tests never make real HTTP calls
+vi.mock('../src/slack-notify.js', () => ({
+  slackNotify: vi.fn().mockResolvedValue(undefined),
+}));
 import {
   createOrchestrator,
   lookupSkillName,
   resolveStageFilePath,
   type OrchestratorDeps,
 } from '../src/loop.js';
+import { slackNotify } from '../src/slack-notify.js';
 import type { OrchestratorConfig, WorkerInfo } from '../src/types.js';
 import type { Discovery, DiscoveryResult, ReadyStage } from '../src/discovery.js';
 import type { Locker } from '../src/locking.js';
@@ -1603,6 +1609,125 @@ describe('createOrchestrator', () => {
       // This should not throw or bind any port
       const orchestrator = createOrchestrator(config, deps);
       expect(orchestrator).toBeDefined();
+    });
+  });
+
+  describe('Slack notifications', () => {
+    beforeEach(() => {
+      vi.mocked(slackNotify).mockClear();
+    });
+
+    it('calls slackNotify when question-requested fires and slackWebhookUrl is set', () => {
+      const { deps, sessionExecutor } = makeMockDeps();
+
+      let questionListener: ((entry: { stageId: string; requestId: string }) => void) | undefined;
+      sessionExecutor.getApprovalService.mockReturnValue({
+        on: vi.fn((event: string, listener: (entry: { stageId: string; requestId: string }) => void) => {
+          if (event === 'question-requested') questionListener = listener;
+        }),
+        emit: vi.fn(),
+        handleControlRequest: vi.fn(),
+        handleCancelRequest: vi.fn(),
+        handleResult: vi.fn(),
+        setCurrentStageId: vi.fn(),
+      });
+
+      const config = makeConfig({ once: true, slackWebhookUrl: 'https://hooks.slack.com/test' });
+      createOrchestrator(config, deps);
+
+      expect(questionListener).toBeDefined();
+      questionListener!({ stageId: 'STAGE-001-001-001', requestId: 'req-1' });
+
+      expect(slackNotify).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: 'User Input Required',
+          stage: 'STAGE-001-001-001',
+        }),
+        'https://hooks.slack.com/test',
+      );
+    });
+
+    it('calls slackNotify when approval-requested fires and slackWebhookUrl is set', () => {
+      const { deps, sessionExecutor } = makeMockDeps();
+
+      let approvalListener: ((entry: { stageId: string; requestId: string; toolName: string }) => void) | undefined;
+      sessionExecutor.getApprovalService.mockReturnValue({
+        on: vi.fn((event: string, listener: (entry: { stageId: string; requestId: string; toolName: string }) => void) => {
+          if (event === 'approval-requested') approvalListener = listener;
+        }),
+        emit: vi.fn(),
+        handleControlRequest: vi.fn(),
+        handleCancelRequest: vi.fn(),
+        handleResult: vi.fn(),
+        setCurrentStageId: vi.fn(),
+      });
+
+      const config = makeConfig({ once: true, slackWebhookUrl: 'https://hooks.slack.com/test' });
+      createOrchestrator(config, deps);
+
+      expect(approvalListener).toBeDefined();
+      approvalListener!({ stageId: 'STAGE-001-001-001', requestId: 'req-2', toolName: 'bash' });
+
+      expect(slackNotify).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: 'Tool Approval Required',
+          stage: 'STAGE-001-001-001',
+        }),
+        'https://hooks.slack.com/test',
+      );
+    });
+
+    it('does not register approval service listeners when slackWebhookUrl is not set', () => {
+      const { deps, sessionExecutor } = makeMockDeps();
+      const onMock = vi.fn();
+      sessionExecutor.getApprovalService.mockReturnValue({
+        on: onMock,
+        emit: vi.fn(),
+        handleControlRequest: vi.fn(),
+        handleCancelRequest: vi.fn(),
+        handleResult: vi.fn(),
+        setCurrentStageId: vi.fn(),
+      });
+
+      const config = makeConfig({ once: true }); // no slackWebhookUrl
+      createOrchestrator(config, deps);
+
+      expect(onMock).not.toHaveBeenCalledWith('question-requested', expect.any(Function));
+      expect(onMock).not.toHaveBeenCalledWith('approval-requested', expect.any(Function));
+    });
+
+    it('calls slackNotify with MR Created when session exits with PR Created status', async () => {
+      const { deps, discovery, locker, sessionExecutor, deferSession } = makeMockDeps();
+      const stage = makeReadyStage();
+      const deferred = deferSession();
+
+      discovery.discover.mockResolvedValueOnce(makeDiscoveryResult([stage]));
+      locker.readStatus
+        .mockResolvedValueOnce('In Build')   // statusBefore
+        .mockResolvedValueOnce('PR Created'); // statusAfter
+
+      // readFrontmatter returns pr_url
+      const readFrontmatter = vi.fn().mockResolvedValue({
+        data: { status: 'PR Created', pr_url: 'https://github.com/org/repo/pull/42' },
+        content: '',
+      });
+
+      const config = makeConfig({ once: true, slackWebhookUrl: 'https://hooks.slack.com/test' });
+      const orchestrator = createOrchestrator(config, { ...deps, readFrontmatter });
+      const startPromise = orchestrator.start();
+
+      await vi.waitFor(() => expect(sessionExecutor.spawn).toHaveBeenCalledTimes(1));
+      deferred.resolve({ exitCode: 0, durationMs: 1000 });
+      await startPromise;
+
+      expect(slackNotify).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: 'MR Created',
+          stage: stage.id,
+          url: 'https://github.com/org/repo/pull/42',
+        }),
+        'https://hooks.slack.com/test',
+      );
     });
   });
 });
