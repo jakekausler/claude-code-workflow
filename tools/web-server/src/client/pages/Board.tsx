@@ -5,6 +5,7 @@ import { useBoardStore } from '../store/board-store.js';
 import type { SessionMapEntry } from '../store/board-store.js';
 import { useDrawerStore, type DrawerEntry } from '../store/drawer-store.js';
 import { FilterBar } from '../components/board/FilterBar.js';
+import { NewEpicButton } from '../components/board/NewEpicButton.js';
 import { BoardLayout } from '../components/board/BoardLayout.js';
 import { BoardColumn } from '../components/board/BoardColumn.js';
 import { BoardCard } from '../components/board/BoardCard.js';
@@ -137,7 +138,10 @@ export function Board() {
 
   return (
     <div>
-      <h1 className="mb-4 text-2xl font-bold text-slate-900">Board</h1>
+      <div className="mb-4 flex items-center justify-between">
+        <h1 className="text-2xl font-bold text-slate-900">Board</h1>
+        <NewEpicButton />
+      </div>
       <FilterBar />
       <BoardLayout isLoading={isLoading} error={error ?? null} isEmpty={columns.length === 0} selectedColumnIndex={selectedColumnIndex}>
         {columns.map((col) => {

@@ -2,6 +2,9 @@ import type { FastifyPluginCallback } from 'fastify';
 import fp from 'fastify-plugin';
 import { z } from 'zod';
 import { parseRefinementType } from './utils.js';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import matter from 'gray-matter';
 
 /** Zod schema for the :id route parameter. */
 const ticketIdSchema = z.string().regex(/^TICKET-\d{3}-\d{3}$/);
@@ -108,6 +111,81 @@ const ticketPlugin: FastifyPluginCallback = (app, _opts, done) => {
       file_path: ticket.file_path,
       stages: stageList,
     });
+  });
+
+  /**
+   * POST /api/tickets — Create a new ticket with a markdown file.
+   */
+  const createTicketSchema = z.object({
+    title: z.string().min(1),
+    epic_id: z.string().min(1),
+    status: z.string().min(1).default('to_convert'),
+    description: z.string().optional(),
+  });
+
+  app.post('/api/tickets', async (request, reply) => {
+    if (!app.dataService) {
+      return reply.status(503).send({ error: 'Database not initialized' });
+    }
+
+    const parsed = createTicketSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: 'Invalid request body', details: parsed.error.issues });
+    }
+    const { title, epic_id, status, description } = parsed.data;
+
+    const repos = app.dataService.repos.findAll();
+    if (repos.length === 0) {
+      return reply.status(503).send({ error: 'No repos configured' });
+    }
+    const repo = repos[0];
+
+    const epic = app.dataService.epics.findById(epic_id);
+    if (!epic) {
+      return reply.status(404).send({ error: `Epic ${epic_id} not found` });
+    }
+
+    // Parse epic number from e.g. EPIC-042 -> 42
+    const epicMatch = /^EPIC-(\d+)$/.exec(epic_id);
+    if (!epicMatch) {
+      return reply.status(400).send({ error: 'Invalid epic ID format' });
+    }
+    const epicNum = parseInt(epicMatch[1], 10);
+    const epicNumPadded = String(epicNum).padStart(3, '0');
+
+    // Find max ticket number for this epic
+    const allTickets = app.dataService.tickets.listByRepo(repo.id);
+    const prefix = `TICKET-${epicNumPadded}-`;
+    const ticketNums = allTickets
+      .filter((t) => t.id.startsWith(prefix))
+      .map((t) => {
+        const m = new RegExp(`^TICKET-\\d{3}-(\\d+)$`).exec(t.id);
+        return m ? parseInt(m[1], 10) : 0;
+      })
+      .filter((n) => n > 0);
+    const nextTicketNum = ticketNums.length > 0 ? Math.max(...ticketNums) + 1 : 1;
+    const id = `TICKET-${epicNumPadded}-${String(nextTicketNum).padStart(3, '0')}`;
+
+    // Derive file path from epic's file path
+    // Epic: .../epics/EPIC-XXX/EPIC-XXX.md -> ticket: .../epics/EPIC-XXX/<id>/<id>.md
+    const file_path = join(dirname(epic.file_path ?? ''), id, `${id}.md`);
+    mkdirSync(dirname(file_path), { recursive: true });
+    writeFileSync(file_path, matter.stringify(description ?? '', { title, status, epic: epic_id }));
+
+    app.dataService.tickets.upsert({
+      id,
+      epic_id,
+      repo_id: repo.id,
+      title,
+      status,
+      jira_key: null,
+      source: null,
+      has_stages: 0,
+      file_path,
+      last_synced: new Date().toISOString(),
+    });
+
+    return reply.status(201).send({ id, title, status, epic_id, file_path });
   });
 
   done();
