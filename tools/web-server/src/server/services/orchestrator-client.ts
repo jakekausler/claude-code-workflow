@@ -121,6 +121,10 @@ export class OrchestratorClient extends EventEmitter {
     this.send({ type: 'interrupt', stageId });
   }
 
+  launchConversion(ticketId: string, epicId: string): void {
+    this.send({ type: 'launch_conversion', ticketId, epicId });
+  }
+
   getPendingForStage(stageId: string): PendingItem[] {
     const approvals = this.pendingApprovals.get(stageId) ?? [];
     const questions = this.pendingQuestions.get(stageId) ?? [];

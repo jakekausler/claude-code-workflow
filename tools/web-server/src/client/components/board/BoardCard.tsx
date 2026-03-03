@@ -1,6 +1,7 @@
 import { PendingBadge } from '../interaction/PendingBadge.js';
 import { SessionStatusIndicator } from './SessionStatusIndicator.js';
 import type { SessionMapEntry } from '../../store/board-store.js';
+import { Zap } from 'lucide-react';
 
 interface Badge {
   label: string;
@@ -18,6 +19,8 @@ interface BoardCardProps {
   onClick: () => void;
   pendingCount?: number;
   sessionStatus?: Pick<SessionMapEntry, 'status' | 'waitingType'> | null;
+  /** When present, renders a "Convert" action button on the card. */
+  onConvert?: (e: React.MouseEvent) => void;
 }
 
 export type { Badge };
@@ -43,6 +46,7 @@ export function BoardCard({
   onClick,
   pendingCount = 0,
   sessionStatus,
+  onConvert,
 }: BoardCardProps) {
   const highlight = needsHighlight(sessionStatus);
 
@@ -114,6 +118,18 @@ export function BoardCard({
             className="h-full rounded-full bg-blue-500 transition-all"
             style={{ width: `${Math.min(100, Math.max(0, progress))}%` }}
           />
+        </div>
+      )}
+      {onConvert && (
+        <div className="mt-2 flex justify-end">
+          <button
+            onClick={onConvert}
+            className="inline-flex items-center gap-1 rounded px-2 py-1 text-[11px] font-medium text-indigo-600 hover:bg-indigo-50 hover:text-indigo-700"
+            aria-label={`Convert ${title} to stages`}
+          >
+            <Zap size={11} />
+            Convert
+          </button>
         </div>
       )}
     </div>

@@ -199,6 +199,57 @@ const ticketPlugin: FastifyPluginCallback<TicketRouteOptions> = (app, opts, done
     return reply.status(201).send({ id, title, status, epic_id, file_path });
   });
 
+  /**
+   * POST /api/tickets/:id/convert
+   *
+   * Launches a Claude session to convert the ticket into stage files.
+   * Requires an epicId in the request body. Sends a launch_conversion
+   * message to the orchestrator via WebSocket.
+   */
+  const convertTicketSchema = z.object({
+    epicId: z.string().min(1),
+  });
+
+  app.post('/api/tickets/:id/convert', async (request, reply) => {
+    if (!app.dataService) {
+      return reply.status(503).send({ error: 'Database not initialized' });
+    }
+
+    const { id } = request.params as { id: string };
+    const parsedId = ticketIdSchema.safeParse(id);
+    if (!parsedId.success) {
+      return reply.status(400).send({ error: 'Invalid ticket ID format' });
+    }
+
+    const ticket = app.dataService.tickets.findById(id);
+    if (!ticket) {
+      return reply.status(404).send({ error: 'Ticket not found' });
+    }
+
+    const parsedBody = convertTicketSchema.safeParse(request.body);
+    if (!parsedBody.success) {
+      return reply.status(400).send({ error: 'Invalid request body', details: parsedBody.error.issues });
+    }
+    const { epicId } = parsedBody.data;
+
+    const epic = app.dataService.epics.findById(epicId);
+    if (!epic) {
+      return reply.status(404).send({ error: `Epic ${epicId} not found` });
+    }
+
+    if (!app.orchestratorClient) {
+      return reply.status(503).send({ error: 'Orchestrator not connected' });
+    }
+
+    if (!app.orchestratorClient.isConnected()) {
+      return reply.status(503).send({ error: 'Orchestrator not connected' });
+    }
+
+    app.orchestratorClient.launchConversion(id, epicId);
+
+    return reply.status(202).send({ ticketId: id, epicId, status: 'conversion_started' });
+  });
+
   done();
 };
 
