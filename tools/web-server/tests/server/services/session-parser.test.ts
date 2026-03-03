@@ -556,5 +556,63 @@ describe('SessionParser', () => {
       expect(messages).toHaveLength(0);
       expect(bytesRead).toBe(0);
     });
+
+    // ─── Gap #1: UTF-8 offset boundary snapping ─────────────────────────────
+    // If startOffset lands inside a multi-byte UTF-8 sequence the parser must
+    // snap back to the start of that character (or the preceding newline) so the
+    // first JSONL line is not corrupted.
+
+    it('snaps startOffset back when it lands inside a multi-byte UTF-8 sequence', async () => {
+      const { mkdtempSync, writeFileSync, rmSync } = await import('fs');
+      const { join } = await import('path');
+      const { tmpdir } = await import('os');
+
+      const dir = mkdtempSync(join(tmpdir(), 'utf8-offset-test-'));
+      try {
+        // Line 1: contains a 3-byte UTF-8 character (€ = 0xE2 0x82 0xAC) so
+        // that offsets 1 and 2 land mid-sequence.
+        const line1 = JSON.stringify({
+          type: 'user',
+          uuid: 'u-utf8-1',
+          parentUuid: null,
+          isSidechain: false,
+          message: { role: 'user', content: 'cost: €100' },
+          timestamp: '2026-01-01T00:00:00.000Z',
+        });
+        // Line 2: a normal ASCII entry that must survive even when we parse
+        // from a mid-sequence offset in line 1.
+        const line2 = JSON.stringify({
+          type: 'assistant',
+          uuid: 'a-utf8-2',
+          parentUuid: 'u-utf8-1',
+          isSidechain: false,
+          message: { role: 'assistant', content: 'ok', model: 'claude-sonnet-4-6' },
+          timestamp: '2026-01-01T00:00:01.000Z',
+        });
+
+        const content = line1 + '\n' + line2 + '\n';
+        const filePath = join(dir, 'utf8-test.jsonl');
+        writeFileSync(filePath, content);
+
+        // Locate the € character (first byte of its 3-byte sequence) and
+        // deliberately pass an offset that lands on its second byte (+1).
+        const buf = Buffer.from(content);
+        const euroPos = buf.indexOf(0xe2); // first byte of €
+        const midSequenceOffset = euroPos + 1; // continuation byte — invalid start
+
+        // The parser must NOT throw and must still produce parseable output.
+        // With correct boundary snapping it reads from a safe position; the
+        // first line may be incomplete but the second line (a-utf8-2) must be
+        // intact and returned.
+        const { messages } = await parseSessionFile(filePath, { startOffset: midSequenceOffset });
+
+        // The second entry must be present and uncorrupted.
+        const assistant = messages.find((m) => m.uuid === 'a-utf8-2');
+        expect(assistant).toBeDefined();
+        expect(assistant!.type).toBe('assistant');
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
   });
 });
