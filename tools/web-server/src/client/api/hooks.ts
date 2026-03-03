@@ -173,6 +173,8 @@ export interface StageDetail extends StageListItem {
   depends_on: DependencyItem[];
   depended_on_by: DependencyItem[];
   checklists: ChecklistData[];
+  body: string;
+  frontmatter_fields: Record<string, unknown>;
 }
 
 // Graph
