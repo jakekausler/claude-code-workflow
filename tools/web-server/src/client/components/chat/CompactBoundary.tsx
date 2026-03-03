@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, memo } from 'react';
 import { Layers, ChevronRight } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -30,7 +30,7 @@ interface Props {
   compactGroup: CompactGroup;
 }
 
-export function CompactBoundary({ compactGroup }: Props) {
+export const CompactBoundary = memo(function CompactBoundary({ compactGroup }: Props) {
   const [expanded, setExpanded] = useState(false);
   const { summary, tokenDelta, startingPhaseNumber, timestamp } = compactGroup;
   const hasSummary = !!summary;
@@ -86,4 +86,4 @@ export function CompactBoundary({ compactGroup }: Props) {
       )}
     </div>
   );
-}
+});

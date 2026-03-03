@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, memo } from 'react';
 import { User } from 'lucide-react';
 import ReactMarkdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -119,7 +119,7 @@ function createMarkdownComponents(knownPaths: Set<string>): Components {
   };
 }
 
-export function UserChatGroup({ userGroup }: Props) {
+export const UserChatGroup = memo(function UserChatGroup({ userGroup }: Props) {
   const [expanded, setExpanded] = useState(false);
   const { content, timestamp } = userGroup;
   const text = content.rawText ?? content.text ?? '';
@@ -179,4 +179,4 @@ export function UserChatGroup({ userGroup }: Props) {
       </div>
     </div>
   );
-}
+});

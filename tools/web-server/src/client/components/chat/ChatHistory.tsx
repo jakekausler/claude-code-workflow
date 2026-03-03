@@ -1,4 +1,4 @@
-import { useRef, useEffect, useCallback } from 'react';
+import { useRef, useEffect, useCallback, memo } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { AIChatGroup } from './AIChatGroup.js';
 import { UserChatGroup } from './UserChatGroup.js';
@@ -79,7 +79,7 @@ function itemKey(item: ChatItem, index: number): string {
   return `${item.type}-${item.group.id}-${index}`;
 }
 
-function ItemRenderer({ item, contextStats, totalPhases }: {
+const ItemRenderer = memo(function ItemRenderer({ item, contextStats, totalPhases }: {
   item: ChatItem;
   contextStats?: Map<string, ContextStats>;
   totalPhases?: number;
@@ -102,7 +102,7 @@ function ItemRenderer({ item, contextStats, totalPhases }: {
     default:
       return null;
   }
-}
+});
 
 function VirtualizedItemList({
   parentRef,

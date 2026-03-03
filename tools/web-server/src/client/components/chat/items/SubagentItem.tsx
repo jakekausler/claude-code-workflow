@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, memo } from 'react';
 import {
   ChevronRight,
   CheckCircle2,
@@ -94,7 +94,7 @@ function extractLastUsage(messages: ParsedMessage[]): UsageMetadata | null {
   return null;
 }
 
-export function SubagentItem({ process, depth = 0 }: Props) {
+export const SubagentItem = memo(function SubagentItem({ process, depth = 0 }: Props) {
   const expanded = useSessionViewStore((s) => s.expandedSubagents.has(process.id));
   const toggleSubagent = useSessionViewStore((s) => s.toggleSubagent);
   const showTrace = useSessionViewStore((s) => s.expandedSubagentTraces.has(process.id));
@@ -323,7 +323,7 @@ export function SubagentItem({ process, depth = 0 }: Props) {
       )}
     </div>
   );
-}
+});
 
 // ─── Execution Trace Item Renderer ───────────────────────────────────────────
 

@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { Components } from 'react-markdown';
@@ -65,7 +66,7 @@ interface Props {
   content: string;
 }
 
-export function TextItem({ content }: Props) {
+export const TextItem = memo(function TextItem({ content }: Props) {
   return (
     <div className="prose prose-sm prose-slate max-w-none">
       <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
@@ -73,4 +74,4 @@ export function TextItem({ content }: Props) {
       </ReactMarkdown>
     </div>
   );
-}
+});

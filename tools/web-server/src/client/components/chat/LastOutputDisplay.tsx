@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { CheckCircle2, FileCheck, XCircle } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -48,7 +49,7 @@ interface Props {
   lastOutput: AIGroupLastOutput | null;
 }
 
-export function LastOutputDisplay({ lastOutput }: Props) {
+export const LastOutputDisplay = memo(function LastOutputDisplay({ lastOutput }: Props) {
   if (!lastOutput) return null;
 
   switch (lastOutput.type) {
@@ -132,4 +133,4 @@ export function LastOutputDisplay({ lastOutput }: Props) {
     default:
       return null;
   }
-}
+});

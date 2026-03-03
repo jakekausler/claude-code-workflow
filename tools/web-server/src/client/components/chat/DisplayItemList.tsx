@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { ThinkingItem } from './items/ThinkingItem.js';
 import { TextItem } from './items/TextItem.js';
 import { LinkedToolItemDisplay } from './items/LinkedToolItemDisplay.js';
@@ -16,7 +17,7 @@ function displayItemKey(item: AIGroupDisplayItem, index: number): string {
   }
 }
 
-export function DisplayItemList({ items }: Props) {
+export const DisplayItemList = memo(function DisplayItemList({ items }: Props) {
   return (
     <div className="space-y-1">
       {items.map((item, i) => (
@@ -24,9 +25,9 @@ export function DisplayItemList({ items }: Props) {
       ))}
     </div>
   );
-}
+});
 
-function DisplayItemRenderer({ item }: { item: AIGroupDisplayItem }) {
+const DisplayItemRenderer = memo(function DisplayItemRenderer({ item }: { item: AIGroupDisplayItem }) {
   switch (item.type) {
     case 'thinking':
       return <ThinkingItem content={item.content} tokenCount={item.tokenCount} />;
@@ -68,4 +69,4 @@ function DisplayItemRenderer({ item }: { item: AIGroupDisplayItem }) {
     default:
       return null;
   }
-}
+});

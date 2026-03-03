@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, memo } from 'react';
 import { Bot, ChevronRight, Clock } from 'lucide-react';
 import { enhanceAIGroup } from '../../utils/ai-group-enhancer.js';
 import { DisplayItemList } from './DisplayItemList.js';
@@ -27,7 +27,7 @@ const MODEL_COLORS: Record<string, string> = {
   haiku: 'text-emerald-700 bg-emerald-100',
 };
 
-export function AIChatGroup({ aiGroup, contextStats, totalPhases, precedingSlash, claudeMdStats }: Props) {
+export const AIChatGroup = memo(function AIChatGroup({ aiGroup, contextStats, totalPhases, precedingSlash, claudeMdStats }: Props) {
   const expanded = useSessionViewStore((s) => s.expandedGroups.has(aiGroup.id));
   const toggleGroup = useSessionViewStore((s) => s.toggleGroup);
 
@@ -101,7 +101,7 @@ export function AIChatGroup({ aiGroup, contextStats, totalPhases, precedingSlash
       </div>
     </div>
   );
-}
+});
 
 function categoryBreakdown(stats: ContextStats) {
   const cats = stats.turnTokens;

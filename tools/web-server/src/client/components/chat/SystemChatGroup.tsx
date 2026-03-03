@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { Terminal } from 'lucide-react';
 import { formatTimestampLong } from '../../utils/session-formatters.js';
 import type { SystemGroup } from '../../types/groups.js';
@@ -6,7 +7,7 @@ interface Props {
   systemGroup: SystemGroup;
 }
 
-export function SystemChatGroup({ systemGroup }: Props) {
+export const SystemChatGroup = memo(function SystemChatGroup({ systemGroup }: Props) {
   const { commandOutput, timestamp } = systemGroup;
   const cleaned = commandOutput.replace(/\x1B\[[0-9;]*m/g, '');
   if (!cleaned.trim()) return null;
@@ -22,4 +23,4 @@ export function SystemChatGroup({ systemGroup }: Props) {
       </div>
     </div>
   );
-}
+});
