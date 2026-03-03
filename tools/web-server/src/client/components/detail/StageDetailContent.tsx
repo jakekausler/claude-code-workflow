@@ -167,7 +167,7 @@ export function StageDetailContent({ stageId }: StageDetailContentProps) {
                 <PhaseSection
                   key={phase.name}
                   title={phase.name}
-                  content=""
+                  content={stage.phase_contents?.[phase.name] ?? ''}
                   isComplete={phase.isComplete}
                   defaultExpanded={!phase.isComplete}
                 />

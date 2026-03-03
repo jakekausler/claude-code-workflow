@@ -175,6 +175,7 @@ export interface StageDetail extends StageListItem {
   checklists: ChecklistData[];
   body: string;
   frontmatter_fields: Record<string, unknown>;
+  phase_contents: Record<string, string>;
 }
 
 // Graph

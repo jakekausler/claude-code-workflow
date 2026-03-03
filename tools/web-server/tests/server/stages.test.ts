@@ -189,4 +189,75 @@ describe('stages API', () => {
 
     expect(response.headers['content-type']).toMatch(/application\/json/);
   });
+
+  it('GET /api/stages/:id returns phase_contents as empty object when no sibling files exist', async () => {
+    const response = await app.inject({
+      method: 'GET',
+      url: `/api/stages/${SEED_IDS.STAGE_LOGIN_FORM}`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body);
+    expect(body).toHaveProperty('phase_contents');
+    expect(typeof body.phase_contents).toBe('object');
+    expect(Object.keys(body.phase_contents)).toHaveLength(0);
+  });
+
+  it('GET /api/stages/:id returns phase_contents populated when sibling files exist', async () => {
+    // Create a sibling file for the "Build" phase next to STAGE-001-001-002.md
+    const stageDir = path.join(
+      tmpDir,
+      'epics',
+      SEED_IDS.EPIC_AUTH,
+      SEED_IDS.TICKET_LOGIN,
+    );
+    fs.mkdirSync(stageDir, { recursive: true });
+
+    const mainFile = path.join(stageDir, `${SEED_IDS.STAGE_AUTH_API}.md`);
+    fs.writeFileSync(mainFile, '---\nid: STAGE-001-001-002\n---\nMain body\n');
+
+    const buildFile = path.join(stageDir, `${SEED_IDS.STAGE_AUTH_API}-build.md`);
+    fs.writeFileSync(buildFile, '# Build Notes\nSome build content here\n');
+
+    const response = await app.inject({
+      method: 'GET',
+      url: `/api/stages/${SEED_IDS.STAGE_AUTH_API}`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body);
+    expect(body.phase_contents).toHaveProperty('Build');
+    expect(body.phase_contents['Build']).toContain('Build Notes');
+    expect(body.phase_contents['Build']).toContain('Some build content here');
+  });
+
+  it('GET /api/stages/:id phase_contents ignores sibling files with empty content', async () => {
+    const stageDir = path.join(
+      tmpDir,
+      'epics',
+      SEED_IDS.EPIC_AUTH,
+      SEED_IDS.TICKET_LOGIN,
+    );
+    fs.mkdirSync(stageDir, { recursive: true });
+
+    const mainFile = path.join(stageDir, `${SEED_IDS.STAGE_AUTH_API}.md`);
+    fs.writeFileSync(mainFile, '---\nid: STAGE-001-001-002\n---\nMain\n');
+
+    // Empty sibling file (frontmatter only, no body)
+    const emptyFile = path.join(stageDir, `${SEED_IDS.STAGE_AUTH_API}-design.md`);
+    fs.writeFileSync(emptyFile, '---\ntitle: Design\n---\n');
+
+    // Non-empty sibling file
+    const buildFile = path.join(stageDir, `${SEED_IDS.STAGE_AUTH_API}-build.md`);
+    fs.writeFileSync(buildFile, 'Build content\n');
+
+    const response = await app.inject({
+      method: 'GET',
+      url: `/api/stages/${SEED_IDS.STAGE_AUTH_API}`,
+    });
+
+    const body = JSON.parse(response.body);
+    expect(body.phase_contents).not.toHaveProperty('Design');
+    expect(body.phase_contents).toHaveProperty('Build');
+  });
 });
