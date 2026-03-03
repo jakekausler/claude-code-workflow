@@ -9,6 +9,7 @@ import { TicketDetail } from './pages/TicketDetail.js';
 import { StageDetail } from './pages/StageDetail.js';
 import { SessionDetail } from './pages/SessionDetail.js';
 import { DependencyGraph } from './pages/DependencyGraph.js';
+import { Settings } from './pages/Settings.js';
 import { useInteractionSSE } from './api/interaction-hooks.js';
 import { useSessionMap } from './api/use-session-map.js';
 import { InteractionOverlay } from './components/interaction/InteractionOverlay.js';
@@ -40,6 +41,7 @@ function AppContent() {
               element={<SessionDetail />}
             />
             <Route path="/graph" element={<DependencyGraph />} />
+            <Route path="/settings" element={<Settings />} />
           </Routes>
         </Layout>
       </BrowserRouter>
