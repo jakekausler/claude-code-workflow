@@ -19,3 +19,7 @@ export { runMigrations } from './hosted/db/migrate.js';
 // RBAC
 export { RoleService, type RoleName, ROLE_HIERARCHY, requireRole, extractRepoId } from './hosted/rbac/index.js';
 export { registerRbacRoutes } from './hosted/rbac/index.js';
+
+// Teams
+export { TeamService, type Team, type TeamMember, type TeamRepoAccess } from './hosted/teams/index.js';
+export { registerTeamRoutes } from './hosted/teams/index.js';

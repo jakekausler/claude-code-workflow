@@ -13,6 +13,7 @@ import type { DeploymentContext } from './deployment/index.js';
 import { LocalDeploymentContext } from './deployment/index.js';
 import { HostedDeploymentContext } from './deployment/index.js';
 import { RoleService, registerRbacRoutes } from './deployment/index.js';
+import { TeamService, registerTeamRoutes } from './deployment/index.js';
 import { boardRoutes } from './routes/board.js';
 import { epicRoutes } from './routes/epics.js';
 import { ticketRoutes } from './routes/tickets.js';
@@ -285,11 +286,14 @@ export async function createServer(
 
   await app.register(searchRoutes);
 
-  // RBAC routes — only in hosted mode (requires PostgreSQL pool)
+  // RBAC and Team routes — only in hosted mode (requires PostgreSQL pool)
   if (deploymentContext.mode === 'hosted') {
     const hostedCtx = deploymentContext as HostedDeploymentContext;
     const roleService = new RoleService(hostedCtx.getPool());
     registerRbacRoutes(app, roleService);
+
+    const teamService = new TeamService(hostedCtx.getPool());
+    registerTeamRoutes(app, teamService);
   }
 
   // --- Static serving / dev proxy ---

@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Layers, GitBranch, GitFork, X, Settings as SettingsIcon, Download } from 'lucide-react';
+import { LayoutDashboard, Layers, GitBranch, GitFork, X, Settings as SettingsIcon, Download, Users } from 'lucide-react';
 import { useSidebarStore } from '../../store/sidebar-store.js';
 
 const navItems = [
@@ -7,6 +7,7 @@ const navItems = [
   { to: '/board', label: 'Board', icon: Layers },
   { to: '/graph', label: 'Dependency Graph', icon: GitBranch },
   { to: '/branches', label: 'Branch Hierarchy', icon: GitFork },
+  { to: '/teams', label: 'Teams', icon: Users },
   { to: '/settings', label: 'Settings', icon: SettingsIcon },
   { to: '/import', label: 'Import Issues', icon: Download },
 ];
