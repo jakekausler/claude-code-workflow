@@ -364,6 +364,41 @@ describe('FileWatcher', () => {
     });
   });
 
+  // ─── Gap #5: Non-atomic parse+offset update ─────────────────────────────
+  // If the 'file-change' emit throws the offset must NOT advance, so the
+  // next catch-up scan retries the same byte range rather than silently
+  // skipping it.
+  describe('atomic offset update on emit failure', () => {
+    it('retains previous offset when file-change emit throws', async () => {
+      const projectDir = join(tempDir, 'proj');
+      mkdirSync(projectDir, { recursive: true });
+
+      const content = '{"line":1}\n{"line":2}\n';
+      const filePath = join(projectDir, 'session.jsonl');
+      writeFileSync(filePath, content);
+
+      watcher = new FileWatcher({ rootDir: tempDir });
+
+      // Register a listener that throws on the first call to simulate a
+      // downstream parse failure during emit handling.
+      let callCount = 0;
+      watcher.on('file-change', () => {
+        callCount++;
+        if (callCount === 1) {
+          throw new Error('simulated parse failure');
+        }
+      });
+
+      // First scan: emit throws → offset must remain 0.
+      await watcher.catchUpScan();
+      expect(watcher.getOffset(filePath)).toBe(0);
+
+      // Second scan: emit succeeds → offset must now equal file size.
+      await watcher.catchUpScan();
+      expect(watcher.getOffset(filePath)).toBe(Buffer.byteLength(content));
+    });
+  });
+
   describe('max depth guard', () => {
     it('does not recurse beyond max depth during catch-up scan', async () => {
       // Create a directory tree deeper than MAX_SCAN_DEPTH (4)
