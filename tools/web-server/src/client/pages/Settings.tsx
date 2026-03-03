@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react';
+import { useCurrentUser } from '../api/hooks.js';
+import { can } from '../utils/permissions.js';
 
 const STORAGE_KEY = 'ccw-settings';
 
@@ -451,20 +453,29 @@ function PreferencesSection({ initial }: { initial: PreferencesSettings }) {
 // --- Main page ---
 
 export function Settings() {
+  const { data: me } = useCurrentUser();
   const [settings, setSettings] = useState<AppSettings>(defaultSettings);
 
   useEffect(() => {
     setSettings(loadSettings());
   }, []);
 
+  const canAdmin = can(me, 'settings:serviceConnections');
+  const canPreferences = me === undefined || can(me, 'settings:userPreferences');
+
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold text-slate-900">Settings</h1>
-      <JiraSection initial={settings.jira} />
-      <GitHubSection initial={settings.github} />
-      <GitLabSection initial={settings.gitlab} />
-      <SlackSection initial={settings.slack} />
-      <PreferencesSection initial={settings.preferences} />
+      {canAdmin && <JiraSection initial={settings.jira} />}
+      {canAdmin && <GitHubSection initial={settings.github} />}
+      {canAdmin && <GitLabSection initial={settings.gitlab} />}
+      {canAdmin && <SlackSection initial={settings.slack} />}
+      {canPreferences && <PreferencesSection initial={settings.preferences} />}
+      {!canAdmin && !canPreferences && me !== undefined && (
+        <div className="rounded-lg border border-slate-200 bg-slate-50 p-6 text-center">
+          <p className="text-sm text-slate-500">You don&apos;t have permission to view settings.</p>
+        </div>
+      )}
     </div>
   );
 }

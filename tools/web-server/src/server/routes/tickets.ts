@@ -5,6 +5,12 @@ import { parseRefinementType } from './utils.js';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import matter from 'gray-matter';
+import type { RoleService } from '../deployment/hosted/rbac/role-service.js';
+import { requireRole } from '../deployment/hosted/rbac/rbac-middleware.js';
+
+export interface TicketRouteOptions {
+  roleService?: RoleService;
+}
 
 /** Zod schema for the :id route parameter. */
 const ticketIdSchema = z.string().regex(/^TICKET-\d{3}-\d{3}$/);
@@ -12,7 +18,8 @@ const ticketIdSchema = z.string().regex(/^TICKET-\d{3}-\d{3}$/);
 /** Zod schema for the optional query parameters. */
 const ticketQuerySchema = z.object({ epic: z.string().optional() });
 
-const ticketPlugin: FastifyPluginCallback = (app, _opts, done) => {
+const ticketPlugin: FastifyPluginCallback<TicketRouteOptions> = (app, opts, done) => {
+  const { roleService } = opts;
   /**
    * GET /api/tickets — List all tickets with enrichment.
    */
@@ -123,7 +130,11 @@ const ticketPlugin: FastifyPluginCallback = (app, _opts, done) => {
     description: z.string().optional(),
   });
 
-  app.post('/api/tickets', async (request, reply) => {
+  const postTicketOpts = roleService
+    ? { preHandler: requireRole(roleService, 'developer') }
+    : {};
+
+  app.post('/api/tickets', postTicketOpts, async (request, reply) => {
     if (!app.dataService) {
       return reply.status(503).send({ error: 'Database not initialized' });
     }

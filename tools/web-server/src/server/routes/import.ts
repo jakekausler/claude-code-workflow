@@ -4,6 +4,12 @@ import { z } from 'zod';
 import { existsSync, readdirSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
 import { join, dirname } from 'path';
 import matter from 'gray-matter';
+import type { RoleService } from '../deployment/hosted/rbac/role-service.js';
+import { requireRole } from '../deployment/hosted/rbac/rbac-middleware.js';
+
+export interface ImportRouteOptions {
+  roleService?: RoleService;
+}
 
 const githubQuerySchema = z.object({
   owner: z.string().min(1),
@@ -75,9 +81,21 @@ function findExistingSourceIds(ticketsDir: string, provider: string): Set<string
   return sourceIds;
 }
 
-const importPlugin: FastifyPluginCallback = (app, _opts, done) => {
+const importPlugin: FastifyPluginCallback<ImportRouteOptions> = (app, opts, done) => {
+  const { roleService } = opts;
+
+  // Config-level routes (fetch issues for display) require Developer role
+  const fetchOpts = roleService
+    ? { preHandler: requireRole(roleService, 'developer') }
+    : {};
+
+  // Import trigger requires Developer role
+  const importOpts = roleService
+    ? { preHandler: requireRole(roleService, 'developer') }
+    : {};
+
   // GET /api/import/github/issues
-  app.get('/api/import/github/issues', async (request, reply) => {
+  app.get('/api/import/github/issues', fetchOpts, async (request, reply) => {
     const parseResult = githubQuerySchema.safeParse(request.query);
     if (!parseResult.success) {
       return reply.status(400).send({ error: 'Invalid parameters', details: parseResult.error.issues });
@@ -117,7 +135,7 @@ const importPlugin: FastifyPluginCallback = (app, _opts, done) => {
   });
 
   // GET /api/import/gitlab/issues
-  app.get('/api/import/gitlab/issues', async (request, reply) => {
+  app.get('/api/import/gitlab/issues', fetchOpts, async (request, reply) => {
     const parseResult = gitlabQuerySchema.safeParse(request.query);
     if (!parseResult.success) {
       return reply.status(400).send({ error: 'Invalid parameters', details: parseResult.error.issues });
@@ -155,7 +173,7 @@ const importPlugin: FastifyPluginCallback = (app, _opts, done) => {
   });
 
   // GET /api/import/jira/issues
-  app.get('/api/import/jira/issues', async (request, reply) => {
+  app.get('/api/import/jira/issues', fetchOpts, async (request, reply) => {
     const parseResult = jiraQuerySchema.safeParse(request.query);
     if (!parseResult.success) {
       return reply.status(400).send({ error: 'Invalid parameters', details: parseResult.error.issues });
@@ -207,7 +225,7 @@ const importPlugin: FastifyPluginCallback = (app, _opts, done) => {
   });
 
   // POST /api/import/issues — create ticket files
-  app.post('/api/import/issues', async (request, reply) => {
+  app.post('/api/import/issues', importOpts, async (request, reply) => {
     const parseResult = importBodySchema.safeParse(request.body);
     if (!parseResult.success) {
       return reply.status(400).send({ error: 'Invalid parameters', details: parseResult.error.issues });

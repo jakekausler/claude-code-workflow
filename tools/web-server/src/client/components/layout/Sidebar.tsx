@@ -1,20 +1,23 @@
 import { Link, useLocation } from 'react-router-dom';
 import { LayoutDashboard, Layers, GitBranch, GitFork, X, Settings as SettingsIcon, Download, Users } from 'lucide-react';
 import { useSidebarStore } from '../../store/sidebar-store.js';
-
-const navItems = [
-  { to: '/', label: 'Dashboard', icon: LayoutDashboard },
-  { to: '/board', label: 'Board', icon: Layers },
-  { to: '/graph', label: 'Dependency Graph', icon: GitBranch },
-  { to: '/branches', label: 'Branch Hierarchy', icon: GitFork },
-  { to: '/teams', label: 'Teams', icon: Users },
-  { to: '/settings', label: 'Settings', icon: SettingsIcon },
-  { to: '/import', label: 'Import Issues', icon: Download },
-];
+import { useCurrentUser } from '../../api/hooks.js';
+import { can } from '../../utils/permissions.js';
 
 export function Sidebar({ className = '' }: { className?: string }) {
   const location = useLocation();
   const close = useSidebarStore((s) => s.close);
+  const { data: me } = useCurrentUser();
+
+  const navItems = [
+    { to: '/', label: 'Dashboard', icon: LayoutDashboard, show: true },
+    { to: '/board', label: 'Board', icon: Layers, show: true },
+    { to: '/graph', label: 'Dependency Graph', icon: GitBranch, show: true },
+    { to: '/branches', label: 'Branch Hierarchy', icon: GitFork, show: true },
+    { to: '/teams', label: 'Teams', icon: Users, show: can(me, 'settings:teamManagement') },
+    { to: '/settings', label: 'Settings', icon: SettingsIcon, show: true },
+    { to: '/import', label: 'Import Issues', icon: Download, show: can(me, 'import:trigger') },
+  ].filter((item) => item.show);
 
   return (
     <aside className={`flex w-64 flex-col bg-slate-900 text-white ${className}`}>

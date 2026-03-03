@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { apiFetch } from './client.js';
 import type { ParsedSession, SessionMetrics, Process } from '@server/types/jsonl.js';
+import type { MeResponse } from '../utils/permissions.js';
 
 // ---------------------------------------------------------------------------
 // Response Types
@@ -451,5 +452,18 @@ export function useTicketSessions(ticketId: string) {
     queryFn: () =>
       apiFetch<{ sessions: TicketSessionEntry[] }>(`/tickets/${ticketId}/sessions`),
     enabled: !!ticketId,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Current user / permissions
+// ---------------------------------------------------------------------------
+
+/** Fetch the current user and their effective role from /api/me. */
+export function useCurrentUser() {
+  return useQuery({
+    queryKey: ['me'],
+    queryFn: () => apiFetch<MeResponse>('/me'),
+    staleTime: 5 * 60 * 1000, // 5 minutes
   });
 }

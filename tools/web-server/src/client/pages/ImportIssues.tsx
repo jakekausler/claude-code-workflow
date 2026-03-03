@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { Github, GitMerge, Search, Check, AlertCircle, Loader2, Download, Layers } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { apiFetch } from '../api/client.js';
+import { useCurrentUser } from '../api/hooks.js';
+import { can } from '../utils/permissions.js';
 
 const STORAGE_KEY = 'ccw-settings';
 
@@ -36,6 +38,8 @@ interface RemoteIssue {
 interface EpicOption { id: string; title: string }
 
 export function ImportIssues() {
+  const { data: me } = useCurrentUser();
+  const canFetch = can(me, 'import:trigger');
   const settings = loadSettings();
 
   const [provider, setProvider] = useState<'github' | 'gitlab' | 'jira'>('github');
@@ -158,6 +162,19 @@ export function ImportIssues() {
       setImporting(false);
     }
   };
+
+  if (!canFetch && me !== undefined) {
+    return (
+      <div className="mx-auto max-w-3xl space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">Import Issues</h1>
+        </div>
+        <div className="rounded-lg border border-slate-200 bg-slate-50 p-6 text-center">
+          <p className="text-sm text-slate-500">You don&apos;t have permission to import issues.</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
