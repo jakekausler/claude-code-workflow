@@ -21,6 +21,7 @@ import { repoRoutes } from './routes/repos.js';
 import { eventRoutes, broadcastEvent, setBroadcaster } from './routes/events.js';
 import { interactionRoutes } from './routes/interaction.js';
 import { orchestratorRoutes, computeWaitingType } from './routes/orchestrator.js';
+import { searchRoutes } from './routes/search.js';
 
 interface SessionStatusSSE {
   stageId: string;
@@ -277,6 +278,8 @@ export async function createServer(
   if (orchestratorClient) {
     await app.register(interactionRoutes, { orchestratorClient });
   }
+
+  await app.register(searchRoutes);
 
   // --- Static serving / dev proxy ---
   if (!isDev) {

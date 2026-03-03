@@ -14,6 +14,7 @@ import { BranchHierarchy } from './pages/BranchHierarchy.js';
 import { useInteractionSSE } from './api/interaction-hooks.js';
 import { useSessionMap } from './api/use-session-map.js';
 import { InteractionOverlay } from './components/interaction/InteractionOverlay.js';
+import { GlobalSearch } from './components/search/GlobalSearch.js';
 
 function AppContent() {
   // Hooks that require QueryClientProvider context must live here, not in App()
@@ -23,6 +24,7 @@ function AppContent() {
   return (
     <>
       <InteractionOverlay />
+      <GlobalSearch />
       <BrowserRouter>
         <Layout>
           <Routes>
