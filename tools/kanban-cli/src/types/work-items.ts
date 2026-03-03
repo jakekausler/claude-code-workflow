@@ -64,6 +64,22 @@ export interface Ticket {
 }
 
 /**
+ * A single item in a checklist.
+ */
+export interface ChecklistItem {
+  text: string;
+  checked: boolean;
+}
+
+/**
+ * A named checklist containing ordered items.
+ */
+export interface Checklist {
+  title: string;
+  items: ChecklistItem[];
+}
+
+/**
  * A parent stage whose MR must merge before this stage's MR can proceed.
  */
 export interface PendingMergeParent {
@@ -106,6 +122,7 @@ export interface Stage {
   pending_merge_parents: PendingMergeParent[];
   is_draft: boolean;
   mr_target_branch: string | null;
+  checklists: Checklist[];
   file_path: string;
 }
 

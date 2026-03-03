@@ -1,8 +1,9 @@
 import matter from 'gray-matter';
-import type { Epic, Ticket, Stage, WorkItemType, PendingMergeParent, JiraLink } from '../types/work-items.js';
+import type { Epic, Ticket, Stage, WorkItemType, PendingMergeParent, JiraLink, Checklist } from '../types/work-items.js';
 import {
   pendingMergeParentSchema,
   jiraLinkSchema,
+  checklistSchema,
 } from './frontmatter-schemas.js';
 
 /**
@@ -112,6 +113,16 @@ export function parseStageFrontmatter(content: string, filePath: string): Stage 
     }
   });
 
+  // Parse checklists with Zod validation, defaulting to []
+  const rawChecklists = Array.isArray(data.checklists) ? data.checklists : [];
+  const checklists: Checklist[] = rawChecklists.map((item: unknown) => {
+    try {
+      return checklistSchema.parse(item);
+    } catch (e) {
+      throw new Error(`Invalid checklists entry in ${filePath}: ${e instanceof Error ? e.message : e}`);
+    }
+  });
+
   return {
     id: requireField<string>(data, 'id', filePath),
     ticket: requireField<string>(data, 'ticket', filePath),
@@ -129,6 +140,7 @@ export function parseStageFrontmatter(content: string, filePath: string): Stage 
     pending_merge_parents: pendingMergeParents,
     is_draft: data.is_draft === true ? true : false,
     mr_target_branch: (data.mr_target_branch as string) ?? null,
+    checklists,
     file_path: filePath,
   };
 }

@@ -155,6 +155,16 @@ export interface DependencyItem {
   resolved: boolean;
 }
 
+export interface ChecklistItem {
+  text: string;
+  checked: boolean;
+}
+
+export interface ChecklistData {
+  title: string;
+  items: ChecklistItem[];
+}
+
 export interface StageDetail extends StageListItem {
   pr_number: number | null;
   is_draft: boolean;
@@ -162,6 +172,7 @@ export interface StageDetail extends StageListItem {
   mr_target_branch: string | null;
   depends_on: DependencyItem[];
   depended_on_by: DependencyItem[];
+  checklists: ChecklistData[];
 }
 
 // Graph

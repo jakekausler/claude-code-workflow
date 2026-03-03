@@ -143,6 +143,21 @@ refinement_type:
 depends_on:
   - STAGE-001-001-002
 priority: 0
+checklists:
+  - title: "Pre-flight checks"
+    items:
+      - text: "Review PR"
+        checked: false
+      - text: "Run tests"
+        checked: true
+  - title: "Deployment steps"
+    items:
+      - text: "Update environment variables"
+        checked: false
+      - text: "Run database migration"
+        checked: false
+      - text: "Verify health endpoint"
+        checked: false
 ---
 
 ## Overview
