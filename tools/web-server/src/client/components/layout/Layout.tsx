@@ -30,7 +30,7 @@ export function Layout({ children }: LayoutProps) {
 
       <div className="flex flex-1 flex-col overflow-hidden">
         <Header />
-        <main className="flex-1 overflow-auto p-6">{children}</main>
+        <main className="flex-1 overflow-auto p-3 sm:p-4 md:p-6">{children}</main>
       </div>
       <DrawerHost />
     </div>

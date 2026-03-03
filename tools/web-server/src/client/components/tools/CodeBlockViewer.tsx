@@ -61,7 +61,7 @@ export function CodeBlockViewer({
   const displayFileName = getBaseName(fileName);
 
   return (
-    <div className="overflow-hidden rounded-lg border border-slate-700 shadow-sm">
+    <div className="overflow-hidden rounded-lg border border-slate-700 shadow-sm max-w-full">
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2 bg-slate-800 border-b border-slate-700">
         <div className="flex min-w-0 items-center gap-2">

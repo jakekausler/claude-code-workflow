@@ -115,7 +115,7 @@ export function SessionDetail() {
   const { metrics } = session;
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full overflow-x-hidden">
       {/* Top bar: session metadata */}
       <div className="flex items-center gap-4 px-4 py-3 border-b border-slate-200 bg-white">
         <button onClick={() => navigate(-1)} className="text-slate-400 hover:text-slate-600 transition-colors">
