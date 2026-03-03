@@ -11,6 +11,7 @@ import { SessionDetail } from './pages/SessionDetail.js';
 import { DependencyGraph } from './pages/DependencyGraph.js';
 import { Settings } from './pages/Settings.js';
 import { BranchHierarchy } from './pages/BranchHierarchy.js';
+import { ImportIssues } from './pages/ImportIssues.js';
 import { useInteractionSSE } from './api/interaction-hooks.js';
 import { useSessionMap } from './api/use-session-map.js';
 import { InteractionOverlay } from './components/interaction/InteractionOverlay.js';
@@ -46,6 +47,7 @@ function AppContent() {
             <Route path="/graph" element={<DependencyGraph />} />
             <Route path="/branches" element={<BranchHierarchy />} />
             <Route path="/settings" element={<Settings />} />
+            <Route path="/import" element={<ImportIssues />} />
           </Routes>
         </Layout>
       </BrowserRouter>
