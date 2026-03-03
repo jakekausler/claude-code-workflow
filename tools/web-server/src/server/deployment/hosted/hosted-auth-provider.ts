@@ -8,6 +8,7 @@ import type {
 import jwt from 'jsonwebtoken';
 import type { AuthProvider, User } from '../types.js';
 import type { PgPool } from './db/pg-client.js';
+import { RoleService } from './rbac/role-service.js';
 
 /** Shape of the access-token JWT payload. */
 interface AccessTokenPayload {
@@ -120,6 +121,10 @@ export class HostedAuthProvider implements AuthProvider {
 
     // 3. Upsert user + oauth_account
     const user = await this.upsertUser(ghUser);
+
+    // 3b. Bootstrap first user as global_admin
+    const roleService = new RoleService(this.pool);
+    await roleService.bootstrapFirstUser(user.id);
 
     // 4. Create auth session
     const sessionId = crypto.randomUUID();

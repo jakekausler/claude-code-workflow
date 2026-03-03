@@ -11,6 +11,8 @@ import type { SessionPipeline } from './services/session-pipeline.js';
 import { type FileWatcher, type FileChangeEvent } from './services/file-watcher.js';
 import type { DeploymentContext } from './deployment/index.js';
 import { LocalDeploymentContext } from './deployment/index.js';
+import { HostedDeploymentContext } from './deployment/index.js';
+import { RoleService, registerRbacRoutes } from './deployment/index.js';
 import { boardRoutes } from './routes/board.js';
 import { epicRoutes } from './routes/epics.js';
 import { ticketRoutes } from './routes/tickets.js';
@@ -282,6 +284,13 @@ export async function createServer(
   }
 
   await app.register(searchRoutes);
+
+  // RBAC routes — only in hosted mode (requires PostgreSQL pool)
+  if (deploymentContext.mode === 'hosted') {
+    const hostedCtx = deploymentContext as HostedDeploymentContext;
+    const roleService = new RoleService(hostedCtx.getPool());
+    registerRbacRoutes(app, roleService);
+  }
 
   // --- Static serving / dev proxy ---
   if (!isDev) {
