@@ -1,3 +1,4 @@
+import { memo, useCallback } from 'react';
 import { Bot, ChevronRight } from 'lucide-react';
 import { formatTimestamp, formatTokenCount, formatDuration } from '../../utils/session-formatters.js';
 import { findLastOutput } from '../../utils/last-output-detector.js';
@@ -51,11 +52,12 @@ function buildStepSummary(steps: SemanticStep[]): string {
   return parts.join(', ');
 }
 
-export function AIChunk({ chunk, chunkIndex }: Props) {
+export const AIChunk = memo(function AIChunk({ chunk, chunkIndex }: Props) {
   const { messages, timestamp } = chunk;
   const enhanced = isEnhanced(chunk);
   const { expandedGroups, toggleGroup } = useSessionViewStore();
   const isExpanded = expandedGroups.has(String(chunkIndex));
+  const handleToggle = useCallback(() => toggleGroup(String(chunkIndex)), [toggleGroup, chunkIndex]);
 
   // Build tool execution lookup from chunk messages
   const toolExecutions = new Map<string, ToolExecution>();
@@ -140,7 +142,7 @@ export function AIChunk({ chunk, chunkIndex }: Props) {
       {/* Clickable header bar */}
       <button
         type="button"
-        onClick={() => toggleGroup(String(chunkIndex))}
+        onClick={handleToggle}
         className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer select-none hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
       >
         {/* Left side: bot icon, model badge, step summary */}
@@ -187,7 +189,7 @@ export function AIChunk({ chunk, chunkIndex }: Props) {
       </div>
     </div>
   );
-}
+});
 
 function AIStepRenderer({
   step,

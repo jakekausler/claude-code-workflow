@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import {
   ChevronRight,
   CheckCircle2,
@@ -31,7 +32,7 @@ const toolIcons: Record<string, typeof FileText> = {
   Skill: Zap,
 };
 
-export function LinkedToolItem({ execution }: Props) {
+export const LinkedToolItem = memo(function LinkedToolItem({ execution }: Props) {
   const expanded = useSessionViewStore((s) => s.expandedTools.has(execution.toolCallId));
   const toggleTool = useSessionViewStore((s) => s.toggleTool);
   const { toolName, input, result, durationMs, isOrphaned } = execution;
@@ -84,4 +85,4 @@ export function LinkedToolItem({ execution }: Props) {
       )}
     </div>
   );
-}
+});

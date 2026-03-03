@@ -14,7 +14,7 @@ interface Props {
   totalPhases?: number;
 }
 
-const VIRTUALIZATION_THRESHOLD = 120;
+const VIRTUALIZATION_THRESHOLD = 50;
 const ESTIMATE_SIZE = 260;
 const OVERSCAN = 8;
 const NEAR_BOTTOM_PX = 100;
