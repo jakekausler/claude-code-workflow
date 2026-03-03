@@ -7,6 +7,8 @@ import { BashRenderer } from './BashRenderer.js';
 import { GlobRenderer } from './GlobRenderer.js';
 import { GrepRenderer } from './GrepRenderer.js';
 import { SkillRenderer } from './SkillRenderer.js';
+import { WebFetchRenderer } from './WebFetchRenderer.js';
+import { NotebookEditRenderer } from './NotebookEditRenderer.js';
 import { DefaultRenderer } from './DefaultRenderer.js';
 
 type ToolRendererComponent = ComponentType<{ execution: ToolExecution }>;
@@ -19,8 +21,8 @@ const rendererMap: Record<string, ToolRendererComponent> = {
   Glob: GlobRenderer,
   Grep: GrepRenderer,
   Skill: SkillRenderer,
-  NotebookEdit: DefaultRenderer,
-  WebFetch: DefaultRenderer,
+  NotebookEdit: NotebookEditRenderer,
+  WebFetch: WebFetchRenderer,
   WebSearch: DefaultRenderer,
 };
 
