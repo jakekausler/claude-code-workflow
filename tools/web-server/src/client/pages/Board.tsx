@@ -1,6 +1,6 @@
-import { useMemo, useCallback } from 'react';
+import { useMemo, useCallback, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { useBoard, useEpics, useTickets } from '../api/hooks.js';
+import { useBoard, useEpics, useTickets, useConvertTicket } from '../api/hooks.js';
 import { useBoardStore } from '../store/board-store.js';
 import type { SessionMapEntry } from '../store/board-store.js';
 import { useDrawerStore, type DrawerEntry } from '../store/drawer-store.js';
@@ -9,6 +9,7 @@ import { NewEpicButton } from '../components/board/NewEpicButton.js';
 import { BoardLayout } from '../components/board/BoardLayout.js';
 import { BoardColumn } from '../components/board/BoardColumn.js';
 import { BoardCard } from '../components/board/BoardCard.js';
+import { EpicSelectModal } from '../components/ticket/EpicSelectModal.js';
 import { slugToTitle, columnColor, statusColor } from '../utils/formatters.js';
 import { useSSE } from '../api/use-sse.js';
 import type { BoardStageItem, BoardTicketItem, BoardItem, EpicListItem, TicketListItem } from '../api/hooks.js';
@@ -52,6 +53,53 @@ export function Board() {
   const currentDrawerId = stack.length > 0 ? stack[stack.length - 1].id : null;
 
   const queryClient = useQueryClient();
+
+  // Conversion state — tracks which ticket is pending epic selection
+  const [convertingTicketId, setConvertingTicketId] = useState<string | null>(null);
+  const [convertingTicketEpicId, setConvertingTicketEpicId] = useState<string | null>(null);
+  const { mutate: convertTicket } = useConvertTicket();
+
+  function handleConvertClick(ticket: TicketListItem, e: React.MouseEvent) {
+    e.stopPropagation();
+    if (ticket.epic_id) {
+      // Epic already attached — launch conversion immediately
+      convertTicket(
+        { ticketId: ticket.id, epicId: ticket.epic_id },
+        {
+          onSuccess: () => {
+            open({ type: 'ticket', id: ticket.id });
+            void queryClient.invalidateQueries({ queryKey: ['board'] });
+            void queryClient.invalidateQueries({ queryKey: ['tickets'] });
+          },
+        },
+      );
+    } else {
+      // Need to pick an epic first
+      setConvertingTicketId(ticket.id);
+      setConvertingTicketEpicId(null);
+    }
+  }
+
+  function handleEpicSelected(epicId: string) {
+    if (!convertingTicketId) return;
+    const ticketId = convertingTicketId;
+    setConvertingTicketId(null);
+    setConvertingTicketEpicId(epicId);
+    convertTicket(
+      { ticketId, epicId },
+      {
+        onSuccess: () => {
+          open({ type: 'ticket', id: ticketId });
+          void queryClient.invalidateQueries({ queryKey: ['board'] });
+          void queryClient.invalidateQueries({ queryKey: ['tickets'] });
+          setConvertingTicketEpicId(null);
+        },
+        onError: () => {
+          setConvertingTicketEpicId(null);
+        },
+      },
+    );
+  }
 
   const handleSSE = useCallback(
     (_channel: string, _data: unknown) => {
@@ -136,8 +184,22 @@ export function Board() {
     return null;
   }, [currentDrawerId, columns, epicCards, convertedTickets]);
 
+  // Find to_convert tickets for the board column
+  const toConvertTickets: TicketListItem[] = tickets
+    ? tickets
+        .filter((t) => !t.has_stages && t.status === 'to_convert')
+        .sort((a, b) => a.id.localeCompare(b.id))
+    : [];
+
   return (
     <div>
+      {convertingTicketId && (
+        <EpicSelectModal
+          ticketId={convertingTicketId}
+          onConfirm={handleEpicSelected}
+          onCancel={() => setConvertingTicketId(null)}
+        />
+      )}
       <div className="mb-4 flex items-center justify-between">
         <h1 className="text-2xl font-bold text-slate-900">Board</h1>
         <NewEpicButton />
@@ -156,6 +218,15 @@ export function Board() {
             return (
               <BoardColumn key={col.slug} title={col.title} color={col.color} count={convertedTickets.length}>
                 {convertedTickets.map((ticket) => renderConvertedTicketCard(ticket, open, currentDrawerId))}
+              </BoardColumn>
+            );
+          }
+          if (col.slug === 'to_convert') {
+            return (
+              <BoardColumn key={col.slug} title={col.title} color={col.color} count={toConvertTickets.length}>
+                {toConvertTickets.map((ticket) =>
+                  renderToConvertTicketCard(ticket, open, currentDrawerId, handleConvertClick, convertingTicketEpicId === ticket.id)
+                )}
               </BoardColumn>
             );
           }
@@ -279,6 +350,35 @@ function renderConvertedTicketCard(
       badges={badges}
       isSelected={currentDrawerId === ticket.id}
       onClick={() => open({ type: 'ticket', id: ticket.id })}
+    />
+  );
+}
+
+function renderToConvertTicketCard(
+  ticket: TicketListItem,
+  open: (entry: DrawerEntry) => void,
+  currentDrawerId: string | null,
+  onConvert: (ticket: TicketListItem, e: React.MouseEvent) => void,
+  isConverting: boolean,
+) {
+  const badges: { label: string; color: string }[] = [];
+  if (ticket.jira_key) {
+    badges.push({ label: ticket.jira_key, color: '#3b82f6' });
+  }
+  if (isConverting) {
+    badges.push({ label: 'Converting…', color: '#6366f1' });
+  }
+
+  return (
+    <BoardCard
+      key={ticket.id}
+      id={ticket.id}
+      title={ticket.title}
+      subtitle={ticket.epic_id ?? undefined}
+      badges={badges.length > 0 ? badges : undefined}
+      isSelected={currentDrawerId === ticket.id}
+      onClick={() => open({ type: 'ticket', id: ticket.id })}
+      onConvert={isConverting ? undefined : (e) => onConvert(ticket, e)}
     />
   );
 }

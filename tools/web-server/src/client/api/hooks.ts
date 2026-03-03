@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation } from '@tanstack/react-query';
 import { apiFetch } from './client.js';
 import type { ParsedSession, SessionMetrics, Process } from '@server/types/jsonl.js';
 import type { MeResponse } from '../utils/permissions.js';
@@ -465,5 +465,24 @@ export function useCurrentUser() {
     queryKey: ['me'],
     queryFn: () => apiFetch<MeResponse>('/me'),
     staleTime: 5 * 60 * 1000, // 5 minutes
+  });
+}
+
+// Conversion ------------------------------------------------------------------
+
+export interface ConvertTicketResponse {
+  ticketId: string;
+  epicId: string;
+  status: 'conversion_started';
+}
+
+/** Trigger ticket-to-stage conversion via the orchestrator. */
+export function useConvertTicket() {
+  return useMutation({
+    mutationFn: ({ ticketId, epicId }: { ticketId: string; epicId: string }) =>
+      apiFetch<ConvertTicketResponse>(`/tickets/${ticketId}/convert`, {
+        method: 'POST',
+        body: JSON.stringify({ epicId }),
+      }),
   });
 }
