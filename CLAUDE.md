@@ -249,6 +249,32 @@ You are a subagent (not the main coordinating agent). As a subagent, you CAN and
 - Communicate with user
 - Spawn and coordinate subagents
 
+## Pull Request Workflow
+
+### Purpose
+
+PRs serve as a **transparency and review trail** for the project lead (jakekausler) when they return. Every meaningful change should go through a PR — not for gate-keeping, but for visibility into what happened and why.
+
+### Auto-merge Policy
+
+If you are confident in a PR (tests pass, lint clean, implementation is correct and self-contained), **merge it immediately after creation** without waiting for explicit instruction. Do not queue up multiple unmerged PRs unless they have unresolved dependencies or uncertainty.
+
+Signs you should merge immediately:
+- All tests pass and lint is clean
+- The change is well-scoped and matches the planned work
+- No architectural questions remain
+
+Signs you should leave it open for review:
+- The change involves a non-obvious design decision
+- You are uncertain about correctness
+- It touches security-sensitive code or shared interfaces
+
+### Branching
+
+- All PRs target `feat/ethan-week-march-2026` (the week's landing branch), not `main`
+- Branch names: `fix/`, `feat/`, `refactor/` prefix matching commit type
+- Delete branches after merge
+
 ## Quality Gates
 
 ### Definition of Done
