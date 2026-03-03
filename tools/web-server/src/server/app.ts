@@ -14,6 +14,7 @@ import { LocalDeploymentContext } from './deployment/index.js';
 import { HostedDeploymentContext } from './deployment/index.js';
 import { RoleService, registerRbacRoutes } from './deployment/index.js';
 import { TeamService, registerTeamRoutes } from './deployment/index.js';
+import { recordSessionLifecycle } from './services/newrelic-instrumentation.js';
 import { boardRoutes } from './routes/board.js';
 import { epicRoutes } from './routes/epics.js';
 import { ticketRoutes } from './routes/tickets.js';
@@ -149,6 +150,7 @@ export async function createServer(
     const requestStageMap = new Map<string, string>();
 
     oc.on('session-registered', (entry: SessionInfo) => {
+      recordSessionLifecycle('start', entry.sessionId, { stageId: entry.stageId });
       broadcastEvent('stage-transition', {
         stageId: entry.stageId,
         sessionId: entry.sessionId,
@@ -183,6 +185,7 @@ export async function createServer(
     });
 
     oc.on('session-ended', (entry: SessionInfo) => {
+      recordSessionLifecycle('complete', entry.sessionId, { stageId: entry.stageId });
       broadcastEvent('stage-transition', {
         stageId: entry.stageId,
         sessionId: entry.sessionId,

@@ -1,3 +1,4 @@
+import 'newrelic';
 import { join } from 'path';
 import os from 'os';
 import { createServer } from './app.js';
