@@ -1,6 +1,8 @@
 import type { FastifyPluginCallback } from 'fastify';
 import fp from 'fastify-plugin';
 import { z } from 'zod';
+import { existsSync, readFileSync } from 'node:fs';
+import matter from 'gray-matter';
 import { parseRefinementType } from './utils.js';
 
 /** Zod schema for the :id route parameter. */
@@ -89,6 +91,20 @@ const stagePlugin: FastifyPluginCallback = (app, _opts, done) => {
       resolved: d.resolved !== 0,
     });
 
+    // Read checklists from the stage file's frontmatter
+    let checklists: Array<{ title: string; items: Array<{ text: string; checked: boolean }> }> = [];
+    if (stage.file_path && existsSync(stage.file_path)) {
+      try {
+        const raw = readFileSync(stage.file_path, 'utf-8');
+        const { data } = matter(raw);
+        if (Array.isArray(data.checklists)) {
+          checklists = data.checklists;
+        }
+      } catch {
+        // If file read or parse fails, return empty checklists
+      }
+    }
+
     return reply.send({
       id: stage.id,
       title: stage.title ?? '',
@@ -110,6 +126,7 @@ const stagePlugin: FastifyPluginCallback = (app, _opts, done) => {
       file_path: stage.file_path,
       depends_on: depsFrom.map(mapDep),
       depended_on_by: depsTo.map(mapDep),
+      checklists,
     });
   });
 

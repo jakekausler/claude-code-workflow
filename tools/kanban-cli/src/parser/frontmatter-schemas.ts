@@ -19,9 +19,19 @@ export const jiraLinkSchema = z.object({
   mime_type: z.string().optional(),
 });
 
+export const checklistItemSchema = z.object({
+  text: z.string(),
+  checked: z.boolean(),
+});
+
+export const checklistSchema = z.object({
+  title: z.string(),
+  items: z.array(checklistItemSchema),
+});
+
 // ─── Full-document schemas ──────────────────────────────────────────────────
 // Available for standalone validation and future use.
-// Sub-schemas (pendingMergeParentSchema, jiraLinkSchema) are used directly by the parser.
+// Sub-schemas (pendingMergeParentSchema, jiraLinkSchema, checklistSchema) are used directly by the parser.
 
 // ─── Stage frontmatter schema ───────────────────────────────────────────────
 
@@ -42,6 +52,7 @@ export const stageFrontmatterSchema = z.object({
   pending_merge_parents: z.array(pendingMergeParentSchema).default([]),
   is_draft: z.boolean().default(false),
   mr_target_branch: z.string().nullable().default(null),
+  checklists: z.array(checklistSchema).default([]),
 });
 
 // ─── Ticket frontmatter schema ──────────────────────────────────────────────

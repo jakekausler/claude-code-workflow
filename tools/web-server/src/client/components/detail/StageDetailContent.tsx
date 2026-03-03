@@ -19,6 +19,8 @@ import {
   Loader2,
   AlertCircle,
   FileCode,
+  CheckSquare,
+  Square,
 } from 'lucide-react';
 
 interface StageDetailContentProps {
@@ -168,6 +170,32 @@ export function StageDetailContent({ stageId }: StageDetailContentProps) {
                   isComplete={phase.isComplete}
                   defaultExpanded={!phase.isComplete}
                 />
+              ))}
+            </div>
+          )}
+
+          {/* Checklists — read-only display of frontmatter checklists */}
+          {stage.checklists && stage.checklists.length > 0 && (
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold text-slate-700">Checklists</h3>
+              {stage.checklists.map((checklist) => (
+                <div key={checklist.title} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                  <h4 className="mb-2 text-xs font-medium text-slate-600">{checklist.title}</h4>
+                  <ul className="space-y-1">
+                    {checklist.items.map((item) => (
+                      <li key={item.text} className="flex items-center gap-2 text-sm text-slate-700">
+                        {item.checked ? (
+                          <CheckSquare size={14} className="shrink-0 text-green-600" />
+                        ) : (
+                          <Square size={14} className="shrink-0 text-slate-400" />
+                        )}
+                        <span className={item.checked ? 'line-through text-slate-400' : ''}>
+                          {item.text}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               ))}
             </div>
           )}
