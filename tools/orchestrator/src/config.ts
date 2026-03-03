@@ -97,5 +97,6 @@ export async function loadOrchestratorConfig(
     pipelineConfig,
     workflowEnv,
     mock: cliOptions.mock === true,
+    slackWebhookUrl: env['WORKFLOW_SLACK_WEBHOOK'] || undefined,
   };
 }
