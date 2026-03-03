@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import {
   ChevronRight,
   CheckCircle2,
@@ -67,7 +68,7 @@ function toToolExecution(tool: LinkedToolItemData): ToolExecution {
  * - teammate_spawned renders as a small badge instead of full card.
  * - SendMessage with shutdown intent renders as an inline indicator.
  */
-export function LinkedToolItemDisplay({ tool }: Props) {
+export const LinkedToolItemDisplay = memo(function LinkedToolItemDisplay({ tool }: Props) {
   const expanded = useSessionViewStore((s) => s.expandedTools.has(tool.id));
   const toggleTool = useSessionViewStore((s) => s.toggleTool);
 
@@ -185,4 +186,4 @@ export function LinkedToolItemDisplay({ tool }: Props) {
       )}
     </div>
   );
-}
+});

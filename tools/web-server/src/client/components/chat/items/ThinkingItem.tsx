@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, memo } from 'react';
 import { Brain, ChevronRight } from 'lucide-react';
 import { formatTokenCount } from '../../../utils/session-formatters.js';
 
@@ -7,7 +7,7 @@ interface Props {
   tokenCount?: number;
 }
 
-export function ThinkingItem({ content, tokenCount }: Props) {
+export const ThinkingItem = memo(function ThinkingItem({ content, tokenCount }: Props) {
   const [expanded, setExpanded] = useState(false);
 
   return (
@@ -36,4 +36,4 @@ export function ThinkingItem({ content, tokenCount }: Props) {
       )}
     </div>
   );
-}
+});
