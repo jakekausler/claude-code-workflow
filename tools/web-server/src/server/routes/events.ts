@@ -1,6 +1,7 @@
 import type { FastifyPluginCallback, FastifyReply } from 'fastify';
 import fp from 'fastify-plugin';
 import type { EventBroadcaster } from '../deployment/index.js';
+import { recordSSEConnection } from '../services/newrelic-instrumentation.js';
 
 /**
  * Mutable broadcaster reference. Set via `setBroadcaster()` during server
@@ -47,6 +48,7 @@ const eventsPlugin: FastifyPluginCallback = (app, _opts, done) => {
     reply.raw.write(
       `event: connected\ndata: ${JSON.stringify({ timestamp: Date.now() })}\n\n`,
     );
+    recordSSEConnection('connect');
 
     const timer = setInterval(() => {
       try {
@@ -65,6 +67,7 @@ const eventsPlugin: FastifyPluginCallback = (app, _opts, done) => {
     request.raw.on('close', () => {
       clearInterval(timer);
       eventBroadcaster.removeClient(reply);
+      recordSSEConnection('drop');
     });
 
     // Keep the connection open — do not call reply.send()
