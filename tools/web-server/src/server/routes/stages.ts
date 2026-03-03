@@ -5,6 +5,14 @@ import { existsSync, readFileSync } from 'node:fs';
 import matter from 'gray-matter';
 import { parseRefinementType } from './utils.js';
 
+/** Fields already exposed as structured properties in the stage detail response. */
+const KNOWN_FRONTMATTER_KEYS = new Set([
+  'id', 'ticket', 'epic', 'title', 'status', 'session_active',
+  'refinement_type', 'depends_on', 'worktree_branch', 'pr_url',
+  'pr_number', 'priority', 'due_date', 'pending_merge_parents',
+  'is_draft', 'mr_target_branch', 'checklists',
+]);
+
 /** Zod schema for the :id route parameter. */
 const stageIdSchema = z.string().regex(/^STAGE-\d{3}-\d{3}-\d{3}$/);
 
@@ -91,17 +99,26 @@ const stagePlugin: FastifyPluginCallback = (app, _opts, done) => {
       resolved: d.resolved !== 0,
     });
 
-    // Read checklists from the stage file's frontmatter
+    // Read markdown body, checklists, and extra frontmatter fields from the stage file
+    let body = '';
     let checklists: Array<{ title: string; items: Array<{ text: string; checked: boolean }> }> = [];
+    let frontmatterFields: Record<string, unknown> = {};
     if (stage.file_path && existsSync(stage.file_path)) {
       try {
         const raw = readFileSync(stage.file_path, 'utf-8');
-        const { data } = matter(raw);
-        if (Array.isArray(data.checklists)) {
-          checklists = data.checklists;
+        const fileParsed = matter(raw);
+        body = fileParsed.content.trim();
+        if (Array.isArray(fileParsed.data.checklists)) {
+          checklists = fileParsed.data.checklists;
+        }
+        // Collect frontmatter fields not already in the structured response
+        for (const [key, value] of Object.entries(fileParsed.data)) {
+          if (!KNOWN_FRONTMATTER_KEYS.has(key)) {
+            frontmatterFields[key] = value;
+          }
         }
       } catch {
-        // If file read or parse fails, return empty checklists
+        // If file read or parse fails, return empty defaults
       }
     }
 
@@ -126,7 +143,9 @@ const stagePlugin: FastifyPluginCallback = (app, _opts, done) => {
       file_path: stage.file_path,
       depends_on: depsFrom.map(mapDep),
       depended_on_by: depsTo.map(mapDep),
+      body,
       checklists,
+      frontmatter_fields: frontmatterFields,
     });
   });
 

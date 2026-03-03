@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { Fragment, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useStage, useStageSession, useStageSessionHistory } from '../../api/hooks.js';
 import { useDrawerStore } from '../../store/drawer-store.js';
@@ -6,6 +6,7 @@ import { useDrawerSessionStore } from '../../store/drawer-session-store.js';
 import { useBoardStore, selectSessionStatus } from '../../store/board-store.js';
 import { StatusBadge } from './StatusBadge.js';
 import { DependencyList } from './DependencyList.js';
+import { MarkdownContent } from './MarkdownContent.js';
 import { PhaseSection } from './PhaseSection.js';
 import { DrawerTabs } from './DrawerTabs.js';
 import type { TabDef } from './DrawerTabs.js';
@@ -226,6 +227,33 @@ export function StageDetailContent({ stageId }: StageDetailContentProps) {
                 dependencies={stage.depended_on_by}
                 displayField="from_id"
               />
+            </div>
+          )}
+
+          {/* Additional frontmatter metadata */}
+          {stage.frontmatter_fields && Object.keys(stage.frontmatter_fields).length > 0 && (
+            <div className="space-y-2">
+              <h3 className="text-sm font-semibold text-slate-700">Metadata</h3>
+              <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
+                {Object.entries(stage.frontmatter_fields).map(([key, value]) => (
+                  <Fragment key={key}>
+                    <dt className="font-medium text-slate-500">{key}</dt>
+                    <dd className="text-slate-700">
+                      {typeof value === 'object' ? JSON.stringify(value) : String(value)}
+                    </dd>
+                  </Fragment>
+                ))}
+              </dl>
+            </div>
+          )}
+
+          {/* Markdown body content */}
+          {stage.body && (
+            <div className="space-y-2">
+              <h3 className="text-sm font-semibold text-slate-700">Description</h3>
+              <div className="rounded-lg border border-slate-200 bg-white p-4">
+                <MarkdownContent content={stage.body} />
+              </div>
             </div>
           )}
         </div>
