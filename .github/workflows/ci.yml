@@ -1,100 +1,63 @@
 name: CI
 
 on:
+  push:
+    branches:
+      - main
   pull_request:
     branches:
       - main
 
 jobs:
-  # kanban-cli must be built first because orchestrator and mcp-server
-  # reference it as a local file dependency (file:../kanban-cli).
-  build-kanban-cli:
-    name: Build kanban-cli
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node 24
-        uses: actions/setup-node@v4
-        with:
-          node-version: '24'
-
-      - name: Cache node_modules
-        uses: actions/cache@v4
-        with:
-          path: tools/kanban-cli/node_modules
-          key: ${{ runner.os }}-kanban-cli-${{ hashFiles('tools/kanban-cli/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-kanban-cli-
-
-      - name: Install dependencies
-        working-directory: tools/kanban-cli
-        run: npm ci
-
-      - name: Lint, typecheck, and test
-        working-directory: tools/kanban-cli
-        run: npm run verify
-
-      - name: Build
-        working-directory: tools/kanban-cli
-        run: npm run build
-
-      - name: Upload dist artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: kanban-cli-dist
-          path: tools/kanban-cli/dist
-          retention-days: 1
-
   verify:
     name: Verify ${{ matrix.tool }}
     runs-on: ubuntu-latest
-    needs: build-kanban-cli
     strategy:
-      fail-fast: false
       matrix:
         include:
-          - tool: web-server
-            needs_kanban_cli_dist: false
-          - tool: orchestrator
-            needs_kanban_cli_dist: true
-          - tool: mcp-server
-            needs_kanban_cli_dist: true
+          - tool: tools/kanban-cli
+            needs_kanban_build: false
+          - tool: tools/web-server
+            needs_kanban_build: false
+          - tool: tools/orchestrator
+            needs_kanban_build: true
+          - tool: tools/mcp-server
+            needs_kanban_build: true
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Node 24
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: '24'
 
-      - name: Download kanban-cli dist (for file: dependencies)
-        if: matrix.needs_kanban_cli_dist
-        uses: actions/download-artifact@v4
+      - name: Cache node_modules (kanban-cli)
+        if: matrix.needs_kanban_build
+        uses: actions/cache@v4
         with:
-          name: kanban-cli-dist
-          path: tools/kanban-cli/dist
+          path: tools/kanban-cli/node_modules
+          key: ${{ runner.os }}-node-tools/kanban-cli-${{ hashFiles('tools/kanban-cli/package-lock.json') }}
+
+      - name: Install kanban-cli dependencies
+        if: matrix.needs_kanban_build
+        run: npm ci
+        working-directory: tools/kanban-cli
+
+      - name: Build kanban-cli
+        if: matrix.needs_kanban_build
+        run: npm run build
+        working-directory: tools/kanban-cli
 
       - name: Cache node_modules
         uses: actions/cache@v4
         with:
-          path: tools/${{ matrix.tool }}/node_modules
-          key: ${{ runner.os }}-${{ matrix.tool }}-${{ hashFiles(format('tools/{0}/package-lock.json', matrix.tool)) }}
-          restore-keys: |
-            ${{ runner.os }}-${{ matrix.tool }}-
+          path: ${{ matrix.tool }}/node_modules
+          key: ${{ runner.os }}-node-${{ matrix.tool }}-${{ hashFiles(format('{0}/package-lock.json', matrix.tool)) }}
 
       - name: Install dependencies
-        working-directory: tools/${{ matrix.tool }}
         run: npm ci
+        working-directory: ${{ matrix.tool }}
 
-      - name: Lint, typecheck, and test
-        working-directory: tools/${{ matrix.tool }}
+      - name: Verify
         run: npm run verify
-
-      - name: Build
-        working-directory: tools/${{ matrix.tool }}
-        run: npm run build
+        working-directory: ${{ matrix.tool }}
