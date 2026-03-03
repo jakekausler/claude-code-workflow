@@ -4,11 +4,18 @@ import { z } from 'zod';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import matter from 'gray-matter';
+import type { RoleService } from '../deployment/hosted/rbac/role-service.js';
+import { requireRole } from '../deployment/hosted/rbac/rbac-middleware.js';
+
+export interface EpicRouteOptions {
+  roleService?: RoleService;
+}
 
 /** Zod schema for the :id route parameter. */
 const epicIdSchema = z.string().regex(/^EPIC-\d{3}$/);
 
-const epicPlugin: FastifyPluginCallback = (app, _opts, done) => {
+const epicPlugin: FastifyPluginCallback<EpicRouteOptions> = (app, opts, done) => {
+  const { roleService } = opts;
   /**
    * GET /api/epics — List all epics with ticket counts.
    */
@@ -105,7 +112,11 @@ const epicPlugin: FastifyPluginCallback = (app, _opts, done) => {
     description: z.string().optional(),
   });
 
-  app.post('/api/epics', async (request, reply) => {
+  const postEpicOpts = roleService
+    ? { preHandler: requireRole(roleService, 'developer') }
+    : {};
+
+  app.post('/api/epics', postEpicOpts, async (request, reply) => {
     if (!app.dataService) {
       return reply.status(503).send({ error: 'Database not initialized' });
     }

@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { Plus, X } from 'lucide-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '../../api/client.js';
+import { useCurrentUser } from '../../api/hooks.js';
+import { can } from '../../utils/permissions.js';
 
 interface CreateEpicBody {
   title: string;
@@ -27,11 +29,14 @@ function useCreateEpic() {
 }
 
 export function NewEpicButton() {
+  const { data: me } = useCurrentUser();
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const queryClient = useQueryClient();
   const mutation = useCreateEpic();
+
+  if (!can(me, 'create:epic')) return null;
 
   const handleClose = useCallback(() => {
     setOpen(false);

@@ -27,6 +27,7 @@ import { interactionRoutes } from './routes/interaction.js';
 import { orchestratorRoutes, computeWaitingType } from './routes/orchestrator.js';
 import { searchRoutes } from './routes/search.js';
 import { importRoutes } from './routes/import.js';
+import { meRoutes } from './routes/me.js';
 
 interface SessionStatusSSE {
   stageId: string;
@@ -269,15 +270,23 @@ export async function createServer(
     timestamp: new Date().toISOString(),
   }));
 
+  // Resolve roleService for hosted mode — used by route plugins for permission checks
+  let roleService: InstanceType<typeof RoleService> | undefined;
+  if (deploymentContext.mode === 'hosted') {
+    const hostedCtx = deploymentContext as HostedDeploymentContext;
+    roleService = new RoleService(hostedCtx.getPool());
+  }
+
+  await app.register(meRoutes, { roleService });
   await app.register(boardRoutes);
-  await app.register(epicRoutes);
-  await app.register(ticketRoutes);
+  await app.register(epicRoutes, { roleService });
+  await app.register(ticketRoutes, { roleService });
   await app.register(stageRoutes);
   await app.register(graphRoutes);
   await app.register(sessionRoutes);
   await app.register(repoRoutes);
   await app.register(eventRoutes);
-  await app.register(importRoutes);
+  await app.register(importRoutes, { roleService });
 
   // Orchestrator routes — session status endpoint
   await app.register(orchestratorRoutes);
@@ -292,8 +301,8 @@ export async function createServer(
   // RBAC and Team routes — only in hosted mode (requires PostgreSQL pool)
   if (deploymentContext.mode === 'hosted') {
     const hostedCtx = deploymentContext as HostedDeploymentContext;
-    const roleService = new RoleService(hostedCtx.getPool());
-    registerRbacRoutes(app, roleService);
+    const hostedRoleService = roleService ?? new RoleService(hostedCtx.getPool());
+    registerRbacRoutes(app, hostedRoleService);
 
     const teamService = new TeamService(hostedCtx.getPool());
     registerTeamRoutes(app, teamService);
