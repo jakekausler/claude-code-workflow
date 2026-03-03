@@ -15,6 +15,7 @@ const SEGMENT_LABELS: Record<string, string> = {
   stages: 'Stages',
   sessions: 'Sessions',
   graph: 'Dependency Graph',
+  import: 'Import Issues',
 };
 
 function buildBreadcrumbs(pathname: string): { label: string; to: string }[] {
