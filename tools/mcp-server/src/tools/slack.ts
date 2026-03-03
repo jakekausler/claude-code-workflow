@@ -90,7 +90,10 @@ export async function handleSlackNotify(
       : `*Epic:* ${args.epic}`;
     lines.push(epicLine);
   }
-  if (args.url) lines.push(`<${args.url}|View MR/PR>`);
+  if (args.url) {
+    const safeUrl = args.url.replace(/[|>]/g, encodeURIComponent);
+    lines.push(`<${safeUrl}|View MR/PR>`);
+  }
 
   const payload = {
     text: args.message, // Top-level fallback for clients that don't render Block Kit

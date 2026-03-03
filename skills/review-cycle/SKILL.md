@@ -268,7 +268,7 @@ glab mr view --output json | jq '.iid'
               "type": "section",
               "text": {
                 "type": "mrkdwn",
-                "text": "*Review Comments Addressed*\n\n*Stage:* STAGE-XXX-YYY-ZZZ — <stage title>\n*Round:* N\n*Comments addressed:* M\n*URL:* <MR/PR URL>\n\nReady for re-review."
+                "text": "*Review Comments Addressed*\n\n*Stage:* STAGE-XXX-YYY-ZZZ\n*Round:* N\n*Comments addressed:* M\n*URL:* <MR/PR URL>\n\nReady for re-review."
               }
             }
           ]
