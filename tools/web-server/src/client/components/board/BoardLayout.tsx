@@ -62,7 +62,7 @@ export function BoardLayout({ children, isLoading, error, emptyMessage, isEmpty,
   }
 
   return (
-    <div ref={gridRef} className="grid auto-cols-[280px] grid-flow-col gap-4 overflow-x-auto pb-4">
+    <div ref={gridRef} className="grid auto-cols-[280px] grid-flow-col gap-4 overflow-x-auto pb-4 select-none" style={{ WebkitOverflowScrolling: 'touch' }}>
       {children}
     </div>
   );
