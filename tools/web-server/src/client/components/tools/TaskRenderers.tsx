@@ -43,6 +43,26 @@ function tryParseJson(content: string): unknown {
   }
 }
 
+/**
+ * Extract the previous task status from a TaskUpdate result content string.
+ *
+ * When the TaskUpdate tool returns the prior task state as JSON (e.g.
+ * `{"id":"42","status":"pending",...}`), this function pulls out the
+ * `status` field so the renderer can display a transition arrow.
+ *
+ * Returns `null` if the content is absent, unparseable, or has no `status`.
+ */
+export function extractPreviousStatus(content: string | null | undefined): string | null {
+  if (!content) return null;
+  const parsed = tryParseJson(content);
+  if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+    const obj = parsed as Record<string, unknown>;
+    const status = obj.status;
+    if (typeof status === 'string' && status.length > 0) return status;
+  }
+  return null;
+}
+
 // ---------------------------------------------------------------------------
 // TaskCreate
 // ---------------------------------------------------------------------------
@@ -83,6 +103,16 @@ export function TaskUpdateRenderer({ execution }: Props) {
   const newStatus = input.status as string | undefined;
   const newSubject = input.subject as string | undefined;
 
+  // Attempt to read the previous status from the result content.
+  const resultContent = extractResultContent(execution.result);
+  const previousStatus = extractPreviousStatus(resultContent);
+
+  // Show a transition when: both old and new status are known and they differ.
+  const showTransition =
+    newStatus != null &&
+    previousStatus != null &&
+    previousStatus.toLowerCase() !== newStatus.toLowerCase();
+
   const fields: UpdateField[] = [];
   if (newSubject) fields.push({ label: 'subject', value: newSubject });
 
@@ -102,7 +132,15 @@ export function TaskUpdateRenderer({ execution }: Props) {
         <span className="text-xs font-medium text-slate-700">
           Task {taskId ? `#${taskId}` : ''}
         </span>
-        {newStatus && <StatusBadge status={newStatus} />}
+        {showTransition ? (
+          <>
+            <StatusBadge status={previousStatus!} />
+            <span className="text-slate-400 text-xs">&rarr;</span>
+            <StatusBadge status={newStatus!} />
+          </>
+        ) : (
+          newStatus && <StatusBadge status={newStatus} />
+        )}
       </div>
       {fields.length > 0 && (
         <div className="pl-6 space-y-1">
