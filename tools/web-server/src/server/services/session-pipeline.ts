@@ -26,6 +26,8 @@ export interface SessionPipelineOptions {
 
 export class SessionPipeline {
   private cache: DataCache<ParsedSession>;
+  /** Tracks the file mtimeMs at the time each session was last cached, keyed by cacheKey. */
+  private cacheMtimes = new Map<string, number>();
   private fileSystem: FileSystemProvider;
 
   constructor(options?: SessionPipelineOptions) {
@@ -37,10 +39,27 @@ export class SessionPipeline {
 
   async parseSession(projectDir: string, sessionId: string): Promise<ParsedSession> {
     const cacheKey = `${projectDir}/${sessionId}`;
-    const cached = this.cache.get(cacheKey);
-    if (cached) return cached;
-
     const filePath = join(projectDir, `${sessionId}.jsonl`);
+    const cached = this.cache.get(cacheKey);
+    if (cached) {
+      // Auto-invalidate if the underlying JSONL file has changed since the last parse.
+      // This ensures re-parses after new lines arrive return fresh data without requiring
+      // an explicit invalidateSession() call from the caller.
+      try {
+        const { mtimeMs } = await this.fileSystem.stat(filePath);
+        const cachedMtime = this.cacheMtimes.get(cacheKey);
+        if (cachedMtime !== undefined && mtimeMs > cachedMtime) {
+          this.cache.invalidate(cacheKey);
+          this.cacheMtimes.delete(cacheKey);
+        } else {
+          return cached;
+        }
+      } catch {
+        // File may not exist (e.g. for non-existent sessions); return the cached empty result.
+        return cached;
+      }
+    }
+
     const { messages } = await parseSessionFile(filePath, { fileSystem: this.fileSystem });
     const toolExecutions = buildToolExecutions(messages);
     const chunks = buildChunks(messages);
@@ -93,6 +112,16 @@ export class SessionPipeline {
     // a modest over- or under-estimate has no correctness impact.
     const sizeEstimate = (session.chunks.length * 50_000) + (session.subagents.length * 200_000) + 100_000;
     this.cache.set(cacheKey, session, sizeEstimate);
+
+    // Record the file's mtime at parse time so future parseSession() calls can
+    // detect whether the file has grown and self-invalidate accordingly.
+    try {
+      const { mtimeMs } = await this.fileSystem.stat(filePath);
+      this.cacheMtimes.set(cacheKey, mtimeMs);
+    } catch {
+      // File may not exist (non-existent session); skip mtime tracking.
+    }
+
     return session;
   }
 
@@ -102,7 +131,9 @@ export class SessionPipeline {
   }
 
   invalidateSession(projectDir: string, sessionId: string): void {
-    this.cache.invalidate(`${projectDir}/${sessionId}`);
+    const cacheKey = `${projectDir}/${sessionId}`;
+    this.cache.invalidate(cacheKey);
+    this.cacheMtimes.delete(cacheKey);
   }
 }
 

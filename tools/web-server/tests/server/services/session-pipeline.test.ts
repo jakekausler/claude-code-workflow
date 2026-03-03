@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { join } from 'path';
+import { mkdtempSync, writeFileSync, rmSync, appendFileSync } from 'fs';
+import { tmpdir } from 'os';
 import { SessionPipeline } from '../../../src/server/services/session-pipeline.js';
 
 const fixturesDir = join(import.meta.dirname, '../../fixtures');
@@ -156,5 +158,106 @@ describe('SessionPipeline', () => {
     const types = session.chunks.map((c) => c.type);
     expect(types).toContain('compact');
     expect(session.chunks.length).toBe(5);
+  });
+
+  it('re-parses when the session file grows (cache auto-invalidates on content change)', async () => {
+    // Write an initial single-turn JSONL to a temp file
+    const tmpDir = mkdtempSync(join(tmpdir(), 'session-pipeline-reparse-'));
+    const sessionId = 'reparse-test';
+
+    const line1 = JSON.stringify({
+      type: 'user',
+      uuid: 'u1',
+      parentUuid: null,
+      isSidechain: false,
+      userType: 'external',
+      cwd: '/project',
+      sessionId,
+      version: '2.1.56',
+      message: { role: 'user', content: 'Hello' },
+      timestamp: '2025-01-15T10:00:00.000Z',
+    });
+    const line2 = JSON.stringify({
+      type: 'assistant',
+      uuid: 'a1',
+      parentUuid: 'u1',
+      isSidechain: false,
+      userType: 'external',
+      cwd: '/project',
+      sessionId,
+      version: '2.1.56',
+      message: {
+        model: 'claude-sonnet-4-6',
+        id: 'resp_01',
+        type: 'message',
+        role: 'assistant',
+        content: [{ type: 'text', text: 'Hi there' }],
+        stop_reason: 'end_turn',
+        stop_sequence: null,
+        usage: { input_tokens: 100, output_tokens: 20 },
+      },
+      requestId: 'req_01',
+      timestamp: '2025-01-15T10:00:05.000Z',
+    });
+
+    try {
+      writeFileSync(join(tmpDir, `${sessionId}.jsonl`), line1 + '\n' + line2 + '\n');
+
+      const pipeline = new SessionPipeline();
+
+      // First parse — 2 chunks (user + ai), 1 assistant turn
+      const first = await pipeline.parseSession(tmpDir, sessionId);
+      expect(first.chunks.length).toBe(2);
+      expect(first.metrics.turnCount).toBe(1);
+
+      // Append a new turn to simulate new JSONL lines arriving
+      const line3 = JSON.stringify({
+        type: 'user',
+        uuid: 'u2',
+        parentUuid: 'a1',
+        isSidechain: false,
+        userType: 'external',
+        cwd: '/project',
+        sessionId,
+        version: '2.1.56',
+        message: { role: 'user', content: 'Follow up question' },
+        timestamp: '2025-01-15T10:00:10.000Z',
+      });
+      const line4 = JSON.stringify({
+        type: 'assistant',
+        uuid: 'a2',
+        parentUuid: 'u2',
+        isSidechain: false,
+        userType: 'external',
+        cwd: '/project',
+        sessionId,
+        version: '2.1.56',
+        message: {
+          model: 'claude-sonnet-4-6',
+          id: 'resp_02',
+          type: 'message',
+          role: 'assistant',
+          content: [{ type: 'text', text: 'Answer to follow up' }],
+          stop_reason: 'end_turn',
+          stop_sequence: null,
+          usage: { input_tokens: 150, output_tokens: 30 },
+        },
+        requestId: 'req_02',
+        timestamp: '2025-01-15T10:00:15.000Z',
+      });
+      appendFileSync(join(tmpDir, `${sessionId}.jsonl`), line3 + '\n' + line4 + '\n');
+
+      // Second parse WITHOUT calling invalidateSession() first.
+      // The cache should auto-invalidate because the file has grown (mtime/size changed).
+      // Stale cached result would return 2 chunks and 1 turn — the fix must return 4 and 2.
+      const second = await pipeline.parseSession(tmpDir, sessionId);
+      expect(second.chunks.length).toBe(4);
+      expect(second.metrics.turnCount).toBe(2);
+
+      // The second result should NOT be the same cached object as the first
+      expect(second).not.toBe(first);
+    } finally {
+      rmSync(tmpDir, { recursive: true, force: true });
+    }
   });
 });
