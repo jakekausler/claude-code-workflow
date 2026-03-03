@@ -6,19 +6,34 @@ interface Props {
   execution: ToolExecution;
 }
 
+// Strip ANSI escape sequences (colors, cursor movements, etc.)
+// eslint-disable-next-line no-control-regex
+export function stripAnsi(str: string): string {
+  return str.replace(/\u001b\[[0-9;]*[a-zA-Z]/g, '');
+}
+
+export function isStderrLine(line: string): boolean {
+  return (
+    line.startsWith('Error:') ||
+    line.startsWith('error:') ||
+    line.startsWith('ERR!') ||
+    line.startsWith('ERR ') ||
+    line.startsWith('WARN') ||
+    line.startsWith('Warning:') ||
+    line.startsWith('warning:') ||
+    line.startsWith('fatal:') ||
+    line.startsWith('Fatal:') ||
+    /^\s*at /.test(line)
+  );
+}
+
 export function BashRenderer({ execution }: Props) {
   const { input, result, durationMs } = execution;
   const command = input.command as string | undefined;
   const description = input.description as string | undefined;
 
-  const output = extractResultContent(result);
-
-  const isStderrLine = (line: string) =>
-    line.startsWith('Error:') ||
-    line.startsWith('error:') ||
-    line.startsWith('ERR!') ||
-    line.startsWith('WARN') ||
-    line.startsWith('fatal:');
+  const rawOutput = extractResultContent(result);
+  const output = rawOutput ? stripAnsi(rawOutput) : null;
 
   return (
     <div className="space-y-2 text-sm">
@@ -36,7 +51,7 @@ export function BashRenderer({ execution }: Props) {
       {output && (
         <pre className="bg-slate-900 rounded-lg p-3 text-xs font-mono overflow-x-auto max-h-64 overflow-y-auto leading-relaxed">
           {output.split('\n').map((line, i) => (
-            <div key={i} className={isStderrLine(line) ? 'text-red-400' : 'text-green-400'}>
+            <div key={i} className={isStderrLine(line) ? 'text-amber-400' : 'text-green-400'}>
               {line}
             </div>
           ))}
