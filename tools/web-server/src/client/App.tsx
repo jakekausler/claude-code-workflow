@@ -14,6 +14,10 @@ import { useSessionMap } from './api/use-session-map.js';
 import { InteractionOverlay } from './components/interaction/InteractionOverlay.js';
 
 function AppContent() {
+  // Hooks that require QueryClientProvider context must live here, not in App()
+  useInteractionSSE();
+  useSessionMap();
+
   return (
     <>
       <InteractionOverlay />
@@ -45,12 +49,6 @@ function AppContent() {
 
 export function App() {
   const [queryClient] = useState(() => new QueryClient());
-
-  // Mount the interaction SSE listener at the app root level
-  useInteractionSSE();
-
-  // Global SSE subscription for session status — active on all pages
-  useSessionMap();
 
   return (
     <QueryClientProvider client={queryClient}>
