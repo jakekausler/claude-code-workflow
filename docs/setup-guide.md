@@ -271,6 +271,7 @@ Additional environment variables used by the tools:
 | `ATLASSIAN_TOOLS_PATH` | kanban-cli jira scripts | Override path to atlassian-tools plugin |
 | `CONFLUENCE_GET_SCRIPT` | kanban-cli enrich | Override path to Confluence fetch script |
 | `DISABLE_SLACK` | mcp-server | Set to `true` to suppress real Slack HTTP calls in test environments |
+| `DISABLE_JIRA` | mcp-server | Set to `true` to suppress real Jira API calls in test environments |
 
 ### Jira integration
 
@@ -314,6 +315,12 @@ Supply a Slack incoming webhook URL in one of these ways, in priority order:
 2. Global default: `WORKFLOW_SLACK_WEBHOOK` env var or `workflow.defaults.WORKFLOW_SLACK_WEBHOOK` in config
 
 The MCP server's `slack_notify` tool also accepts a `webhook_url` argument at call time to override the global default for per-channel routing.
+
+The orchestrator automatically sends Slack notifications for:
+- Tool approval requests from Claude
+- User input questions from Claude
+- Stage transitions to `PR Created`
+- New unresolved review comments (via the MR comment poll cron job)
 
 ### Multi-repo registry
 
@@ -594,6 +601,12 @@ The server binds to `0.0.0.0:3100` by default. Override with `PORT` and `HOST` e
 PORT=8080 HOST=127.0.0.1 node dist/server/index.js
 ```
 
+The web server connects to the orchestrator's WebSocket server at `ws://localhost:3101` by default. Override with `ORCHESTRATOR_WS_URL`:
+
+```bash
+ORCHESTRATOR_WS_URL=ws://localhost:3101 node dist/server/index.js
+```
+
 ### Pages
 
 | Route | Page | Description |
@@ -603,35 +616,85 @@ PORT=8080 HOST=127.0.0.1 node dist/server/index.js
 | `/epics/:epicId` | Epic Detail | Epic overview and its tickets |
 | `/tickets/:ticketId` | Ticket Detail | Ticket details and its stages |
 | `/stages/:stageId` | Stage Detail | Stage frontmatter, status, and session log |
-| `/sessions/:projectId/:sessionId` | Session Viewer | Raw Claude session transcript |
+| `/sessions/:projectId/:sessionId` | Session Viewer | Parsed Claude session transcript with tool calls |
 | `/graph` | Dependency Graph | Interactive Mermaid dependency graph |
 
 ### Dashboard
 
-The dashboard shows a summary of workflow state: active sessions, recent stage transitions, and any pending interactions waiting for user input.
+The dashboard shows a summary of workflow state: active sessions, recent stage transitions, and any pending interactions waiting for user input. When the orchestrator is connected via WebSocket, live updates arrive without refreshing the page.
 
 ### Kanban Board
 
-The board page shows all stages in columns that match the pipeline phases defined in `.kanban-workflow.yaml`. Stages in multi-repo mode include a repo label.
+The board page shows all stages in columns that match the pipeline phases defined in `.kanban-workflow.yaml`. Each column corresponds to a phase status (Design, Build, Automatic Testing, Manual Testing, Finalize, PR Created, Done).
 
-Use the column filter or epic/ticket filter in the UI to narrow the view. Clicking a stage card opens the Stage Detail drawer.
+In multi-repo mode, stage cards include a repo label. Use the column filter or epic/ticket filter controls in the UI to narrow the view. Clicking a stage card opens the Stage Detail drawer.
+
+The board reflects data from the SQLite database populated by `kanban-cli sync`. It does not auto-sync from disk; run `kanban-cli sync --repo <path>` to pull in markdown changes, or rely on the orchestrator which syncs automatically as sessions complete.
 
 ### Detail drawers
 
-Clicking any epic, ticket, or stage navigates to its detail page. Stage detail shows:
+#### Stage Detail
+
+Clicking a stage card or navigating to `/stages/:stageId` opens the stage detail view, which shows:
 
 - Current status and pipeline column
-- Frontmatter fields (branch, priority, due date)
-- Whether a session is currently active
-- Links to related ticket and epic
+- Frontmatter fields: `worktree_branch`, `priority`, `due_date`, `pr_url`, `pr_number`, `is_draft`, `mr_target_branch`
+- Whether a session is currently active (`session_active`)
+- Checklists defined in the stage's frontmatter
+- The markdown body of the stage file
+- All `depends_on` dependencies (what this stage is waiting on) and `depended_on_by` dependencies (what is waiting on this stage), both with resolved/unresolved status
+- Links to the parent ticket and epic
+- Any extra frontmatter fields not covered by the known fields list
+
+If the stage has an associated session, a link to the Session Viewer is shown.
+
+#### Ticket Detail
+
+The ticket detail page at `/tickets/:ticketId` shows:
+
+- Ticket title, status, and Jira key (if linked)
+- Source (local or Jira-imported)
+- All stages belonging to the ticket, with their current statuses
+- Session history for the ticket, ordered by most recent
+
+#### Epic Detail
+
+The epic detail page at `/epics/:epicId` shows:
+
+- Epic title and status
+- All tickets belonging to the epic, with their current statuses and stage counts
 
 ### Session viewer
 
-Navigate to `/sessions/:projectId/:sessionId` to read the raw transcript of a Claude session. This is useful for debugging what a stage session did and why it transitioned.
+Navigate to `/sessions/:projectId/:sessionId` to read the parsed transcript of a Claude session.
+
+The session viewer parses the raw JSONL session file from `~/.claude/projects/` and presents it as structured chunks. Each chunk represents a logical unit of work:
+
+- **Tool calls**: Shown with the tool name, input arguments, and output. Tool call inputs and outputs are syntax-highlighted where applicable.
+- **Text output**: Claude's prose responses between tool calls.
+- **Subagent invocations**: When Claude spawns a subagent via the Task tool, the subagent's session appears as a nested tree. Navigate into a subagent by clicking its entry to see its own chunks and tool calls.
+
+The viewer also displays session metrics: total tokens used, cost estimate, and duration.
+
+Sessions are identified by `projectId` (derived from the repo path) and `sessionId` (the JSONL filename without extension). A stage can have multiple sessions across its lifecycle — one per phase run. The stage detail page lists all sessions for a stage in order, with the current session marked.
+
+To look up sessions for a specific stage from the CLI:
+
+```bash
+# Returns all sessions linked to a stage
+GET /api/stages/:stageId/sessions
+
+# Returns all sessions linked to a ticket
+GET /api/tickets/:ticketId/sessions
+```
 
 ### Dependency graph
 
-The `/graph` page renders the full dependency graph using Mermaid. Nodes represent epics, tickets, and stages; edges represent `depends_on` relationships. Use the epic/ticket filter to focus on a subset.
+The `/graph` page renders the full dependency graph using Mermaid. Nodes represent epics, tickets, and stages; edges represent `depends_on` relationships. Resolved dependencies are shown differently from unresolved ones.
+
+Use the epic filter in the UI to focus on a specific epic's dependency subgraph. The graph data is also available as JSON via `GET /api/graph` or as a Mermaid string via `GET /api/graph?mermaid=true`.
+
+The graph also exposes cycle detection and critical path information in the JSON response, useful for diagnosing dependency deadlocks.
 
 ---
 
@@ -678,16 +741,39 @@ Brackets indicate optional phases. Phase transitions are defined in the config `
 
 At each tick:
 
-1. `kanban-cli next` is called to find the highest-priority ready stage.
-2. The orchestrator acquires a lock on the stage to prevent duplicate sessions.
-3. A git worktree is created for the stage's branch.
-4. A Claude Code session is launched in the worktree with the appropriate skill.
-5. The session runs to completion; the orchestrator reads the resulting stage status.
-6. The worktree is cleaned up and the lock released.
+1. All resolver-type phases are checked across every stage in `PR Created` status (the `pr-status` resolver polls the git platform for merge status and unresolved comments).
+2. `kanban-cli next` is called to find the highest-priority ready stage(s), up to `WORKFLOW_MAX_PARALLEL` slots.
+3. The orchestrator acquires a lock on each selected stage to prevent duplicate sessions.
+4. Stages with status `Not Started` are promoted to the entry phase (default: `Design`) before spawning.
+5. A git worktree is created for the stage's branch.
+6. A Claude Code session is launched in the worktree with the appropriate skill.
+7. The session runs to completion; the orchestrator reads the resulting stage status from the frontmatter.
+8. The exit gate runs: ticket and epic statuses are updated if all their children have completed.
+9. The worktree is cleaned up and the lock released.
 
 ### Dependency resolution
 
 A stage is "ready" when all of its `depends_on` dependencies are resolved. The `kanban-cli next` command applies this filter. You do not need to manually manage dependencies; the orchestrator respects them automatically.
+
+### Cron jobs
+
+The orchestrator runs two background cron jobs defined in the pipeline config:
+
+| Job | Default interval | Description |
+|---|---|---|
+| `mr_comment_poll` | 300 seconds | Polls open PRs/MRs for new unresolved review comments. Sends Slack notification if new comments arrive. |
+| `insights_threshold` | 600 seconds | Counts unanalyzed learnings entries. Triggers a `meta-insights` session if the count exceeds `WORKFLOW_LEARNINGS_THRESHOLD`. |
+
+Disable a job by setting `enabled: false` in `.kanban-workflow.yaml`:
+
+```yaml
+cron:
+  mr_comment_poll:
+    enabled: false
+  insights_threshold:
+    enabled: true
+    interval_seconds: 300
+```
 
 ### `--mock` flag
 
@@ -750,13 +836,44 @@ Replace the path with the absolute path to the built `dist/index.js` on your mac
 
 ### Available tools
 
-| Tool group | Tools | Description |
+#### Jira tools
+
+| Tool | Arguments | Description |
 |---|---|---|
-| Jira | `jira_get_ticket`, `jira_search`, `jira_transition`, `jira_assign` | Read and update Jira tickets |
-| PR/MR | `pr_create`, `pr_update`, `pr_get`, and others | Create and manage pull/merge requests |
-| Enrich | enrich tools | Fetch Confluence and linked content for a ticket |
-| Confluence | confluence tools | Read Confluence pages |
-| Slack | `slack_notify` | Send notifications to a Slack channel |
+| `jira_get_ticket` | `key: string` | Get a Jira ticket by key (e.g. `PROJ-123`) |
+| `jira_search` | `jql: string`, `maxResults?: number` | Search Jira tickets using JQL |
+| `jira_transition` | `key: string`, `targetStatus: string` | Transition a ticket to a new status |
+| `jira_assign` | `key: string`, `assignee?: string` | Assign a ticket to a user (omit assignee to unassign) |
+| `jira_comment` | `key: string`, `body: string` | Add a comment to a Jira ticket |
+| `jira_sync` | `ticketId: string`, `repoPath: string`, `dryRun?: boolean` | Sync a ticket's workflow status to Jira |
+
+#### PR/MR tools
+
+| Tool | Arguments | Description |
+|---|---|---|
+| `pr_create` | `branch`, `title`, `body`, `base?`, `draft?`, `assignees?`, `reviewers?` | Create a pull/merge request |
+| `pr_update` | `number`, `title?`, `body?`, `base?`, `draft?`, `assignees?`, `reviewers?` | Update an existing PR/MR |
+| `pr_get` | `number: number` | Get PR/MR details by number |
+| `pr_close` | `number: number` | Close a PR/MR |
+| `pr_get_comments` | `number: number` | Get all comments on a PR/MR |
+| `pr_add_comment` | `number: number`, `body: string` | Add a comment to a PR/MR |
+| `pr_get_status` | `prUrl: string` | Get merged state and unresolved comment count from a PR/MR URL |
+| `pr_mark_ready` | `number: number` | Convert a draft PR/MR to ready for review |
+
+#### Enrichment and Confluence tools
+
+| Tool | Arguments | Description |
+|---|---|---|
+| `enrich_ticket` | `ticketPath: string` | Enrich a ticket with fresh Jira data and linked Confluence pages |
+| `confluence_get_page` | `pageId: string` | Get a Confluence page by ID |
+
+#### Slack tool
+
+| Tool | Arguments | Description |
+|---|---|---|
+| `slack_notify` | `message`, `webhook_url?`, `stage?`, `title?`, `ticket?`, `ticket_title?`, `epic?`, `epic_title?`, `url?` | Send a notification via Slack webhook |
+
+The `slack_notify` tool builds a formatted Slack Block Kit message. The `webhook_url` argument overrides the global `WORKFLOW_SLACK_WEBHOOK` env var, enabling per-repo channel routing. If no URL is configured anywhere, the tool returns a success result with a "skipped" message rather than an error.
 
 ### Mock mode
 
@@ -764,12 +881,4 @@ Set `KANBAN_MOCK=true` before starting the server to run in mock mode. In mock m
 
 The orchestrator sets `KANBAN_MOCK=true` automatically when started with `--mock`, so the MCP server it spawns also runs in mock mode.
 
-### Slack tool
-
-The `slack_notify` tool sends a formatted message to a Slack channel. The webhook URL is resolved in this order:
-
-1. `webhook_url` argument passed at call time (per-repo routing)
-2. `WORKFLOW_SLACK_WEBHOOK` environment variable
-3. `workflow.defaults.WORKFLOW_SLACK_WEBHOOK` in the pipeline config
-
-If no URL is configured, the tool returns a success result with a "skipped" message rather than an error.
+In mock mode, an additional set of `mock_admin_*` tools is registered to allow tests to inspect and manipulate the in-memory state directly.
