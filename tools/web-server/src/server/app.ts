@@ -169,6 +169,11 @@ export async function createServer(
     });
 
     oc.on('session-status', (entry: SessionInfo) => {
+      if ((entry.status as string) === 'paused') {
+        recordSessionLifecycle('pause', entry.sessionId, { stageId: entry.stageId });
+      } else if ((entry.status as string) === 'resumed') {
+        recordSessionLifecycle('resume', entry.sessionId, { stageId: entry.stageId });
+      }
       broadcastEvent('board-update', {
         type: 'session_status',
         stageId: entry.stageId,
@@ -257,6 +262,9 @@ export async function createServer(
     });
 
     oc.on('disconnected', () => {
+      for (const session of oc.getAllSessions()) {
+        recordSessionLifecycle('crash', session.sessionId, { stageId: session.stageId });
+      }
       broadcastEvent('session-status', {
         type: 'orchestrator_disconnected',
         connected: false,
@@ -305,7 +313,7 @@ export async function createServer(
     registerRbacRoutes(app, hostedRoleService);
 
     const teamService = new TeamService(hostedCtx.getPool());
-    registerTeamRoutes(app, teamService);
+    registerTeamRoutes(app, teamService, hostedRoleService);
   }
 
   // --- Static serving / dev proxy ---
