@@ -8,6 +8,8 @@ import { OrchestratorClient } from './services/orchestrator-client.js';
 import { SessionPipeline } from './services/session-pipeline.js';
 import { FileWatcher } from './services/file-watcher.js';
 import { LocalDeploymentContext, HostedDeploymentContext } from './deployment/index.js';
+import { IssueSyncService } from './services/issue-sync-service.js';
+import { IssueSyncScheduler } from './services/issue-sync-scheduler.js';
 
 const port = parseInt(process.env.PORT || '3100', 10);
 const host = process.env.HOST || '0.0.0.0';
@@ -52,6 +54,19 @@ if (!isHosted) {
 const claudeProjectsDir =
   process.env.CLAUDE_PROJECTS_DIR ?? join(os.homedir(), '.claude', 'projects');
 
+// Issue sync service and scheduler
+const syncService = new IssueSyncService({
+  pool: isHosted ? (deploymentContext as HostedDeploymentContext).getPool() : undefined,
+  dataService,
+});
+const syncScheduler = new IssueSyncScheduler(syncService, {
+  logger: {
+    info: (msg, ctx) => console.log(`[sync] ${msg}`, ctx ?? ''),
+    warn: (msg, ctx) => console.warn(`[sync] ${msg}`, ctx ?? ''),
+    error: (msg, ctx) => console.error(`[sync] ${msg}`, ctx ?? ''),
+  },
+});
+
 const app = await createServer({
   dataService,
   orchestratorClient,
@@ -59,6 +74,8 @@ const app = await createServer({
   sessionPipeline,
   fileWatcher,
   deploymentContext,
+  syncService,
+  syncScheduler,
 });
 
 await app.listen({ port, host });

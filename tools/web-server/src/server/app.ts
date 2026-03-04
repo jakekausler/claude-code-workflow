@@ -27,8 +27,11 @@ import { interactionRoutes } from './routes/interaction.js';
 import { orchestratorRoutes, computeWaitingType } from './routes/orchestrator.js';
 import { searchRoutes } from './routes/search.js';
 import { importRoutes } from './routes/import.js';
+import { syncRoutes } from './routes/sync.js';
 import { meRoutes } from './routes/me.js';
 import { authRoutes } from './routes/auth.js';
+import type { IssueSyncService } from './services/issue-sync-service.js';
+import type { IssueSyncScheduler } from './services/issue-sync-scheduler.js';
 
 interface SessionStatusSSE {
   stageId: string;
@@ -66,6 +69,8 @@ export interface ServerOptions {
   sessionPipeline?: SessionPipeline;
   fileWatcher?: FileWatcher;
   deploymentContext?: DeploymentContext;
+  syncService?: IssueSyncService;
+  syncScheduler?: IssueSyncScheduler;
 }
 
 export async function createServer(
@@ -309,6 +314,19 @@ export async function createServer(
   await app.register(repoRoutes);
   await app.register(eventRoutes);
   await app.register(importRoutes, { roleService });
+
+  // Sync routes — periodic GitHub/GitLab issue sync
+  if (options.syncService && options.syncScheduler) {
+    await app.register(syncRoutes, {
+      syncService: options.syncService,
+      syncScheduler: options.syncScheduler,
+      roleService,
+    });
+
+    const scheduler = options.syncScheduler;
+    app.addHook('onReady', async () => scheduler.start());
+    app.addHook('onClose', async () => scheduler.stop());
+  }
 
   // Orchestrator routes — session status endpoint
   await app.register(orchestratorRoutes);
