@@ -7,6 +7,7 @@ import os from 'os';
 import matter from 'gray-matter';
 import type { RoleService } from '../deployment/hosted/rbac/role-service.js';
 import { requireRole } from '../deployment/hosted/rbac/rbac-middleware.js';
+import { withApiSegment } from '../services/newrelic-instrumentation.js';
 
 export interface ImportRouteOptions {
   roleService?: RoleService;
@@ -195,12 +196,14 @@ const importPlugin: FastifyPluginCallback<ImportRouteOptions> = (app, opts, done
 
     try {
       const url = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/issues?state=${state}&per_page=50`;
-      const res = await fetch(url, { headers });
-      if (!res.ok) {
-        const msg = await res.text();
-        return reply.status(res.status).send({ error: `GitHub API error: ${msg}` });
-      }
-      const raw = await res.json() as Array<Record<string, unknown>>;
+      const raw = await withApiSegment('GitHubAPI:listIssues', async () => {
+        const res = await fetch(url, { headers });
+        if (!res.ok) {
+          const msg = await res.text();
+          throw Object.assign(new Error(`GitHub API error: ${msg}`), { status: res.status });
+        }
+        return res.json() as Promise<Array<Record<string, unknown>>>;
+      });
       const issues: RemoteIssue[] = raw
         .filter((i) => !i['pull_request'])
         .map((i) => ({
@@ -214,8 +217,9 @@ const importPlugin: FastifyPluginCallback<ImportRouteOptions> = (app, opts, done
         }));
 
       return reply.send({ issues });
-    } catch (err) {
-      return reply.status(500).send({ error: String(err) });
+    } catch (err: unknown) {
+      const status = (err as { status?: number }).status;
+      return reply.status(status ?? 500).send({ error: String(err) });
     }
   });
 
@@ -235,12 +239,14 @@ const importPlugin: FastifyPluginCallback<ImportRouteOptions> = (app, opts, done
     try {
       const base = instanceUrl.replace(/\/$/, '');
       const url = `${base}/api/v4/projects/${encodeURIComponent(projectId)}/issues?state=${state}&per_page=50`;
-      const res = await fetch(url, { headers });
-      if (!res.ok) {
-        const msg = await res.text();
-        return reply.status(res.status).send({ error: `GitLab API error: ${msg}` });
-      }
-      const raw = await res.json() as Array<Record<string, unknown>>;
+      const raw = await withApiSegment('GitLabAPI:listIssues', async () => {
+        const res = await fetch(url, { headers });
+        if (!res.ok) {
+          const msg = await res.text();
+          throw Object.assign(new Error(`GitLab API error: ${msg}`), { status: res.status });
+        }
+        return res.json() as Promise<Array<Record<string, unknown>>>;
+      });
       const issues: RemoteIssue[] = raw.map((i) => ({
         id: i['id'] as number,
         number: i['iid'] as number,
@@ -252,8 +258,9 @@ const importPlugin: FastifyPluginCallback<ImportRouteOptions> = (app, opts, done
       }));
 
       return reply.send({ issues });
-    } catch (err) {
-      return reply.status(500).send({ error: String(err) });
+    } catch (err: unknown) {
+      const status = (err as { status?: number }).status;
+      return reply.status(status ?? 500).send({ error: String(err) });
     }
   });
 
@@ -282,23 +289,25 @@ const importPlugin: FastifyPluginCallback<ImportRouteOptions> = (app, opts, done
         : `project=${encodeURIComponent(projectKey)} AND (${filterJql})`;
 
       const url = `${base}/rest/api/3/search?jql=${encodeURIComponent(jql)}&maxResults=50`;
-      const res = await fetch(url, { headers });
-      if (!res.ok) {
-        const msg = await res.text();
-        return reply.status(res.status).send({ error: `Jira API error: ${msg}` });
-      }
-      const raw = await res.json() as {
-        issues: Array<{
-          id: string;
-          key: string;
-          fields: {
-            summary: string;
-            description: unknown;
-            status: { name: string };
-            labels: string[];
-          };
+      const raw = await withApiSegment('JiraAPI:searchIssues', async () => {
+        const res = await fetch(url, { headers });
+        if (!res.ok) {
+          const msg = await res.text();
+          throw Object.assign(new Error(`Jira API error: ${msg}`), { status: res.status });
+        }
+        return res.json() as Promise<{
+          issues: Array<{
+            id: string;
+            key: string;
+            fields: {
+              summary: string;
+              description: unknown;
+              status: { name: string };
+              labels: string[];
+            };
+          }>;
         }>;
-      };
+      });
       const issues: RemoteIssue[] = raw.issues.map((issue) => ({
         id: parseInt(issue.id),
         number: parseInt(issue.id),
@@ -312,8 +321,9 @@ const importPlugin: FastifyPluginCallback<ImportRouteOptions> = (app, opts, done
       }));
 
       return reply.send({ issues });
-    } catch (err) {
-      return reply.status(500).send({ error: String(err) });
+    } catch (err: unknown) {
+      const status = (err as { status?: number }).status;
+      return reply.status(status ?? 500).send({ error: String(err) });
     }
   });
 
