@@ -1,11 +1,20 @@
 import type { FastifyInstance } from 'fastify';
 import type { User } from '../../types.js';
 import type { TeamService } from './team-service.js';
+import type { RoleService } from '../rbac/role-service.js';
+import { requireRole } from '../rbac/rbac-middleware.js';
 
-export function registerTeamRoutes(app: FastifyInstance, teamService: TeamService): void {
+export function registerTeamRoutes(
+  app: FastifyInstance,
+  teamService: TeamService,
+  roleService: RoleService,
+): void {
+  const adminGuard = requireRole(roleService, 'global_admin', { getRepoId: () => null });
+
   // Create team
   app.post<{ Body: { name: string; description?: string } }>(
     '/api/teams',
+    { preHandler: adminGuard },
     async (request, reply) => {
       const user = (request as typeof request & { user?: User }).user;
       if (!user?.id) return reply.code(401).send({ error: 'Unauthorized' });
@@ -33,6 +42,7 @@ export function registerTeamRoutes(app: FastifyInstance, teamService: TeamServic
   // Delete team
   app.delete<{ Params: { teamId: string } }>(
     '/api/teams/:teamId',
+    { preHandler: adminGuard },
     async (request, reply) => {
       const user = (request as typeof request & { user?: User }).user;
       if (!user?.id) return reply.code(401).send({ error: 'Unauthorized' });
@@ -44,6 +54,7 @@ export function registerTeamRoutes(app: FastifyInstance, teamService: TeamServic
   // Add member to team
   app.post<{ Params: { teamId: string }; Body: { userId: string } }>(
     '/api/teams/:teamId/members',
+    { preHandler: adminGuard },
     async (request, reply) => {
       const user = (request as typeof request & { user?: User }).user;
       if (!user?.id) return reply.code(401).send({ error: 'Unauthorized' });
@@ -57,6 +68,7 @@ export function registerTeamRoutes(app: FastifyInstance, teamService: TeamServic
   // Remove member from team
   app.delete<{ Params: { teamId: string; userId: string } }>(
     '/api/teams/:teamId/members/:userId',
+    { preHandler: adminGuard },
     async (request, reply) => {
       const user = (request as typeof request & { user?: User }).user;
       if (!user?.id) return reply.code(401).send({ error: 'Unauthorized' });
@@ -72,6 +84,7 @@ export function registerTeamRoutes(app: FastifyInstance, teamService: TeamServic
     Body: { repoId: number; roleName: 'admin' | 'developer' | 'viewer' };
   }>(
     '/api/teams/:teamId/repos',
+    { preHandler: adminGuard },
     async (request, reply) => {
       const user = (request as typeof request & { user?: User }).user;
       if (!user?.id) return reply.code(401).send({ error: 'Unauthorized' });
@@ -85,6 +98,7 @@ export function registerTeamRoutes(app: FastifyInstance, teamService: TeamServic
   // Remove team repo access
   app.delete<{ Params: { teamId: string; repoId: string } }>(
     '/api/teams/:teamId/repos/:repoId',
+    { preHandler: adminGuard },
     async (request, reply) => {
       const user = (request as typeof request & { user?: User }).user;
       if (!user?.id) return reply.code(401).send({ error: 'Unauthorized' });

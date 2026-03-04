@@ -305,7 +305,7 @@ export async function createServer(
     registerRbacRoutes(app, hostedRoleService);
 
     const teamService = new TeamService(hostedCtx.getPool());
-    registerTeamRoutes(app, teamService);
+    registerTeamRoutes(app, teamService, hostedRoleService);
   }
 
   // --- Static serving / dev proxy ---
