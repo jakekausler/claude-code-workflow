@@ -17,7 +17,7 @@ export type { PgPool, PgPoolClient } from './hosted/db/pg-client.js';
 export { runMigrations } from './hosted/db/migrate.js';
 
 // RBAC
-export { RoleService, type RoleName, ROLE_HIERARCHY, requireRole, extractRepoId } from './hosted/rbac/index.js';
+export { RoleService, type RoleName, ROLE_HIERARCHY, requireRole, extractRepoId, repoScopeMiddleware } from './hosted/rbac/index.js';
 export { registerRbacRoutes } from './hosted/rbac/index.js';
 
 // Teams
