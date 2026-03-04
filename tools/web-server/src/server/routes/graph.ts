@@ -44,7 +44,7 @@ function mapTickets(
     status: string | null;
     jira_key: string | null;
     source: string | null;
-    has_stages: number | null;
+    has_stages: boolean | null;
     file_path: string;
   }[],
 ): GraphTicketRow[] {
@@ -68,7 +68,7 @@ function mapStages(
     worktree_branch: string | null;
     priority: number;
     due_date: string | null;
-    session_active: number;
+    session_active: boolean;
     pending_merge_parents: string | null;
     file_path: string;
   }[],
@@ -89,7 +89,7 @@ function mapDependencies(
     to_id: string;
     from_type: string;
     to_type: string;
-    resolved: number;
+    resolved: boolean;
   }[],
 ): GraphDependencyRow[] {
   return rows.map((r) => ({
@@ -98,7 +98,7 @@ function mapDependencies(
     to_id: r.to_id,
     from_type: r.from_type,
     to_type: r.to_type,
-    resolved: r.resolved !== 0,
+    resolved: r.resolved !== false,
   }));
 }
 
@@ -114,16 +114,16 @@ interface GraphData {
  * Fetch and map the common graph data from the first repo.
  * Returns `null` when no repos exist.
  */
-function fetchGraphData(dataService: DataService): GraphData | null {
-  const repos = dataService.repos.findAll();
+async function fetchGraphData(dataService: DataService): Promise<GraphData | null> {
+  const repos = await dataService.repos.findAll();
   if (repos.length === 0) return null;
   const repo = repos[0];
 
   return {
-    epics: mapEpics(dataService.epics.listByRepo(repo.id)),
-    tickets: mapTickets(dataService.tickets.listByRepo(repo.id)),
-    stages: mapStages(dataService.stages.listByRepo(repo.id)),
-    dependencies: mapDependencies(dataService.dependencies.listByRepo(repo.id)),
+    epics: mapEpics(await dataService.epics.listByRepo(repo.id)),
+    tickets: mapTickets(await dataService.tickets.listByRepo(repo.id)),
+    stages: mapStages(await dataService.stages.listByRepo(repo.id)),
+    dependencies: mapDependencies(await dataService.dependencies.listByRepo(repo.id)),
   };
 }
 
@@ -148,7 +148,7 @@ const graphPlugin: FastifyPluginCallback = (app, _opts, done) => {
 
     const { epic, mermaid } = result.data;
 
-    const data = fetchGraphData(app.dataService);
+    const data = await fetchGraphData(app.dataService);
     if (!data) {
       const emptyGraph = { nodes: [], edges: [], cycles: [], critical_path: [] };
       if (mermaid) {

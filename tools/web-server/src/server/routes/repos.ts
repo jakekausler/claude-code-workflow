@@ -10,7 +10,7 @@ const repoPlugin: FastifyPluginCallback = (app, _opts, done) => {
       return reply.status(503).send({ error: 'Database not initialized' });
     }
 
-    const repos = app.dataService.repos.findAll();
+    const repos = await app.dataService.repos.findAll();
     const result = repos.map((r) => ({
       id: r.id,
       name: r.name,

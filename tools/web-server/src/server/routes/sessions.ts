@@ -1,7 +1,7 @@
 import type { FastifyPluginCallback } from 'fastify';
 import fp from 'fastify-plugin';
 import { join, resolve } from 'path';
-import type { StageSessionRow, TicketSessionRow } from '../../../../kanban-cli/dist/db/repositories/index.js';
+import type { StageSessionRow, TicketSessionRow } from '../services/repositories/types.js';
 
 /** Validate that a session ID looks safe (alphanumeric, hyphens, underscores). */
 const SESSION_ID_RE = /^[\w-]+$/;
@@ -196,7 +196,7 @@ const sessionsPlugin: FastifyPluginCallback = (app, _opts, done) => {
         return reply.status(503).send({ error: 'Database not initialized' });
       }
 
-      const stage = app.dataService.stages.findById(stageId);
+      const stage = await app.dataService.stages.findById(stageId);
       if (!stage) {
         return reply.status(404).send({ error: 'Stage not found' });
       }
@@ -207,7 +207,7 @@ const sessionsPlugin: FastifyPluginCallback = (app, _opts, done) => {
 
       // Derive projectId from the repo path so the client can build a
       // `/sessions/:projectId/:sessionId` URL without extra round-trips.
-      const repo = app.dataService.repos.findById(stage.repo_id);
+      const repo = await app.dataService.repos.findById(stage.repo_id);
       const projectId = repo
         ? repo.path.replace(/\//g, '-')
         : null;
@@ -231,15 +231,15 @@ const sessionsPlugin: FastifyPluginCallback = (app, _opts, done) => {
         return reply.status(503).send({ error: 'Database not initialized' });
       }
 
-      const stage = app.dataService.stages.findById(stageId);
+      const stage = await app.dataService.stages.findById(stageId);
       if (!stage) {
         return reply.status(404).send({ error: 'Stage not found' });
       }
 
-      const rows = app.dataService.stageSessions.getSessionsByStageId(stageId);
+      const rows = await app.dataService.stageSessions.getSessionsByStageId(stageId);
 
       // Derive projectId from repo path (same logic as existing /session endpoint)
-      const repo = app.dataService.repos.findById(stage.repo_id);
+      const repo = await app.dataService.repos.findById(stage.repo_id);
       const projectId = repo ? repo.path.replace(/\//g, '-') : null;
 
       return {
@@ -249,7 +249,7 @@ const sessionsPlugin: FastifyPluginCallback = (app, _opts, done) => {
           phase: r.phase,
           startedAt: r.started_at,
           endedAt: r.ended_at,
-          isCurrent: r.is_current === 1,
+          isCurrent: r.is_current === true,
         })),
       };
     },
@@ -269,15 +269,15 @@ const sessionsPlugin: FastifyPluginCallback = (app, _opts, done) => {
         return reply.status(503).send({ error: 'Database not initialized' });
       }
 
-      const ticket = app.dataService.tickets.findById(ticketId);
+      const ticket = await app.dataService.tickets.findById(ticketId);
       if (!ticket) {
         return reply.status(404).send({ error: 'Ticket not found' });
       }
 
-      const rows = app.dataService.ticketSessions.getSessionsByTicketId(ticketId);
+      const rows = await app.dataService.ticketSessions.getSessionsByTicketId(ticketId);
 
       // Derive projectId from repo path
-      const repo = app.dataService.repos.findById(ticket.repo_id);
+      const repo = await app.dataService.repos.findById(ticket.repo_id);
       const projectId = repo ? repo.path.replace(/\//g, '-') : null;
 
       return {
