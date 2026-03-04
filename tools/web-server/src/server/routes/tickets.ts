@@ -210,7 +210,11 @@ const ticketPlugin: FastifyPluginCallback<TicketRouteOptions> = (app, opts, done
     epicId: z.string().min(1),
   });
 
-  app.post('/api/tickets/:id/convert', async (request, reply) => {
+  const convertTicketOpts = roleService
+    ? { preHandler: requireRole(roleService, 'developer') }
+    : {};
+
+  app.post('/api/tickets/:id/convert', convertTicketOpts, async (request, reply) => {
     if (!app.dataService) {
       return reply.status(503).send({ error: 'Database not initialized' });
     }
