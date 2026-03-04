@@ -12,7 +12,7 @@ import { type FileWatcher, type FileChangeEvent } from './services/file-watcher.
 import type { DeploymentContext } from './deployment/index.js';
 import { LocalDeploymentContext } from './deployment/index.js';
 import { HostedDeploymentContext } from './deployment/index.js';
-import { RoleService, registerRbacRoutes } from './deployment/index.js';
+import { RoleService, registerRbacRoutes, repoScopeMiddleware } from './deployment/index.js';
 import { TeamService, registerTeamRoutes } from './deployment/index.js';
 import { recordSessionLifecycle } from './services/newrelic-instrumentation.js';
 import { boardRoutes } from './routes/board.js';
@@ -46,6 +46,10 @@ declare module 'fastify' {
     sessionPipeline: SessionPipeline | null;
     fileWatcher: FileWatcher | null;
     deploymentContext: DeploymentContext;
+  }
+  interface FastifyRequest {
+    /** Repo IDs the authenticated user may access (hosted mode only). undefined = no filtering (local mode). */
+    allowedRepoIds?: string[];
   }
 }
 
@@ -290,6 +294,9 @@ export async function createServer(
   if (deploymentContext.mode === 'hosted') {
     const hostedCtx = deploymentContext as HostedDeploymentContext;
     roleService = new RoleService(hostedCtx.getPool());
+
+    // Attach allowedRepoIds to every request so read endpoints can scope results
+    app.addHook('preHandler', repoScopeMiddleware(roleService));
   }
 
   await app.register(meRoutes, { roleService });

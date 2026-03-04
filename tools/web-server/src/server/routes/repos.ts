@@ -5,12 +5,15 @@ const repoPlugin: FastifyPluginCallback = (app, _opts, done) => {
   /**
    * GET /api/repos — List all registered repos.
    */
-  app.get('/api/repos', async (_request, reply) => {
+  app.get('/api/repos', async (request, reply) => {
     if (!app.dataService) {
       return reply.status(503).send({ error: 'Database not initialized' });
     }
 
-    const repos = await app.dataService.repos.findAll();
+    const allRepos = await app.dataService.repos.findAll();
+    const repos = request.allowedRepoIds
+      ? allRepos.filter((r) => request.allowedRepoIds!.includes(String(r.id)))
+      : allRepos;
     const result = repos.map((r) => ({
       id: r.id,
       name: r.name,

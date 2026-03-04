@@ -111,19 +111,37 @@ interface GraphData {
 }
 
 /**
- * Fetch and map the common graph data from the first repo.
+ * Fetch and map the common graph data across allowed repos.
+ *
+ * `allowedRepoIds` restricts which repos are visible (hosted mode scoping).
+ * When undefined (local mode), no filtering is applied.
+ *
  * Returns `null` when no repos exist.
  */
-async function fetchGraphData(dataService: DataService): Promise<GraphData | null> {
-  const repos = await dataService.repos.findAll();
+async function fetchGraphData(dataService: DataService, allowedRepoIds?: string[]): Promise<GraphData | null> {
+  const allRepos = await dataService.repos.findAll();
+  const repos = allowedRepoIds
+    ? allRepos.filter((r) => allowedRepoIds.includes(String(r.id)))
+    : allRepos;
   if (repos.length === 0) return null;
-  const repo = repos[0];
+
+  const allEpics: GraphEpicRow[] = [];
+  const allTickets: GraphTicketRow[] = [];
+  const allStages: GraphStageRow[] = [];
+  const allDependencies: GraphDependencyRow[] = [];
+
+  for (const repo of repos) {
+    allEpics.push(...mapEpics(await dataService.epics.listByRepo(repo.id)));
+    allTickets.push(...mapTickets(await dataService.tickets.listByRepo(repo.id)));
+    allStages.push(...mapStages(await dataService.stages.listByRepo(repo.id)));
+    allDependencies.push(...mapDependencies(await dataService.dependencies.listByRepo(repo.id)));
+  }
 
   return {
-    epics: mapEpics(await dataService.epics.listByRepo(repo.id)),
-    tickets: mapTickets(await dataService.tickets.listByRepo(repo.id)),
-    stages: mapStages(await dataService.stages.listByRepo(repo.id)),
-    dependencies: mapDependencies(await dataService.dependencies.listByRepo(repo.id)),
+    epics: allEpics,
+    tickets: allTickets,
+    stages: allStages,
+    dependencies: allDependencies,
   };
 }
 
@@ -148,7 +166,7 @@ const graphPlugin: FastifyPluginCallback = (app, _opts, done) => {
 
     const { epic, mermaid } = result.data;
 
-    const data = await fetchGraphData(app.dataService);
+    const data = await fetchGraphData(app.dataService, request.allowedRepoIds);
     if (!data) {
       const emptyGraph = { nodes: [], edges: [], cycles: [], critical_path: [] };
       if (mermaid) {

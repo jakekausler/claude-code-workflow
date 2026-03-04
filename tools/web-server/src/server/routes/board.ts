@@ -130,16 +130,29 @@ interface BoardData {
 }
 
 /**
+ * Filter repos to only those the user is allowed to access.
+ * When `allowedRepoIds` is undefined (local mode), all repos are returned.
+ */
+function filterAllowedRepos<T extends { id: number }>(repos: T[], allowedRepoIds?: string[]): T[] {
+  if (!allowedRepoIds) return repos;
+  return repos.filter((r) => allowedRepoIds.includes(String(r.id)));
+}
+
+/**
  * Fetch and map the common board data.
  *
  * When `repoFilter` is provided, returns data for that single repo.
  * When omitted ("All Repos"), aggregates data across every registered repo
  * and sets `global: true` so that `buildBoard` produces a multi-repo board.
  *
+ * `allowedRepoIds` restricts which repos are visible (hosted mode scoping).
+ * When undefined (local mode), no filtering is applied.
+ *
  * Returns `null` when no repos exist (or the requested repo is not found).
  */
-async function fetchBoardData(dataService: DataService, repoFilter?: string): Promise<BoardData | null> {
-  const repos = await dataService.repos.findAll();
+async function fetchBoardData(dataService: DataService, repoFilter?: string, allowedRepoIds?: string[]): Promise<BoardData | null> {
+  const allRepos = await dataService.repos.findAll();
+  const repos = filterAllowedRepos(allRepos, allowedRepoIds);
   if (repos.length === 0) return null;
 
   if (repoFilter) {
@@ -203,7 +216,7 @@ const boardPlugin: FastifyPluginCallback = (app, _opts, done) => {
 
     const { epic, ticket, column, excludeDone, repo } = result.data;
 
-    const data = await fetchBoardData(app.dataService, repo);
+    const data = await fetchBoardData(app.dataService, repo, request.allowedRepoIds);
     if (!data) {
       return reply.send({
         generated_at: new Date().toISOString(),
@@ -233,7 +246,7 @@ const boardPlugin: FastifyPluginCallback = (app, _opts, done) => {
       return reply.status(503).send({ error: 'Database not initialized' });
     }
 
-    const data = await fetchBoardData(app.dataService);
+    const data = await fetchBoardData(app.dataService, undefined, request.allowedRepoIds);
     if (!data) {
       return reply.send({ total_stages: 0, total_tickets: 0, by_column: {} });
     }

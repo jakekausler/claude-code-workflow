@@ -19,19 +19,22 @@ const epicPlugin: FastifyPluginCallback<EpicRouteOptions> = (app, opts, done) =>
   /**
    * GET /api/epics — List all epics with ticket counts.
    */
-  app.get('/api/epics', async (_request, reply) => {
+  app.get('/api/epics', async (request, reply) => {
     if (!app.dataService) {
       return reply.status(503).send({ error: 'Database not initialized' });
     }
 
-    const repos = await app.dataService.repos.findAll();
+    const allRepos = await app.dataService.repos.findAll();
+    const repos = request.allowedRepoIds
+      ? allRepos.filter((r) => request.allowedRepoIds!.includes(String(r.id)))
+      : allRepos;
     if (repos.length === 0) {
       return reply.send([]);
     }
-    const repo = repos[0];
 
-    const epics = await app.dataService.epics.listByRepo(repo.id);
-    const tickets = await app.dataService.tickets.listByRepo(repo.id);
+    // Aggregate across all allowed repos
+    const epics = (await Promise.all(repos.map((r) => app.dataService!.epics.listByRepo(r.id)))).flat();
+    const tickets = (await Promise.all(repos.map((r) => app.dataService!.tickets.listByRepo(r.id)))).flat();
 
     // Build a map of epic_id -> ticket count for O(n) instead of O(n*m)
     const ticketCountByEpic = new Map<string, number>();
@@ -70,6 +73,11 @@ const epicPlugin: FastifyPluginCallback<EpicRouteOptions> = (app, opts, done) =>
     const epic = await app.dataService.epics.findById(id);
     if (!epic) {
       return reply.status(404).send({ error: 'Epic not found' });
+    }
+
+    // Repo-scoped access check
+    if (request.allowedRepoIds && !request.allowedRepoIds.includes(String(epic.repo_id))) {
+      return reply.status(403).send({ error: 'Access denied' });
     }
 
     const tickets = await app.dataService.tickets.listByEpic(id, epic.repo_id);

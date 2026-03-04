@@ -34,20 +34,23 @@ const ticketPlugin: FastifyPluginCallback<TicketRouteOptions> = (app, opts, done
     }
     const { epic } = parseResult.data;
 
-    const repos = await app.dataService.repos.findAll();
+    const allRepos = await app.dataService.repos.findAll();
+    const repos = request.allowedRepoIds
+      ? allRepos.filter((r) => request.allowedRepoIds!.includes(String(r.id)))
+      : allRepos;
     if (repos.length === 0) {
       return reply.send([]);
     }
-    const repo = repos[0];
 
-    let tickets = await app.dataService.tickets.listByRepo(repo.id);
+    // Aggregate across all allowed repos
+    let tickets = (await Promise.all(repos.map((r) => app.dataService!.tickets.listByRepo(r.id)))).flat();
 
     // Filter by epic if query param provided
     if (epic) {
       tickets = tickets.filter((t) => t.epic_id === epic);
     }
 
-    const stages = await app.dataService.stages.listByRepo(repo.id);
+    const stages = (await Promise.all(repos.map((r) => app.dataService!.stages.listByRepo(r.id)))).flat();
 
     // Build a map of ticket_id -> stage count for O(n) enrichment
     const stageCountByTicket = new Map<string, number>();
@@ -89,6 +92,11 @@ const ticketPlugin: FastifyPluginCallback<TicketRouteOptions> = (app, opts, done
     const ticket = await app.dataService.tickets.findById(id);
     if (!ticket) {
       return reply.status(404).send({ error: 'Ticket not found' });
+    }
+
+    // Repo-scoped access check
+    if (request.allowedRepoIds && !request.allowedRepoIds.includes(String(ticket.repo_id))) {
+      return reply.status(403).send({ error: 'Access denied' });
     }
 
     const stages = await app.dataService.stages.listByTicket(id, ticket.repo_id);

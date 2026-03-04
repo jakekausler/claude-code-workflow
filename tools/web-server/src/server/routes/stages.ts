@@ -81,13 +81,16 @@ const stagePlugin: FastifyPluginCallback = (app, _opts, done) => {
     }
     const { ticket } = parseResult.data;
 
-    const repos = await app.dataService.repos.findAll();
+    const allRepos = await app.dataService.repos.findAll();
+    const repos = request.allowedRepoIds
+      ? allRepos.filter((r) => request.allowedRepoIds!.includes(String(r.id)))
+      : allRepos;
     if (repos.length === 0) {
       return reply.send([]);
     }
-    const repo = repos[0];
 
-    let stages = await app.dataService.stages.listByRepo(repo.id);
+    // Aggregate across all allowed repos
+    let stages = (await Promise.all(repos.map((r) => app.dataService!.stages.listByRepo(r.id)))).flat();
 
     // Filter by ticket if query param provided
     if (ticket) {
@@ -131,6 +134,11 @@ const stagePlugin: FastifyPluginCallback = (app, _opts, done) => {
     const stage = await app.dataService.stages.findById(id);
     if (!stage) {
       return reply.status(404).send({ error: 'Stage not found' });
+    }
+
+    // Repo-scoped access check
+    if (request.allowedRepoIds && !request.allowedRepoIds.includes(String(stage.repo_id))) {
+      return reply.status(403).send({ error: 'Access denied' });
     }
 
     // Fetch dependencies in both directions
