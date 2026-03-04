@@ -18,6 +18,29 @@ import { useInteractionSSE } from './api/interaction-hooks.js';
 import { useSessionMap } from './api/use-session-map.js';
 import { InteractionOverlay } from './components/interaction/InteractionOverlay.js';
 import { GlobalSearch } from './components/search/GlobalSearch.js';
+import { AuthProvider, useAuthContext } from './components/AuthProvider.js';
+import { LoginPage } from './components/LoginPage.js';
+
+/**
+ * Gate component: in hosted mode, requires authentication before
+ * rendering children. In local mode, renders children directly.
+ */
+function AuthGate({ children }: { children: React.ReactNode }) {
+  const deploymentMode = (window as unknown as { __DEPLOYMENT_MODE__?: string }).__DEPLOYMENT_MODE__;
+
+  // Local mode: no auth required
+  if (deploymentMode !== 'hosted') {
+    return <>{children}</>;
+  }
+
+  // Hosted mode: check authentication
+  const { isAuthenticated } = useAuthContext();
+  if (!isAuthenticated) {
+    return <LoginPage />;
+  }
+
+  return <>{children}</>;
+}
 
 function AppContent() {
   // Hooks that require QueryClientProvider context must live here, not in App()
@@ -64,7 +87,11 @@ export function App() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <AppContent />
+      <AuthProvider>
+        <AuthGate>
+          <AppContent />
+        </AuthGate>
+      </AuthProvider>
     </QueryClientProvider>
   );
 }

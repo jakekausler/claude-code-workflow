@@ -241,6 +241,37 @@ export class HostedAuthProvider implements AuthProvider {
     return { accessToken, refreshToken };
   }
 
+  /**
+   * Revoke a refresh token's session (logout).
+   * Marks the session as revoked and adds the token to the revoked list.
+   */
+  async logout(refreshToken: string): Promise<void> {
+    let payload: RefreshTokenPayload;
+    try {
+      payload = jwt.verify(refreshToken, this.jwtSecret) as RefreshTokenPayload;
+    } catch {
+      // Token is already expired or invalid — treat as successful logout
+      return;
+    }
+
+    const { jti: tokenId, sub: userId, sessionId } = payload;
+
+    // Revoke the session
+    await this.pool.query(
+      `UPDATE auth_sessions SET revoked_at = NOW()
+       WHERE id = $1 AND revoked_at IS NULL`,
+      [sessionId],
+    );
+
+    // Mark the refresh token as revoked
+    await this.pool.query(
+      `INSERT INTO revoked_refresh_tokens (token_id, user_id, revoked_reason)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (token_id) DO NOTHING`,
+      [tokenId, userId, 'logout'],
+    );
+  }
+
   // ----------------------------------------------------------------
   // Private helpers
   // ----------------------------------------------------------------

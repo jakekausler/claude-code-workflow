@@ -28,6 +28,7 @@ import { orchestratorRoutes, computeWaitingType } from './routes/orchestrator.js
 import { searchRoutes } from './routes/search.js';
 import { importRoutes } from './routes/import.js';
 import { meRoutes } from './routes/me.js';
+import { authRoutes } from './routes/auth.js';
 
 interface SessionStatusSSE {
   stageId: string;
@@ -94,6 +95,12 @@ export async function createServer(
 
   // Wire the module-level broadcastEvent() to the deployment context's EventBroadcaster
   setBroadcaster(deploymentContext.getEventBroadcaster());
+
+  // Register public auth routes BEFORE the auth middleware (hosted mode only)
+  if (deploymentContext.mode === 'hosted') {
+    const hostedCtx = deploymentContext as HostedDeploymentContext;
+    await app.register(authRoutes, { authProvider: hostedCtx.getHostedAuthProvider() });
+  }
 
   // Register auth plugin (no-op for local mode)
   await app.register(deploymentContext.getAuthProvider().requireAuth());
