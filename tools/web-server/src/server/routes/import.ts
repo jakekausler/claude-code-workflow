@@ -349,6 +349,11 @@ const importPlugin: FastifyPluginCallback<ImportRouteOptions> = (app, opts, done
 
   // POST /api/import/issues — create ticket files
   app.post('/api/import/issues', importOpts, async (request, reply) => {
+    // Filesystem operations not supported in hosted mode
+    if (app.deploymentContext.mode === 'hosted') {
+      return reply.code(501).send({ error: 'Not supported in hosted mode' });
+    }
+
     const parseResult = importBodySchema.safeParse(request.body);
     if (!parseResult.success) {
       return reply.status(400).send({ error: 'Invalid parameters', details: parseResult.error.issues });
@@ -362,14 +367,14 @@ const importPlugin: FastifyPluginCallback<ImportRouteOptions> = (app, opts, done
 
     // Determine tickets directory from the repo data
     let ticketsDir: string;
-    const repos = app.dataService.repos.findAll();
+    const repos = await app.dataService.repos.findAll();
     if (repos.length > 0) {
       const repo = repos[0];
       if (repo.path) {
         ticketsDir = join(repo.path, 'tickets');
       } else {
         // Fall back to first ticket's file_path
-        const tickets = app.dataService.tickets.listByRepo(repo.id);
+        const tickets = await app.dataService.tickets.listByRepo(repo.id);
         if (tickets.length > 0 && tickets[0].file_path) {
           ticketsDir = dirname(tickets[0].file_path);
         } else {

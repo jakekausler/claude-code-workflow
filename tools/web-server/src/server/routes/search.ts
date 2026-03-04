@@ -31,13 +31,13 @@ const searchPlugin: FastifyPluginCallback = (app, _opts, done) => {
     const term = q.toLowerCase();
     const results: SearchResult[] = [];
 
-    const repos = app.dataService.repos.findAll();
+    const repos = await app.dataService.repos.findAll();
     if (repos.length === 0) return reply.send({ results: [] });
     const repo = repos[0];
 
     // Search epics
     if (!type || type === 'epic') {
-      const epics = app.dataService.epics.listByRepo(repo.id);
+      const epics = await app.dataService.epics.listByRepo(repo.id);
       for (const epic of epics) {
         if (!epic.title?.toLowerCase().includes(term)) continue;
         if (status && epic.status !== status) continue;
@@ -53,9 +53,9 @@ const searchPlugin: FastifyPluginCallback = (app, _opts, done) => {
 
     // Search tickets
     if (!type || type === 'ticket') {
-      const tickets = app.dataService.tickets.listByRepo(repo.id);
+      const tickets = await app.dataService.tickets.listByRepo(repo.id);
       const epicMap = new Map<string, string>();
-      for (const e of app.dataService.epics.listByRepo(repo.id)) {
+      for (const e of await app.dataService.epics.listByRepo(repo.id)) {
         epicMap.set(e.id, e.title ?? e.id);
       }
       for (const ticket of tickets) {
@@ -74,9 +74,9 @@ const searchPlugin: FastifyPluginCallback = (app, _opts, done) => {
 
     // Search stages
     if (!type || type === 'stage') {
-      const stages = app.dataService.stages.listByRepo(repo.id);
+      const stages = await app.dataService.stages.listByRepo(repo.id);
       const ticketMap = new Map<string, string>();
-      for (const t of app.dataService.tickets.listByRepo(repo.id)) {
+      for (const t of await app.dataService.tickets.listByRepo(repo.id)) {
         ticketMap.set(t.id, t.title ?? t.id);
       }
       for (const stage of stages) {

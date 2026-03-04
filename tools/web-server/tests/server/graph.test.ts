@@ -18,7 +18,7 @@ describe('graph API', () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'kanban-graph-test-'));
     db = new KanbanDatabase(path.join(tmpDir, 'test.db'));
     seedDatabase(db, tmpDir);
-    dataService = new DataService({ db });
+    dataService = DataService.fromSqlite(db);
     app = await createServer({ logger: false, isDev: true, dataService });
   });
 
@@ -105,7 +105,7 @@ describe('graph API', () => {
   it('GET /api/graph with empty database returns empty graph', async () => {
     const emptyTmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'kanban-graph-empty-'));
     const emptyDb = new KanbanDatabase(path.join(emptyTmpDir, 'empty.db'));
-    const emptyDs = new DataService({ db: emptyDb });
+    const emptyDs = DataService.fromSqlite(emptyDb);
     const emptyApp = await createServer({ logger: false, isDev: true, dataService: emptyDs });
     try {
       const response = await emptyApp.inject({ method: 'GET', url: '/api/graph' });
@@ -160,7 +160,7 @@ describe('graph API', () => {
   it('GET /api/graph?mermaid=true with empty database returns mermaid string', async () => {
     const emptyTmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'kanban-empty-'));
     const emptyDb = new KanbanDatabase(path.join(emptyTmpDir, 'empty.db'));
-    const emptyDs = new DataService({ db: emptyDb });
+    const emptyDs = DataService.fromSqlite(emptyDb);
     const emptyApp = await createServer({ logger: false, isDev: true, dataService: emptyDs });
     try {
       const response = await emptyApp.inject({

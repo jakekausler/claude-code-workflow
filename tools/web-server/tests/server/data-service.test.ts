@@ -5,13 +5,6 @@ import { tmpdir } from 'os';
 import { KanbanDatabase } from '../../../kanban-cli/dist/db/database.js';
 import { DataService } from '../../src/server/services/data-service.js';
 import { createServer } from '../../src/server/app.js';
-import {
-  RepoRepository,
-  EpicRepository,
-  TicketRepository,
-  StageRepository,
-  DependencyRepository,
-} from '../../../kanban-cli/dist/db/repositories/index.js';
 
 describe('DataService', () => {
   let tmpDir: string;
@@ -21,7 +14,7 @@ describe('DataService', () => {
   beforeEach(() => {
     tmpDir = mkdtempSync(join(tmpdir(), 'data-service-test-'));
     db = new KanbanDatabase(join(tmpDir, 'test.db'));
-    service = new DataService({ db });
+    service = DataService.fromSqlite(db);
   });
 
   afterEach(() => {
@@ -33,28 +26,20 @@ describe('DataService', () => {
     rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it('provides access to the raw database', () => {
-    expect(service.database).toBe(db);
+  it('provides repository instances', () => {
+    expect(service.repos).toBeDefined();
+    expect(service.epics).toBeDefined();
+    expect(service.tickets).toBeDefined();
+    expect(service.stages).toBeDefined();
+    expect(service.dependencies).toBeDefined();
+    expect(service.stageSessions).toBeDefined();
+    expect(service.ticketSessions).toBeDefined();
   });
 
-  it('provides a RepoRepository instance', () => {
-    expect(service.repos).toBeInstanceOf(RepoRepository);
-  });
-
-  it('provides an EpicRepository instance', () => {
-    expect(service.epics).toBeInstanceOf(EpicRepository);
-  });
-
-  it('provides a TicketRepository instance', () => {
-    expect(service.tickets).toBeInstanceOf(TicketRepository);
-  });
-
-  it('provides a StageRepository instance', () => {
-    expect(service.stages).toBeInstanceOf(StageRepository);
-  });
-
-  it('provides a DependencyRepository instance', () => {
-    expect(service.dependencies).toBeInstanceOf(DependencyRepository);
+  it('repository methods return promises', async () => {
+    const repos = await service.repos.findAll();
+    expect(Array.isArray(repos)).toBe(true);
+    expect(repos.length).toBe(0);
   });
 
   it('close() closes the database connection', () => {

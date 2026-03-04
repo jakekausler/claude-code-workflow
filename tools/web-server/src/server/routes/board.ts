@@ -28,8 +28,8 @@ const boardQuerySchema = z.object({
 
 /**
  * Maps database row types to the shapes that buildBoard() expects.
- * DB rows use SQLite conventions (number for booleans, nullable strings);
- * buildBoard input types use stricter TypeScript types.
+ * Repository rows use boolean for boolean fields; buildBoard input
+ * types use stricter TypeScript types.
  */
 function mapEpics(rows: { id: string; title: string | null; status: string | null; file_path: string }[]): BoardEpicRow[] {
   return rows.map((r) => ({
@@ -48,7 +48,7 @@ function mapTickets(
     status: string | null;
     jira_key: string | null;
     source: string | null;
-    has_stages: number | null;
+    has_stages: boolean | null;
     file_path: string;
   }[],
 ): BoardTicketRow[] {
@@ -59,7 +59,7 @@ function mapTickets(
     status: r.status ?? '',
     jira_key: r.jira_key,
     source: r.source ?? '',
-    has_stages: (r.has_stages ?? 0) !== 0,
+    has_stages: (r.has_stages ?? false) !== false,
     file_path: r.file_path,
   }));
 }
@@ -76,7 +76,7 @@ function mapStages(
     worktree_branch: string | null;
     priority: number;
     due_date: string | null;
-    session_active: number;
+    session_active: boolean;
     pending_merge_parents: string | null;
     file_path: string;
   }[],
@@ -92,7 +92,7 @@ function mapStages(
     worktree_branch: r.worktree_branch ?? '',
     priority: r.priority,
     due_date: r.due_date,
-    session_active: r.session_active !== 0,
+    session_active: r.session_active !== false,
     pending_merge_parents: r.pending_merge_parents ?? undefined,
     file_path: r.file_path,
   }));
@@ -105,7 +105,7 @@ function mapDependencies(
     to_id: string;
     from_type: string;
     to_type: string;
-    resolved: number;
+    resolved: boolean;
   }[],
 ): BoardDependencyRow[] {
   return rows.map((r) => ({
@@ -114,7 +114,7 @@ function mapDependencies(
     to_id: r.to_id,
     from_type: r.from_type,
     to_type: r.to_type,
-    resolved: r.resolved !== 0,
+    resolved: r.resolved !== false,
   }));
 }
 
@@ -138,8 +138,8 @@ interface BoardData {
  *
  * Returns `null` when no repos exist (or the requested repo is not found).
  */
-function fetchBoardData(dataService: DataService, repoFilter?: string): BoardData | null {
-  const repos = dataService.repos.findAll();
+async function fetchBoardData(dataService: DataService, repoFilter?: string): Promise<BoardData | null> {
+  const repos = await dataService.repos.findAll();
   if (repos.length === 0) return null;
 
   if (repoFilter) {
@@ -150,10 +150,10 @@ function fetchBoardData(dataService: DataService, repoFilter?: string): BoardDat
 
     return {
       repoPath: repo.path,
-      epics: mapEpics(dataService.epics.listByRepo(repo.id)),
-      tickets: mapTickets(dataService.tickets.listByRepo(repo.id)),
-      stages: mapStages(dataService.stages.listByRepo(repo.id)),
-      dependencies: mapDependencies(dataService.dependencies.listByRepo(repo.id)),
+      epics: mapEpics(await dataService.epics.listByRepo(repo.id)),
+      tickets: mapTickets(await dataService.tickets.listByRepo(repo.id)),
+      stages: mapStages(await dataService.stages.listByRepo(repo.id)),
+      dependencies: mapDependencies(await dataService.dependencies.listByRepo(repo.id)),
       global: false,
     };
   }
@@ -165,10 +165,10 @@ function fetchBoardData(dataService: DataService, repoFilter?: string): BoardDat
   const allDependencies: BoardDependencyRow[] = [];
 
   for (const repo of repos) {
-    allEpics.push(...mapEpics(dataService.epics.listByRepo(repo.id)));
-    allTickets.push(...mapTickets(dataService.tickets.listByRepo(repo.id)));
-    allStages.push(...mapStages(dataService.stages.listByRepo(repo.id)));
-    allDependencies.push(...mapDependencies(dataService.dependencies.listByRepo(repo.id)));
+    allEpics.push(...mapEpics(await dataService.epics.listByRepo(repo.id)));
+    allTickets.push(...mapTickets(await dataService.tickets.listByRepo(repo.id)));
+    allStages.push(...mapStages(await dataService.stages.listByRepo(repo.id)));
+    allDependencies.push(...mapDependencies(await dataService.dependencies.listByRepo(repo.id)));
   }
 
   return {
@@ -203,7 +203,7 @@ const boardPlugin: FastifyPluginCallback = (app, _opts, done) => {
 
     const { epic, ticket, column, excludeDone, repo } = result.data;
 
-    const data = fetchBoardData(app.dataService, repo);
+    const data = await fetchBoardData(app.dataService, repo);
     if (!data) {
       return reply.send({
         generated_at: new Date().toISOString(),
@@ -233,7 +233,7 @@ const boardPlugin: FastifyPluginCallback = (app, _opts, done) => {
       return reply.status(503).send({ error: 'Database not initialized' });
     }
 
-    const data = fetchBoardData(app.dataService);
+    const data = await fetchBoardData(app.dataService);
     if (!data) {
       return reply.send({ total_stages: 0, total_tickets: 0, by_column: {} });
     }

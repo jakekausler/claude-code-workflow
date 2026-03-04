@@ -34,20 +34,20 @@ const ticketPlugin: FastifyPluginCallback<TicketRouteOptions> = (app, opts, done
     }
     const { epic } = parseResult.data;
 
-    const repos = app.dataService.repos.findAll();
+    const repos = await app.dataService.repos.findAll();
     if (repos.length === 0) {
       return reply.send([]);
     }
     const repo = repos[0];
 
-    let tickets = app.dataService.tickets.listByRepo(repo.id);
+    let tickets = await app.dataService.tickets.listByRepo(repo.id);
 
     // Filter by epic if query param provided
     if (epic) {
       tickets = tickets.filter((t) => t.epic_id === epic);
     }
 
-    const stages = app.dataService.stages.listByRepo(repo.id);
+    const stages = await app.dataService.stages.listByRepo(repo.id);
 
     // Build a map of ticket_id -> stage count for O(n) enrichment
     const stageCountByTicket = new Map<string, number>();
@@ -64,7 +64,7 @@ const ticketPlugin: FastifyPluginCallback<TicketRouteOptions> = (app, opts, done
       epic_id: t.epic_id,
       jira_key: t.jira_key,
       source: t.source,
-      has_stages: (t.has_stages ?? 0) !== 0,
+      has_stages: (t.has_stages ?? false) !== false,
       file_path: t.file_path,
       stage_count: stageCountByTicket.get(t.id) ?? 0,
     }));
@@ -86,12 +86,12 @@ const ticketPlugin: FastifyPluginCallback<TicketRouteOptions> = (app, opts, done
       return reply.status(400).send({ error: 'Invalid ticket ID format' });
     }
 
-    const ticket = app.dataService.tickets.findById(id);
+    const ticket = await app.dataService.tickets.findById(id);
     if (!ticket) {
       return reply.status(404).send({ error: 'Ticket not found' });
     }
 
-    const stages = app.dataService.stages.listByTicket(id, ticket.repo_id);
+    const stages = await app.dataService.stages.listByTicket(id, ticket.repo_id);
 
     const stageList = stages.map((s) => ({
       id: s.id,
@@ -100,7 +100,7 @@ const ticketPlugin: FastifyPluginCallback<TicketRouteOptions> = (app, opts, done
       kanban_column: s.kanban_column,
       refinement_type: parseRefinementType(s.refinement_type),
       worktree_branch: s.worktree_branch,
-      session_active: s.session_active !== 0,
+      session_active: s.session_active !== false,
       session_id: s.session_id ?? null,
       priority: s.priority,
       due_date: s.due_date,
@@ -114,7 +114,7 @@ const ticketPlugin: FastifyPluginCallback<TicketRouteOptions> = (app, opts, done
       epic_id: ticket.epic_id,
       jira_key: ticket.jira_key,
       source: ticket.source,
-      has_stages: (ticket.has_stages ?? 0) !== 0,
+      has_stages: (ticket.has_stages ?? false) !== false,
       file_path: ticket.file_path,
       stages: stageList,
     });
@@ -139,19 +139,24 @@ const ticketPlugin: FastifyPluginCallback<TicketRouteOptions> = (app, opts, done
       return reply.status(503).send({ error: 'Database not initialized' });
     }
 
+    // Filesystem operations not supported in hosted mode
+    if (app.deploymentContext.mode === 'hosted') {
+      return reply.code(501).send({ error: 'Not supported in hosted mode' });
+    }
+
     const parsed = createTicketSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.status(400).send({ error: 'Invalid request body', details: parsed.error.issues });
     }
     const { title, epic_id, status, description } = parsed.data;
 
-    const repos = app.dataService.repos.findAll();
+    const repos = await app.dataService.repos.findAll();
     if (repos.length === 0) {
       return reply.status(503).send({ error: 'No repos configured' });
     }
     const repo = repos[0];
 
-    const epic = app.dataService.epics.findById(epic_id);
+    const epic = await app.dataService.epics.findById(epic_id);
     if (!epic) {
       return reply.status(404).send({ error: `Epic ${epic_id} not found` });
     }
@@ -165,7 +170,7 @@ const ticketPlugin: FastifyPluginCallback<TicketRouteOptions> = (app, opts, done
     const epicNumPadded = String(epicNum).padStart(3, '0');
 
     // Find max ticket number for this epic
-    const allTickets = app.dataService.tickets.listByRepo(repo.id);
+    const allTickets = await app.dataService.tickets.listByRepo(repo.id);
     const prefix = `TICKET-${epicNumPadded}-`;
     const ticketNums = allTickets
       .filter((t) => t.id.startsWith(prefix))
@@ -183,7 +188,7 @@ const ticketPlugin: FastifyPluginCallback<TicketRouteOptions> = (app, opts, done
     mkdirSync(dirname(file_path), { recursive: true });
     writeFileSync(file_path, matter.stringify(description ?? '', { title, status, epic: epic_id }));
 
-    app.dataService.tickets.upsert({
+    await app.dataService.tickets.upsert({
       id,
       epic_id,
       repo_id: repo.id,
@@ -225,7 +230,7 @@ const ticketPlugin: FastifyPluginCallback<TicketRouteOptions> = (app, opts, done
       return reply.status(400).send({ error: 'Invalid ticket ID format' });
     }
 
-    const ticket = app.dataService.tickets.findById(id);
+    const ticket = await app.dataService.tickets.findById(id);
     if (!ticket) {
       return reply.status(404).send({ error: 'Ticket not found' });
     }
@@ -236,7 +241,7 @@ const ticketPlugin: FastifyPluginCallback<TicketRouteOptions> = (app, opts, done
     }
     const { epicId } = parsedBody.data;
 
-    const epic = app.dataService.epics.findById(epicId);
+    const epic = await app.dataService.epics.findById(epicId);
     if (!epic) {
       return reply.status(404).send({ error: `Epic ${epicId} not found` });
     }

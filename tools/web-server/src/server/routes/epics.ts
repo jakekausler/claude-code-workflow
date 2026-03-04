@@ -24,14 +24,14 @@ const epicPlugin: FastifyPluginCallback<EpicRouteOptions> = (app, opts, done) =>
       return reply.status(503).send({ error: 'Database not initialized' });
     }
 
-    const repos = app.dataService.repos.findAll();
+    const repos = await app.dataService.repos.findAll();
     if (repos.length === 0) {
       return reply.send([]);
     }
     const repo = repos[0];
 
-    const epics = app.dataService.epics.listByRepo(repo.id);
-    const tickets = app.dataService.tickets.listByRepo(repo.id);
+    const epics = await app.dataService.epics.listByRepo(repo.id);
+    const tickets = await app.dataService.tickets.listByRepo(repo.id);
 
     // Build a map of epic_id -> ticket count for O(n) instead of O(n*m)
     const ticketCountByEpic = new Map<string, number>();
@@ -67,13 +67,13 @@ const epicPlugin: FastifyPluginCallback<EpicRouteOptions> = (app, opts, done) =>
       return reply.status(400).send({ error: 'Invalid epic ID format' });
     }
 
-    const epic = app.dataService.epics.findById(id);
+    const epic = await app.dataService.epics.findById(id);
     if (!epic) {
       return reply.status(404).send({ error: 'Epic not found' });
     }
 
-    const tickets = app.dataService.tickets.listByEpic(id, epic.repo_id);
-    const stages = app.dataService.stages.listByRepo(epic.repo_id);
+    const tickets = await app.dataService.tickets.listByEpic(id, epic.repo_id);
+    const stages = await app.dataService.stages.listByRepo(epic.repo_id);
 
     // Build a map of ticket_id -> stage count
     const stageCountByTicket = new Map<string, number>();
@@ -89,7 +89,7 @@ const epicPlugin: FastifyPluginCallback<EpicRouteOptions> = (app, opts, done) =>
       status: t.status ?? '',
       jira_key: t.jira_key,
       source: t.source,
-      has_stages: (t.has_stages ?? 0) !== 0,
+      has_stages: (t.has_stages ?? false) !== false,
       stage_count: stageCountByTicket.get(t.id) ?? 0,
     }));
 
@@ -121,20 +121,25 @@ const epicPlugin: FastifyPluginCallback<EpicRouteOptions> = (app, opts, done) =>
       return reply.status(503).send({ error: 'Database not initialized' });
     }
 
+    // Filesystem operations not supported in hosted mode
+    if (app.deploymentContext.mode === 'hosted') {
+      return reply.code(501).send({ error: 'Not supported in hosted mode' });
+    }
+
     const parsed = createEpicSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.status(400).send({ error: 'Invalid request body', details: parsed.error.issues });
     }
     const { title, status, description } = parsed.data;
 
-    const repos = app.dataService.repos.findAll();
+    const repos = await app.dataService.repos.findAll();
     if (repos.length === 0) {
       return reply.status(503).send({ error: 'No repos configured' });
     }
     const repo = repos[0];
 
     // Generate next EPIC ID
-    const existingEpics = app.dataService.epics.listByRepo(repo.id);
+    const existingEpics = await app.dataService.epics.listByRepo(repo.id);
     const nums = existingEpics
       .map((e) => {
         const m = /^EPIC-(\d+)$/.exec(e.id);
@@ -148,7 +153,7 @@ const epicPlugin: FastifyPluginCallback<EpicRouteOptions> = (app, opts, done) =>
     mkdirSync(dirname(file_path), { recursive: true });
     writeFileSync(file_path, matter.stringify(description ?? '', { title, status }));
 
-    app.dataService.epics.upsert({
+    await app.dataService.epics.upsert({
       id,
       repo_id: repo.id,
       title,

@@ -18,7 +18,7 @@ describe('board API', () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'kanban-board-test-'));
     db = new KanbanDatabase(path.join(tmpDir, 'test.db'));
     seedDatabase(db, tmpDir);
-    dataService = new DataService({ db });
+    dataService = DataService.fromSqlite(db);
     app = await createServer({ logger: false, isDev: true, dataService });
   });
 
@@ -206,7 +206,7 @@ describe('board API', () => {
   it('GET /api/board with empty database returns empty board', async () => {
     const emptyTmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'kanban-empty-'));
     const emptyDb = new KanbanDatabase(path.join(emptyTmpDir, 'empty.db'));
-    const emptyDs = new DataService({ db: emptyDb });
+    const emptyDs = DataService.fromSqlite(emptyDb);
     const emptyApp = await createServer({ logger: false, isDev: true, dataService: emptyDs });
     try {
       const response = await emptyApp.inject({ method: 'GET', url: '/api/board' });

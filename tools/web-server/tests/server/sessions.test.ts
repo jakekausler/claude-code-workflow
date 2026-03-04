@@ -332,10 +332,10 @@ describe('sessions API', () => {
       stageTmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'kanban-stage-session-test-'));
       stageDb = new KanbanDatabase(path.join(stageTmpDir, 'test.db'));
       seedDatabase(stageDb, stageTmpDir);
-      stageDataService = new DataService({ db: stageDb });
+      stageDataService = DataService.fromSqlite(stageDb);
 
       // Link one stage to a session so we can test the happy path
-      stageDataService.stages.updateSessionId(SEED_IDS.STAGE_AUTH_API, 'sess-linked-123');
+      await stageDataService.stages.updateSessionId(SEED_IDS.STAGE_AUTH_API, 'sess-linked-123');
 
       stageApp = await createServer({
         logger: false,

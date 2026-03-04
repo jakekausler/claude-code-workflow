@@ -23,7 +23,7 @@ describe('session history API', () => {
 
     db = new KanbanDatabase(path.join(tmpDir, 'test.db'));
     seedDatabase(db, tmpDir);
-    dataService = new DataService({ db });
+    dataService = DataService.fromSqlite(db);
 
     app = await createServer({
       logger: false,
@@ -51,7 +51,7 @@ describe('session history API', () => {
     });
 
     it('returns sessions with projectId', async () => {
-      dataService.stageSessions.addSession(SEED_IDS.STAGE_AUTH_API, 'sess-1', 'Design');
+      await dataService.stageSessions.addSession(SEED_IDS.STAGE_AUTH_API, 'sess-1', 'Design');
 
       const res = await app.inject({
         method: 'GET',
@@ -67,8 +67,8 @@ describe('session history API', () => {
     });
 
     it('returns multiple sessions ordered by is_current DESC, started_at DESC', async () => {
-      dataService.stageSessions.addSession(SEED_IDS.STAGE_AUTH_API, 'sess-old', 'Design');
-      dataService.stageSessions.addSession(SEED_IDS.STAGE_AUTH_API, 'sess-new', 'Build');
+      await dataService.stageSessions.addSession(SEED_IDS.STAGE_AUTH_API, 'sess-old', 'Design');
+      await dataService.stageSessions.addSession(SEED_IDS.STAGE_AUTH_API, 'sess-new', 'Build');
 
       const res = await app.inject({
         method: 'GET',
@@ -108,7 +108,7 @@ describe('session history API', () => {
     });
 
     it('returns sessions with projectId', async () => {
-      dataService.ticketSessions.addSession(SEED_IDS.TICKET_LOGIN, 'sess-conv', 'convert');
+      await dataService.ticketSessions.addSession(SEED_IDS.TICKET_LOGIN, 'sess-conv', 'convert');
 
       const res = await app.inject({
         method: 'GET',

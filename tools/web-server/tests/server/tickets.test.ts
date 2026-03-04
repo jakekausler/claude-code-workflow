@@ -18,7 +18,7 @@ describe('tickets API', () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'kanban-tickets-test-'));
     db = new KanbanDatabase(path.join(tmpDir, 'test.db'));
     seedDatabase(db, tmpDir);
-    dataService = new DataService({ db });
+    dataService = DataService.fromSqlite(db);
     app = await createServer({ logger: false, isDev: true, dataService });
   });
 
