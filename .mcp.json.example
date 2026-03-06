@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "kanban": {
+      "command": "npx",
+      "args": ["tsx", "tools/mcp-server/src/index.ts"],
+      "env": {
+        "DISABLE_JIRA": "false"
+      }
+    }
+  }
+}

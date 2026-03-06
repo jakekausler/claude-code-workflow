@@ -1,0 +1,5 @@
+{"type":"user","uuid":"u1","parentUuid":null,"isSidechain":false,"userType":"external","cwd":"/project","sessionId":"s1","version":"2.1.56","gitBranch":"main","message":{"role":"user","content":"Hello"},"timestamp":"2026-02-25T10:00:00.000Z"}
+this is not valid json
+{"type":"progress","percent":50}
+
+{"type":"assistant","uuid":"a1","parentUuid":"u1","isSidechain":false,"userType":"external","cwd":"/project","sessionId":"s1","version":"2.1.56","gitBranch":"main","message":{"model":"claude-sonnet-4-6","id":"msg_01","type":"message","role":"assistant","content":[{"type":"text","text":"Hi there!"}],"stop_reason":"end_turn","stop_sequence":null,"usage":{"input_tokens":50,"output_tokens":10}},"requestId":"req_01","timestamp":"2026-02-25T10:00:01.000Z"}

@@ -1,0 +1,174 @@
+import type { KanbanDatabase } from '../database.js';
+import type { PendingMergeParent } from '../../types/work-items.js';
+import type { StageRow } from './types.js';
+
+export interface StageUpsertData {
+  id: string;
+  ticket_id: string | null;
+  epic_id: string | null;
+  repo_id: number;
+  title: string | null;
+  status: string | null;
+  kanban_column: string | null;
+  refinement_type: string | null;
+  worktree_branch: string | null;
+  pr_url: string | null;
+  pr_number: number | null;
+  priority: number;
+  due_date: string | null;
+  session_active: number;
+  locked_at: string | null;
+  locked_by: string | null;
+  is_draft?: number;
+  pending_merge_parents?: string | null;
+  mr_target_branch?: string | null;
+  session_id?: string | null;
+  file_path: string;
+  last_synced: string;
+}
+
+/**
+ * Repository for the stages table.
+ */
+export class StageRepository {
+  private db: KanbanDatabase;
+
+  constructor(db: KanbanDatabase) {
+    this.db = db;
+  }
+
+  /**
+   * Insert or replace a stage.
+   */
+  upsert(data: StageUpsertData): void {
+    this.db
+      .raw()
+      .prepare(
+        `INSERT OR REPLACE INTO stages
+         (id, ticket_id, epic_id, repo_id, title, status, kanban_column, refinement_type,
+          worktree_branch, pr_url, pr_number, priority, due_date, session_active, locked_at, locked_by,
+          is_draft, pending_merge_parents, mr_target_branch, session_id, file_path, last_synced)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        data.id,
+        data.ticket_id,
+        data.epic_id,
+        data.repo_id,
+        data.title,
+        data.status,
+        data.kanban_column,
+        data.refinement_type,
+        data.worktree_branch,
+        data.pr_url,
+        data.pr_number,
+        data.priority,
+        data.due_date,
+        data.session_active,
+        data.locked_at,
+        data.locked_by,
+        data.is_draft ?? 0,
+        data.pending_merge_parents ?? null,
+        data.mr_target_branch ?? null,
+        data.session_id ?? null,
+        data.file_path,
+        data.last_synced
+      );
+  }
+
+  /**
+   * Find a stage by id.
+   */
+  findById(id: string): StageRow | null {
+    const row = this.db
+      .raw()
+      .prepare('SELECT * FROM stages WHERE id = ?')
+      .get(id) as StageRow | undefined;
+    return row ?? null;
+  }
+
+  /**
+   * List all stages for a repo.
+   */
+  listByRepo(repoId: number): StageRow[] {
+    return this.db
+      .raw()
+      .prepare('SELECT * FROM stages WHERE repo_id = ?')
+      .all(repoId) as StageRow[];
+  }
+
+  /**
+   * List all stages for a ticket, optionally scoped to a specific repo.
+   */
+  listByTicket(ticketId: string, repoId?: number): StageRow[] {
+    if (repoId !== undefined) {
+      return this.db
+        .raw()
+        .prepare('SELECT * FROM stages WHERE ticket_id = ? AND repo_id = ?')
+        .all(ticketId, repoId) as StageRow[];
+    }
+    return this.db
+      .raw()
+      .prepare('SELECT * FROM stages WHERE ticket_id = ?')
+      .all(ticketId) as StageRow[];
+  }
+
+  /**
+   * List all stages in a given kanban column for a repo.
+   */
+  listByColumn(repoId: number, column: string): StageRow[] {
+    return this.db
+      .raw()
+      .prepare('SELECT * FROM stages WHERE repo_id = ? AND kanban_column = ?')
+      .all(repoId, column) as StageRow[];
+  }
+
+  /**
+   * List stages that are ready for work: not session_active, and not in backlog or done columns.
+   */
+  listReady(repoId: number): StageRow[] {
+    return this.db
+      .raw()
+      .prepare(
+        `SELECT * FROM stages
+         WHERE repo_id = ?
+           AND session_active = 0
+           AND kanban_column != 'backlog'
+           AND kanban_column != 'done'`
+      )
+      .all(repoId) as StageRow[];
+  }
+
+  /**
+   * Find a stage by its session ID.
+   */
+  findBySessionId(sessionId: string): StageRow | null {
+    const row = this.db
+      .raw()
+      .prepare('SELECT * FROM stages WHERE session_id = ?')
+      .get(sessionId) as StageRow | undefined;
+    return row ?? null;
+  }
+
+  /**
+   * Update the session_id for a stage (targeted update, no full upsert needed).
+   */
+  updateSessionId(stageId: string, sessionId: string | null): void {
+    this.db
+      .raw()
+      .prepare('UPDATE stages SET session_id = ? WHERE id = ?')
+      .run(sessionId, stageId);
+  }
+
+  /**
+   * Update pending_merge_parents for a stage (targeted update, no full upsert needed).
+   * Stores as JSON string in SQLite.
+   */
+  updatePendingMergeParents(stageId: string, parents: PendingMergeParent[]): void {
+    const json = parents.length > 0 ? JSON.stringify(parents) : null;
+    this.db
+      .raw()
+      .prepare('UPDATE stages SET pending_merge_parents = ? WHERE id = ?')
+      .run(json, stageId);
+  }
+}

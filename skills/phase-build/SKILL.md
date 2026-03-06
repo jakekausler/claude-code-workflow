@@ -1,18 +1,99 @@
 ---
 name: phase-build
-description: Use when entering Build phase of epic-stage-workflow - guides implementation planning, code writing, and verification
+description: Use when entering Build phase of ticket-stage-workflow — guides implementation planning, code writing, and verification within the epic/ticket/stage hierarchy
 ---
 
 # Build Phase
 
 ## Purpose
 
-The Build phase implements the selected approach from Design. It creates working code that can be tested in Refinement.
+The Build phase implements the selected approach from Design. It creates working code that can be tested in Automatic Testing.
 
 ## Entry Conditions
 
 - Design phase is complete (approach selected, tracking docs updated)
-- `epic-stage-workflow` skill has been invoked (shared rules loaded)
+- `ticket-stage-workflow` skill has been invoked (shared data conventions loaded)
+- Stage YAML frontmatter has been read (status, refinement_type, ticket, epic, worktree_branch, etc.)
+
+**Re-entry note:** If re-entering Build (e.g., kicked back from Automatic Testing), read existing `-build.md` sibling and overwrite with updated implementation notes.
+
+## Worktree Awareness
+
+Before implementation begins, check if `worktree_branch` is set in the stage's YAML frontmatter.
+
+**If `worktree_branch` is set:**
+
+1. Check if the git worktree already exists for this branch:
+   ```bash
+   git worktree list | grep <worktree_branch>
+   ```
+2. If the worktree does NOT exist, create it:
+   ```bash
+   git worktree add ../worktrees/<worktree_branch> -b <worktree_branch>
+   ```
+   The worktree path uses the branch name under a `worktrees/` sibling directory.
+3. Ensure the worktree is checked out to the correct branch before any code changes begin.
+
+**If `worktree_branch` is not set:**
+
+- Proceed with implementation in the current working directory (default behavior).
+
+> **Note**: Full worktree lifecycle management (cleanup, port isolation, `$WORKTREE_INDEX` assignment) ships in Stage 6. For now, create the worktree if it doesn't exist and work within it.
+
+## Parent Branch Merge
+
+After worktree setup, check if the stage has parent dependencies whose MR branches need to be merged into the working branch.
+
+**When to run:** Only if `pending_merge_parents` exists and is non-empty in the stage's YAML frontmatter.
+
+**If `pending_merge_parents` is empty or not present:** Skip this section entirely.
+
+### Merge Flow
+
+1. Read `pending_merge_parents` from stage YAML frontmatter. Each entry has:
+   - `stage_id`: Parent stage ID
+   - `branch`: Parent's MR branch name
+   - `pr_url`: Parent's PR/MR URL
+   - `pr_number`: Parent's PR/MR number
+
+2. For each parent in `pending_merge_parents`:
+   ```bash
+   git fetch origin <parent.branch>
+   git merge origin/<parent.branch> --no-edit
+   ```
+   - If merge succeeds: continue to next parent
+   - If merge conflicts: invoke `resolve-merge-conflicts` skill, then continue
+   - If `origin/<parent.branch>` does not exist after fetch: skip this parent and log a warning — the parent branch may have been merged and deleted, or the frontmatter entry may be stale
+
+3. After ALL parents are merged, run full project verification:
+   ```bash
+   npm run verify  # or project equivalent
+   ```
+
+4. If verification fails:
+   a. Analyze failures using full codebase context plus parent and child stage design docs
+   b. Fix issues (type errors, test failures, lint issues from merge integration)
+   c. Re-run verification
+   d. Repeat until passing or until the direction is genuinely ambiguous
+      (e.g., two patterns with opposite intentions, no clear path from context)
+   e. Only escalate to user via AskUserQuestion if the correct direction cannot be determined from context
+
+5. Proceed to planning phase with a clean, verified, merged baseline.
+
+### Key Rules
+
+- Fetch targets the specific parent branch (`git fetch origin <parent.branch>`) — avoids fetching all refs while ensuring the parent branch is up to date
+- `--no-edit` avoids interactive commit message editing
+- If a parent branch is already fully merged (git reports "Already up to date"), this is expected and not an error — continue to the next parent
+- `resolve-merge-conflicts` runs in the same session (not a subagent) — it needs full context
+- Verification runs once after ALL parents are merged, not after each individual merge
+- The session exhausts its own problem-solving ability before escalating to the user
+
+### What This Step Does NOT Do
+
+- Does not set `is_draft` or `mr_target_branch` — that's `phase-finalize`'s responsibility
+- Does not modify `pending_merge_parents` — that's the sync engine's responsibility
+- Does not push anything — Build phase works locally in the worktree
 
 ## Spec Handoff Protocol (CRITICAL)
 
@@ -97,8 +178,8 @@ WRONG:   scribe implements → write spec after "for documentation"
 
 **Key distinction:**
 
-- ❌ Retroactive = Writing spec for COMPLETED work ("I did X, here's the spec for X")
-- ✅ Prospective = Writing spec for REMAINING work after learning ("I learned X, here's spec for remaining Y")
+- Retroactive = Writing spec for COMPLETED work ("I did X, here's the spec for X")
+- Prospective = Writing spec for REMAINING work after learning ("I learned X, here's spec for remaining Y")
 
 **Escalation triggers (any of these → STOP and write spec):**
 
@@ -117,9 +198,9 @@ There is NO completion percentage where you're "too far along" to need a spec.
 
 **Explicit examples that do NOT exempt you:**
 
-- ❌ "Remaining 1% is trivial"
-- ❌ "It's just a closing brace"
-- ❌ "The overhead isn't worth it for this little"
+- "Remaining 1% is trivial"
+- "It's just a closing brace"
+- "The overhead isn't worth it for this little"
 
 **Why late-stage specs matter:** A spec written at 99% documents the complexity you discovered. It's a "complexity warning label" preventing future developers from assuming the task was trivial.
 
@@ -149,7 +230,27 @@ This is a sunk cost situation. The time spent is gone whether you keep or redo t
 ## Phase Workflow
 
 ```
-1. [CONDITIONAL: Planning]
+1. Read all sibling files for prior context
+   Delegate to Explore (built-in) to read ALL `STAGE-XXX-YYY-ZZZ-*.md` sibling
+   files in the same ticket directory. This will include:
+   - `STAGE-XXX-YYY-ZZZ-design.md` (design research from Design phase)
+   - `STAGE-XXX-YYY-ZZZ-user-design-feedback.md` (decision rationale, if present)
+   - Any other sibling notes files from prior phases
+
+2. [CONDITIONAL: Worktree Setup]
+   IF worktree_branch is set in stage YAML frontmatter:
+     → Ensure git worktree exists (create if needed)
+     → Switch to worktree directory for all subsequent work
+
+2.5. [CONDITIONAL: Parent Branch Merge]
+   IF pending_merge_parents is non-empty in stage YAML frontmatter:
+     → For each parent: git fetch origin <parent.branch> && git merge origin/<parent.branch> --no-edit
+     → If conflicts: invoke resolve-merge-conflicts skill
+     → After all parents merged: run full npm run verify (or project equivalent)
+     → If verify fails: analyze and fix using full context; only escalate if genuinely ambiguous
+     → Result: clean, verified, merged baseline before planning begins
+
+3. [CONDITIONAL: Planning]
    IF complex multi-file feature OR architectural change:
      → Delegate to planner (Opus) for detailed implementation spec
      → Planner MUST save spec to /tmp/spec-YYYY-MM-DD-HH-MM-SS.md
@@ -159,26 +260,50 @@ This is a sunk cost situation. The time spent is gone whether you keep or redo t
    ELSE (trivial change):
      → Skip planner, main agent instructs scribe directly (no spec file needed)
 
-2. Delegate to scribe (Haiku) to write code from spec file
+4. Delegate to scribe (Haiku) to write code from spec file
    → Pass spec file path explicitly: "Read and implement: /tmp/spec-YYYY-MM-DD-HH-MM-SS.md"
 
-3. Add seed data if agreed in Design phase
+5. Add seed data if agreed in Design phase
 
-4. Add placeholder stubs for related future features
+6. Add placeholder stubs for related future features
 
-5. Verify dev server works - feature must be testable
+7. Verify dev server works — feature must be testable
 
-6. [PARALLEL] Delegate to verifier (Haiku) + tester (Haiku)
+8. [PARALLEL] Delegate to verifier (Haiku) + tester (Haiku)
    Run build/lint/type-check AND tests in parallel
 
-7. [IF verification fails] → Error handling flow (see epic-stage-workflow)
+9. [IF verification fails] → Analyze errors, delegate to fixer (Haiku) to resolve
 
-8. [LOOP steps 2-7 until green]
+10. [LOOP steps 4-9 until green]
 
-9. Delegate to doc-updater (Haiku) to update tracking documents:
-   - Mark Build phase complete in STAGE-XXX-YYY.md
-   - Update stage status in epic's EPIC-XXX.md table (MANDATORY)
+11. Prepare build session notes (DO NOT write files yet — exit gate handles all writes)
+
+    Content for `STAGE-XXX-YYY-ZZZ-build.md`:
+    - Implementation decisions made during the session
+    - Problems encountered and how they were solved
+    - Deviations from the design (if any)
+    - Key code changes and their rationale
 ```
+
+## Build Notes File (`STAGE-XXX-YYY-ZZZ-build.md`)
+
+The build notes sibling file captures implementation context so later phases (Automatic Testing, Manual Testing, Finalize) can reference it. It lives alongside the stage file:
+
+```
+epics/EPIC-XXX/TICKET-XXX-YYY/STAGE-XXX-YYY-ZZZ.md                        # stage tracking (lean)
+epics/EPIC-XXX/TICKET-XXX-YYY/STAGE-XXX-YYY-ZZZ-design.md                 # design research
+epics/EPIC-XXX/TICKET-XXX-YYY/STAGE-XXX-YYY-ZZZ-user-design-feedback.md   # decision rationale
+epics/EPIC-XXX/TICKET-XXX-YYY/STAGE-XXX-YYY-ZZZ-build.md                  # build notes (this phase)
+```
+
+**Contents of the build notes file:**
+
+- Implementation decisions made during the session
+- Problems encountered and how they were solved
+- Deviations from the design (if any)
+- Key code changes and their rationale
+
+**The main stage file stays lean.** Only build phase completion status goes in the stage file. Full implementation context lives in `-build.md`.
 
 ## Planner Selection Criteria
 
@@ -228,19 +353,40 @@ Trivial ONLY includes:
 
 **Test**: Would verifier/tester need to run? → Not trivial → Write spec
 
+## Reading Stage Data
+
+All stage metadata is read from YAML frontmatter in the stage file (`STAGE-XXX-YYY-ZZZ.md`), not from markdown headers. Key fields:
+
+- `id`: Stage identifier (e.g., `STAGE-001-001-001`)
+- `ticket`: Parent ticket (e.g., `TICKET-001-001`)
+- `epic`: Parent epic (e.g., `EPIC-001`)
+- `title`: Stage title
+- `status`: Current status
+- `refinement_type`: List of types (frontend, backend, cli, database, infrastructure, custom)
+- `depends_on`: Dependencies
+- `worktree_branch`: Git worktree branch name
+- `pending_merge_parents`: List of parent stages whose MR branches must be merged before build
+
+File paths follow the three-level hierarchy:
+```
+epics/EPIC-XXX/TICKET-XXX-YYY/STAGE-XXX-YYY-ZZZ.md
+```
+
 ## Phase Gates Checklist
 
 Before completing Build phase, verify:
 
+- [ ] All sibling files read for context (design, user-design-feedback notes)
+- [ ] Worktree checked out (if `worktree_branch` is set)
+- [ ] Parent branches merged (if `pending_merge_parents` is non-empty) and verification passed
 - [ ] Implementation spec created (planner OR planner-lite OR direct for trivial)
 - [ ] Code written via scribe
 - [ ] Seed data added (if agreed in Design)
 - [ ] Placeholder stubs added for related future features
 - [ ] Dev server verified working
 - [ ] Verification passed (verifier + tester in parallel)
-- [ ] Tracking documents updated via doc-updater:
-  - Build phase marked complete in stage file
-  - Epic stage status updated (MANDATORY)
+- [ ] Build session notes prepared for `-build.md`
+- [ ] Exit gate completed (all file writes and tracking updates happen there)
 
 ## Time Pressure Does NOT Override Exit Gates
 
@@ -249,6 +395,7 @@ Before completing Build phase, verify:
 **YOU MUST STILL:**
 
 - Complete ALL exit gate steps in order
+- Write build notes to `-build.md` sibling file
 - Invoke lessons-learned skill (even if "nothing to capture")
 - Invoke journal skill (even if brief)
 - Update ALL tracking documents via doc-updater
@@ -259,29 +406,36 @@ Before completing Build phase, verify:
 
 ## Phase Exit Gate (MANDATORY)
 
-Before proceeding to Refinement phase, you MUST complete these steps IN ORDER:
+Before completing the Build phase, you MUST complete these steps IN ORDER.
+This is the SINGLE authoritative checklist -- all file writes happen here, not in the workflow steps above.
 
-1. Update stage tracking file (mark Build phase complete)
-2. Update epic tracking file (update stage status in table)
-3. Use Skill tool to invoke `lessons-learned`
-4. Use Skill tool to invoke `journal`
+1. Delegate to doc-updater (Haiku) to write build artifacts:
+   a. Write build session notes to `STAGE-XXX-YYY-ZZZ-build.md` sibling file (implementation decisions, problems encountered, deviations from design, key code changes and rationale)
+2. Delegate to doc-updater (Haiku) to update tracking documents:
+   a. Mark Build phase complete in `STAGE-XXX-YYY-ZZZ.md`
+   b. Set stage status → Automatic Testing in `STAGE-XXX-YYY-ZZZ.md`
+   c. Update stage status in `TICKET-XXX-YYY.md` (MANDATORY)
+   d. Update ticket status in `EPIC-XXX.md` if needed
+3. Use Skill tool to invoke `lessons-learned` -- **mandatory, no exceptions**
+4. Use Skill tool to invoke `journal` -- **mandatory, no exceptions**
 
 **Why this order?**
 
-- Steps 1-2: Establish facts (phase done, status updated)
+- Step 1: Persist build context before anything else (if session crashes, implementation notes are saved)
+- Step 2: Establish facts (phase done, status updated to Automatic Testing in all tracking files)
 - Steps 3-4: Capture learnings and feelings based on the now-complete phase
 
-Lessons and journal need the full phase context, including final status updates. Running them before status updates means they lack complete information.
+**After exit gate completes:**
 
-After completing all exit gate steps, use Skill tool to invoke `phase-refinement` to begin the next phase.
+Use Skill tool to invoke `automatic-testing` to begin the next phase.
 
 **DO NOT skip any exit gate step. DO NOT proceed until all steps are done.**
 
-**DO NOT proceed to Refinement phase until exit gate is complete.** This includes:
+**DO NOT proceed to Automatic Testing phase until exit gate is complete.** This includes:
 
-- Announcing "proceeding to Refinement"
+- Announcing "proceeding to Automatic Testing"
 - Starting user testing discussions
 - Thinking about what to test
-- Invoking phase-refinement skill
+- Invoking automatic-testing skill
 
-**Complete ALL exit gate steps FIRST. Then invoke phase-refinement.**
+**Complete ALL exit gate steps FIRST. Then invoke automatic-testing.**

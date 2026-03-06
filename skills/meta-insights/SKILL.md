@@ -13,9 +13,17 @@ This skill analyzes Claude's learnings and journal entries to identify cross-cut
 
 ---
 
+## Auto-Trigger Threshold
+
+When unanalyzed learnings exceed `WORKFLOW_LEARNINGS_THRESHOLD` (default: 10), meta-insights should be auto-invoked. This threshold is checked at the end of each phase (after lessons-learned runs). If the threshold is exceeded, meta-insights runs automatically instead of waiting for manual `/analyze_learnings`.
+
+> **Note:** Auto-trigger implementation ships in Stage 5. For now, manual invocation only via `/analyze_learnings`.
+
+---
+
 ## CRITICAL RULE: Analysis Only, No Implementation
 
-**⚠️ IN THIS ANALYSIS SESSION:**
+**In THIS ANALYSIS SESSION:**
 - **DO**: Read entries, detect themes, discuss with user, generate prompts
 - **DO NOT**: Edit skills, update docs, modify code, implement anything
 
@@ -82,13 +90,14 @@ Read these learning/journal entries and extract themes:
 For each entry, identify:
 - Primary pattern or issue
 - Repository context
+- Epic/ticket/stage context (from entry metadata)
 - Type (learning vs journal)
 - Date
 
 Return structured list of themes found.
 ```
 
-**Calculate session frequency**: Count entries in last 14 days ÷ 14 = entries/day
+**Calculate session frequency**: Count entries in last 14 days / 14 = entries/day
 
 ### 2. Analysis Phase (Main Agent)
 
@@ -96,9 +105,9 @@ Return structured list of themes found.
 
 **Theme detection:**
 - Analyze patterns across ALL entries (from subagent)
-- Weight learnings 2× journals for scoring
+- Weight learnings 2x journals for scoring
 - **Automatic repository separation**: Never mix themes across different repos
-- Score formula: `(frequency × 2) + severity + actionability`
+- Score formula: `(frequency x 2) + severity + actionability`
 - Recency boost: Last 2 days get +20% score
 - Adaptive granularity: 8+ occurrences → split into sub-themes
 
@@ -129,7 +138,7 @@ Return structured list of themes found.
 
 ## High-Priority Themes (Top 5 by score)
 
-### 🆕 Theme Name (Score: 87, Repository: campaign-manager)
+### Theme Name (Score: 87, Repository: campaign-manager)
 - **First seen**: 2026-01-10 | **Last seen**: 2026-01-18
 - **Occurrences**: 12 entries (8 learnings, 4 journals)
 - **Status**: NEW
@@ -322,11 +331,11 @@ update-trend-status.sh a7b3c9d2-4e5f-6789-abcd-ef0123456789 ACTIVE
 **When to mark ACTIVE → MONITORING**
 
 ```
-monitoring_threshold = 2 days OR (2 × session_frequency) entries
+monitoring_threshold = 2 days OR (2 x session_frequency) entries
 ```
 
 **What this means:**
-- Time for 2× the session frequency worth of NEW entries to be created
+- Time for 2x the session frequency worth of NEW entries to be created
 - NOT "2 actions on the trend"
 - NOT "2 new occurrences of the theme"
 
@@ -339,11 +348,11 @@ monitoring_threshold = 2 days OR (2 × session_frequency) entries
 **When to mark MONITORING → RESOLVED**
 
 ```
-resolved_threshold = 7 days OR (7 × session_frequency) entries
+resolved_threshold = 7 days OR (7 x session_frequency) entries
 ```
 
 **What this means:**
-- Time for 7× the session frequency worth of NEW entries to be created
+- Time for 7x the session frequency worth of NEW entries to be created
 - If that much time passes with NO new occurrences → mark RESOLVED
 
 **Example:**
@@ -428,6 +437,18 @@ cleanup-resolved.sh --days 60
 
 ---
 
+## Metadata References
+
+When analyzing learnings and journal entries, the metadata fields use the three-level hierarchy:
+
+- **epic**: The epic container ID (e.g., `EPIC-001`)
+- **ticket**: The ticket ID within an epic (e.g., `TICKET-001-001`)
+- **stage**: The stage ID within a ticket (e.g., `STAGE-001-001-001`)
+
+Use these fields for grouping themes by epic, ticket, or stage context. Cross-reference with the `ticket-stage-workflow` to understand where in the pipeline patterns occur.
+
+---
+
 ## Action Decision Framework
 
 | Theme Type | Likely Actions | Example |
@@ -435,7 +456,7 @@ cleanup-resolved.sh --days 60
 | Skill violation under pressure | Update skill with rationalization | TDD skipped due to time pressure → add to TDD skill "Common Rationalizations" |
 | Repo-specific gotcha | Update project CLAUDE.md | Prisma migrations need server restart → add to gotchas section |
 | Cross-repo technical pattern | Create new skill | Database migration workflow issues → new skill |
-| Process friction | Update workflow docs | Epic/stage tracking confusion → clarify in CLAUDE.md |
+| Process friction | Update workflow docs | Ticket/stage tracking confusion → clarify in CLAUDE.md |
 | Tool confusion | Update agent config | Playwright delegation unclear → update agent instructions |
 | False positive | Dismiss | One-off issue, not pattern |
 | Unclear pattern | Manual review | Needs investigation first |
@@ -472,7 +493,7 @@ When generating prompts for `create_skill` or `update_skill` actions:
 | Task/user says "implement" or "update directly" | Agent rationalizes task instruction overrides workflow | Analysis workflow ALWAYS generates prompts. No exceptions for how task is phrased. |
 | "Let me just update this skill quickly" | Implementation pressure, feels inefficient to generate prompt | Generate prompt. Fresh session has clean context for quality implementation. |
 | "I implemented the prompt, no need to track it" | Implementation pressure, feels bureaucratic | Record completion with add-trend-action.sh. This enables trend lifecycle tracking and measures effectiveness. |
-| "2× session frequency means 2 actions on the trend" | Misreading threshold calculation | It means TIME for that many NEW entries to be created, not occurrences of the theme. |
+| "2x session frequency means 2 actions on the trend" | Misreading threshold calculation | It means TIME for that many NEW entries to be created, not occurrences of the theme. |
 | "I should read all entries to be thorough" | Completeness bias | Batch recent 50 max. Subagent handles reading, main agent analyzes patterns. |
 | "Mixing theme from repo A and repo B makes sense" | Optimization pressure | Never merge. Repository context is critical for actions. |
 | "Prompt file needs frontmatter and structure" | Documentation instinct | Pure prompt text only. User copies entire file and pastes. |
@@ -578,7 +599,7 @@ Target: Eliminate these 8 recurring issues in future work.
 
 ### Example 3: Update Project Docs
 
-**Theme detected**: Epic/stage tracking confusion (5 occurrences, docs repo)
+**Theme detected**: Ticket/stage tracking confusion (5 occurrences, docs repo)
 
 **Action chosen**: Update CLAUDE.md
 
@@ -590,22 +611,22 @@ Target: Eliminate these 8 recurring issues in future work.
 
 Trend ID: 6c2d8a4f-7e1b-4a3c-9d5e-0f8a7b6c5d4e
 
-Update ~/docs/CLAUDE.md to clarify epic/stage tracking workflow.
+Update ~/docs/CLAUDE.md to clarify ticket/stage tracking workflow.
 
 Pattern from 5 journal entries:
 - Confusion about when to update stage status
-- Forgetting to link learnings to epic/stage
+- Forgetting to link learnings to epic/ticket/stage
 - Unclear what "skipped" vs "blocked" means
 
 Add to "Gotchas" section in ~/docs/CLAUDE.md:
 
-## Epic/Stage Tracking
+## Epic/Ticket/Stage Tracking
 - Update stage status IMMEDIATELY when starting/completing phases
-- ALWAYS include epic/stage in learning/journal frontmatter (helps meta-insights)
+- ALWAYS include epic/ticket/stage in learning/journal frontmatter (helps meta-insights)
 - "skipped" = won't do this stage, "blocked" = can't do yet, need dependency
-- Run /epic-stats regularly to see progress
+- Run /next_task regularly to see progress
 
-Expected outcome: Future journal entries show correct epic/stage tracking.
+Expected outcome: Future journal entries show correct epic/ticket/stage tracking.
 ```
 
 ---

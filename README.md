@@ -939,7 +939,9 @@ MIT License - see LICENSE file for details.
 
 ## Acknowledgments
 
-Built on patterns from:
+This project builds on the work of others. See [CREDITS.md](./CREDITS.md) for full attribution, including heavy credit to [claude-devtools](https://github.com/anthropics/claude-devtools) for session JSONL parsing, chunk building, tool rendering, subagent tree resolution, context tracking, and cost calculation — and inspiration from [vibe-kanban](https://github.com/mckaywrigley/vibe-kanban) for the kanban board design and hosted deployment architecture.
+
+Also built on patterns from:
 
 - The Superpowers plugin by obra
 - The Claude Code community

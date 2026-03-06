@@ -1,0 +1,9 @@
+{
+  "name": "kanban-jira-scripts",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "tsx": "^4.0.0"
+  }
+}

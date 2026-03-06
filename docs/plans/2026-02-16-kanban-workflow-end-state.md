@@ -17,7 +17,8 @@
 8. [User Intervention Points](#8-user-intervention-points)
 9. [External Integrations](#9-external-integrations)
 10. [Infrastructure](#10-infrastructure)
-11. [Master Flow Diagrams](#11-master-flow-diagrams)
+11. [Modularity & Pipeline Configuration](#11-modularity--pipeline-configuration)
+12. [Master Flow Diagrams](#12-master-flow-diagrams)
 
 ---
 
@@ -28,10 +29,10 @@ The Kanban Workflow System is a file-based, AI-agent-driven development orchestr
 ### Core Principles
 
 - **Files are the source of truth.** Markdown files with YAML frontmatter define all work items. A SQLite database caches this data for fast queries. A web UI visualizes it. But the files are canonical.
-- **Stages are where work happens.** Epics and tickets are organizational containers. Stages contain the four-phase workflow (Design → Build → Refinement → Finalize).
+- **Stages are where work happens.** Epics and tickets are organizational containers. Stages contain the four-phase workflow (Design → Build → Automatic Testing → Finalize).
 - **Per-stage worktree isolation.** Every active stage gets its own git worktree and branch. Parallel work never causes merge conflicts at the filesystem level.
 - **The orchestration loop dispatches, Claude sessions execute.** An external TypeScript scheduler picks up ready stages and spawns fresh Claude sessions in worktrees. Each session does one unit of work and exits. The loop respawns as needed.
-- **Human intervention is explicit and trackable.** When a stage needs a human decision (design choice, refinement approval, code review), it moves to an "Awaiting" column. The loop skips it and works on other stages. The web UI shows what's waiting for you.
+- **Human intervention is explicit and trackable.** When a stage needs a human decision (design choice, manual testing approval, code review), it moves to an "Awaiting" column. The loop skips it and works on other stages. The web UI shows what's waiting for you.
 
 ### Architecture Layers
 
@@ -77,7 +78,7 @@ graph TD
     T2 --> S4[Stage]
     S1 --> P1[Phase: Design]
     P1 --> P2[Phase: Build]
-    P2 --> P3[Phase: Refinement]
+    P2 --> P3[Phase: Automatic Testing]
     P3 --> P4[Phase: Finalize]
 
     style E fill:#4a90d9,stroke:#333,color:#fff
@@ -98,7 +99,7 @@ graph TD
 | **Epic** | `EPIC-XXX` | `EPIC-001` | A theme or initiative grouping related tickets. Status computed from children. Linked to Jira epics (read-only, no auto-transitions). |
 | **Ticket** | `TICKET-XXX-YYY` | `TICKET-001-002` | A feature or capability. Contains stages. Status computed from children. Syncs bidirectionally with Jira tickets. Can exist without stages (needs conversion). |
 | **Stage** | `STAGE-XXX-YYY-ZZZ` | `STAGE-001-002-003` | A concrete unit of work. Contains four phases. This is where code gets written, tested, and reviewed. Each stage gets its own git worktree and branch. |
-| **Phase** | N/A | Design, Build, Refinement, Finalize | The workflow within a stage. Sequential, mandatory. |
+| **Phase** | N/A | Design, Build, Automatic Testing, Finalize | The workflow within a stage. Sequential, mandatory. |
 
 IDs embed the hierarchy — `STAGE-001-002-003` belongs to `TICKET-001-002` which belongs to `EPIC-001`. Any ID is globally unique and self-describing.
 
@@ -215,14 +216,14 @@ graph LR
     TC["To Convert<br/><i>Ticket-level</i><br/>stages: &#91;&#93;"] --> BL["Backlog<br/><i>Unresolved deps</i>"]
     BL --> RW["Ready for Work<br/><i>Deps resolved</i><br/><i>Not Started</i>"]
     RW --> DE["Design<br/><i>phase-design</i>"]
-    DE --> ADD["Awaiting Design<br/>Decision<br/><i>needs human</i>"]
+    DE --> ADD["User Design<br/>Feedback<br/><i>needs human</i>"]
     ADD --> DE
     DE --> BU["Build<br/><i>phase-build</i>"]
-    BU --> RE["Refinement<br/><i>phase-refinement</i>"]
-    RE --> AR["Awaiting<br/>Refinement<br/><i>needs human</i>"]
+    BU --> RE["Automatic Testing<br/><i>phase-refinement</i>"]
+    RE --> AR["Manual<br/>Testing<br/><i>needs human</i>"]
     AR --> RE
     RE --> FI["Finalize<br/><i>phase-finalize</i>"]
-    FI --> AM["Awaiting Merge<br/><i>remote mode</i><br/><i>review-cycle</i>"]
+    FI --> AM["PR Created<br/><i>remote mode</i><br/><i>review-cycle</i>"]
     AM --> FI
     FI --> DO["Done<br/><i>Complete</i>"]
     AM --> DO
@@ -246,12 +247,12 @@ graph LR
 | 2 | **Backlog** | Stage | Unresolved `depends_on` | Stage is waiting for dependencies to complete. No work can be done. Automatically moves to Ready for Work when all deps resolve. | None (passive) | No |
 | 3 | **Ready for Work** | Stage | `status: Not Started`, all deps resolved | Stage is available for the orchestration loop to pick up. Next available worker session will claim it. | `next_task` / `kanban-cli next` | No |
 | 4 | **Design** | Stage | `status: Design` | Claude session runs `phase-design`: explores codebase, brainstorms approaches (2-3 options), selects approach. | `phase-design` → `brainstorming` | Conditional — see WORKFLOW_AUTO_DESIGN |
-| 5 | **Awaiting Design Decision** | Stage | `status: Awaiting Design Decision` | Brainstormer has presented options. Waiting for user to select an approach. Loop skips this stage. | None (waiting) | **Yes** — select approach |
+| 5 | **User Design Feedback** | Stage | `status: User Design Feedback` | Brainstormer has presented options. Waiting for user to select an approach. Loop skips this stage. | None (waiting) | **Yes** — select approach |
 | 6 | **Build** | Stage | `status: Build` | Claude session runs `phase-build`: writes spec, implements code in worktree, runs verification. | `phase-build` → `planner`/`planner-lite` → `scribe` → `verifier` + `tester` | No |
-| 7 | **Refinement** | Stage | `status: Refinement` | Claude session runs `phase-refinement`: type-specific testing/approval cycle. | `phase-refinement` → type-specific (frontend: viewport testing, backend: e2e, cli: behavior, database: migration, infrastructure: deployment, custom: user-defined) | Yes — approve each checklist item |
-| 8 | **Awaiting Refinement** | Stage | `status: Awaiting Refinement` | Refinement testing done, waiting for user to formally approve. Loop skips this stage. | None (waiting) | **Yes** — formal approval |
+| 7 | **Automatic Testing** | Stage | `status: Automatic Testing` | Claude session runs `phase-refinement`: type-specific testing/approval cycle. | `phase-refinement` → type-specific (frontend: viewport testing, backend: e2e, cli: behavior, database: migration, infrastructure: deployment, custom: user-defined) | Yes — approve each checklist item |
+| 8 | **Manual Testing** | Stage | `status: Manual Testing` | Automatic testing done, waiting for user to formally approve. Loop skips this stage. | None (waiting) | **Yes** — formal approval |
 | 9 | **Finalize** | Stage | `status: Finalize` | Claude session runs `phase-finalize`: code review, tests, docs, commit, MR/PR creation (remote mode), Jira sync. | `phase-finalize` → `code-reviewer` → `fixer` → `test-writer` → `tester` → `doc-writer` | No |
-| 10 | **Awaiting Merge** | Stage | `status: Awaiting Merge` | Remote mode only. MR/PR created, waiting for team review. `review-cycle` addresses comments. | `review-cycle` | **Yes** — team approves MR/PR |
+| 10 | **PR Created** | Stage | `status: PR Created` | Remote mode only. MR/PR created, waiting for team review. `review-cycle` addresses comments. | `review-cycle` | **Yes** — team approves MR/PR |
 | 11 | **Done** | Stage | `status: Complete` | All phases complete. Code merged (local) or MR/PR merged (remote). Jira ticket moved to Done when all stages in ticket complete. | None (terminal) | No |
 
 ### Column Transitions
@@ -260,16 +261,16 @@ A stage moves between columns when its `status` field changes in the YAML frontm
 
 - **Backlog → Ready for Work**: Automatic when all `depends_on` items reach `Complete` status.
 - **Ready for Work → Design**: Orchestration loop picks up stage, Claude session starts `phase-design`.
-- **Design → Awaiting Design Decision**: Brainstormer presents options, needs human choice (skipped if `WORKFLOW_AUTO_DESIGN=true`).
-- **Awaiting Design Decision → Design**: User selects approach, Claude session resumes.
+- **Design → User Design Feedback**: Brainstormer presents options, needs human choice (skipped if `WORKFLOW_AUTO_DESIGN=true`).
+- **User Design Feedback → Design**: User selects approach, Claude session resumes.
 - **Design → Build**: Design phase exit gate complete.
-- **Build → Refinement**: Build phase exit gate complete.
-- **Refinement → Awaiting Refinement**: Testing done, formal approval needed.
-- **Awaiting Refinement → Refinement**: User approves, or code changes require re-testing (reset rule).
-- **Refinement → Finalize**: All refinement approvals granted.
+- **Build → Automatic Testing**: Build phase exit gate complete.
+- **Automatic Testing → Manual Testing**: Testing done, formal approval needed.
+- **Manual Testing → Automatic Testing**: User approves, or code changes require re-testing (reset rule).
+- **Automatic Testing → Finalize**: All refinement approvals granted.
 - **Finalize → Done**: Local mode — code merged to main.
-- **Finalize → Awaiting Merge**: Remote mode — MR/PR created, pushed to remote.
-- **Awaiting Merge → Done**: MR/PR approved and merged by team.
+- **Finalize → PR Created**: Remote mode — MR/PR created, pushed to remote.
+- **PR Created → Done**: MR/PR approved and merged by team.
 
 ### Filtering
 
@@ -342,10 +343,10 @@ When `kanban-cli next` identifies ready stages, it sorts them by priority:
 flowchart TD
     A["All actionable stages"] --> B{Has unresolved<br/>MR/PR comments?}
     B -->|Yes| C["Priority 1: Review Comments<br/><i>Unblock team reviewers</i>"]
-    B -->|No| D{Awaiting<br/>Refinement?}
-    D -->|Yes| E["Priority 2: Awaiting Refinement<br/><i>Quick human unblock</i>"]
-    D -->|No| F{Refinement<br/>ready?}
-    F -->|Yes| G["Priority 3: Refinement Ready<br/><i>Just finished Build</i>"]
+    B -->|No| D{Manual<br/>Testing?}
+    D -->|Yes| E["Priority 2: Manual Testing<br/><i>Quick human unblock</i>"]
+    D -->|No| F{Automatic Testing<br/>ready?}
+    F -->|Yes| G["Priority 3: Automatic Testing Ready<br/><i>Just finished Build</i>"]
     F -->|No| H{Build ready?<br/>Design approved?}
     H -->|Yes| I["Priority 4: Build Ready<br/><i>Has approved design</i>"]
     H -->|No| J{Design ready?<br/>Not Started + deps met?}
@@ -385,7 +386,7 @@ sequenceDiagram
         alt WORKFLOW_AUTO_DESIGN=true
             C->>F: Log recommended approach
         else WORKFLOW_AUTO_DESIGN=false
-            C->>F: Set status: Awaiting Design Decision
+            C->>F: Set status: User Design Feedback
             C->>C: Exit session
             Note over S: User selects approach later
             S->>C: Respawn session after user decides
@@ -396,9 +397,9 @@ sequenceDiagram
         C->>C: Write spec → implement → verify
     end
 
-    alt Refinement Phase
+    alt Automatic Testing Phase
         C->>C: Run type-specific tests
-        C->>F: Set status: Awaiting Refinement
+        C->>F: Set status: Manual Testing
         C->>C: Exit session
         Note over S: User approves later
     end
@@ -408,7 +409,7 @@ sequenceDiagram
         alt WORKFLOW_REMOTE_MODE=true
             C->>G: Push branch + create MR/PR
             C->>J: Move ticket to In Review
-            C->>F: Set status: Awaiting Merge
+            C->>F: Set status: PR Created
         else WORKFLOW_REMOTE_MODE=false
             C->>C: Merge to main
             C->>F: Set status: Complete
@@ -470,7 +471,7 @@ flowchart TD
 
     E --> G{WORKFLOW_AUTO_DESIGN?}
     G -->|true| H["Accept recommended approach<br/>Log reasoning to stage file"]
-    G -->|false| I["Present options to user<br/>Set status: Awaiting Design Decision"]
+    G -->|false| I["Present options to user<br/>Set status: User Design Feedback"]
 
     I --> J["🧑 USER: Select approach"]
     J --> K["Log selection to stage file"]
@@ -522,7 +523,7 @@ flowchart TD
     O --> P["Invoke journal"]
     P --> Q{Learnings threshold?}
     Q -->|Exceeded| R["Auto meta-insights"]
-    Q -->|No| S["Exit → Refinement Phase"]
+    Q -->|No| S["Exit → Automatic Testing Phase"]
     R --> S
 
     style D fill:#4a90d9,stroke:#333,color:#fff
@@ -533,11 +534,11 @@ flowchart TD
 **Agents used**: planner/planner-lite (Opus/Sonnet), scribe, verifier, tester, doc-updater
 **User intervention**: None (fully autonomous)
 
-### 6.3 Refinement Phase
+### 6.3 Automatic Testing Phase
 
 ```mermaid
 flowchart TD
-    A[Enter Refinement Phase] --> B["Read refinement_type<br/>from frontmatter"]
+    A[Enter Automatic Testing Phase] --> B["Read refinement_type<br/>from frontmatter"]
 
     B --> C{Type?}
     C -->|frontend| D["Desktop viewport test<br/>Mobile viewport test"]
@@ -548,7 +549,7 @@ flowchart TD
     C -->|custom| I["User-defined checks<br/>(from Design phase)"]
     C -->|"multiple types"| J["Combined checklist<br/>All types required"]
 
-    D --> K["Set status: Awaiting Refinement"]
+    D --> K["Set status: Manual Testing"]
     E --> K
     F --> K
     G --> K
@@ -558,13 +559,13 @@ flowchart TD
 
     K --> L["🧑 USER: Formal approval<br/>(per checklist item)"]
 
-    L --> M{Code changes<br/>during refinement?}
+    L --> M{Code changes<br/>during testing?}
     M -->|Yes| N["RESET ALL approvals<br/>No exceptions"]
     N --> B
     M -->|No| O{All items<br/>approved?}
     O -->|No| P["Address feedback<br/>Debug/fix"]
     P --> M
-    O -->|Yes| Q["Mark Refinement complete"]
+    O -->|Yes| Q["Mark Automatic Testing complete"]
     Q --> R["Add regression items"]
     R --> S["Invoke lessons-learned"]
     S --> T["Invoke journal"]
@@ -575,7 +576,7 @@ flowchart TD
     style N fill:#c0392b,stroke:#333,color:#fff
 ```
 
-**The Reset Rule**: ANY code change during refinement resets ALL approvals for ALL refinement types. This is a workflow rule, not a technical judgment. No exceptions based on CSS specificity, change scope, or developer confidence.
+**The Reset Rule**: ANY code change during automatic testing resets ALL approvals for ALL refinement types. This is a workflow rule, not a technical judgment. No exceptions based on CSS specificity, change scope, or developer confidence.
 
 **Skills involved**: `phase-refinement`, `ticket-stage-workflow`
 **Agents used**: e2e-tester (backend), debugger/fixer (issues), doc-updater
@@ -619,7 +620,7 @@ flowchart TD
     U --> V
     V -->|Set| W["POST Slack notification<br/>with MR/PR link"]
     V -->|Unset| X["Skip Slack"]
-    W --> Y["Set status: Awaiting Merge"]
+    W --> Y["Set status: PR Created"]
     X --> Y
 
     Y --> AA["🧑 TEAM: Review MR/PR"]
@@ -663,8 +664,8 @@ flowchart TD
     H -->|No| J{Next phase?}
     I --> J
     J -->|Design → Build| K["Invoke phase-build"]
-    J -->|Build → Refinement| L["Invoke phase-refinement"]
-    J -->|Refinement → Finalize| M["Invoke phase-finalize"]
+    J -->|Build → Automatic Testing| L["Invoke phase-refinement"]
+    J -->|Automatic Testing → Finalize| M["Invoke phase-finalize"]
     J -->|Finalize → Done| N["Stage complete<br/>Session exits"]
 ```
 
@@ -698,8 +699,8 @@ flowchart LR
 
 | Variable | Type | Default | Effect on Workflow |
 |----------|------|---------|-------------------|
-| `WORKFLOW_REMOTE_MODE` | `true`/`false` | `false` | **false**: Finalize merges to main directly. Stage goes to Done. **true**: Finalize pushes to remote branch, creates MR/PR. Stage goes to Awaiting Merge. Enables the review-cycle skill. |
-| `WORKFLOW_AUTO_DESIGN` | `true`/`false` | `false` | **false**: Brainstormer presents 2-3 approaches, user selects. Stage pauses at Awaiting Design Decision. **true**: Brainstormer runs and logs its recommendation. Proceeds without user input. Stage never enters Awaiting Design Decision. |
+| `WORKFLOW_REMOTE_MODE` | `true`/`false` | `false` | **false**: Finalize merges to main directly. Stage goes to Done. **true**: Finalize pushes to remote branch, creates MR/PR. Stage goes to PR Created. Enables the review-cycle skill. |
+| `WORKFLOW_AUTO_DESIGN` | `true`/`false` | `false` | **false**: Brainstormer presents 2-3 approaches, user selects. Stage pauses at User Design Feedback. **true**: Brainstormer runs and logs its recommendation. Proceeds without user input. Stage never enters User Design Feedback. |
 | `WORKFLOW_MAX_PARALLEL` | integer | `1` | Maximum number of stages the orchestration loop works on simultaneously. Each gets its own worktree (WORKTREE_INDEX 1 through N). Set to 1 for sequential mode. |
 | `WORKFLOW_GIT_PLATFORM` | `github`/`gitlab` | auto-detected | Determines which CLI tool to use for MR/PR: `gh` for GitHub, `glab` for GitLab. Auto-detection checks for `.git/config` remote URLs. |
 | `WORKFLOW_SLACK_WEBHOOK` | URL | unset | When set, a POST request is sent to this webhook URL every time an MR/PR is created. Includes MR/PR link, title, and description summary. When unset, no Slack notifications. |
@@ -710,10 +711,10 @@ flowchart LR
 
 | Scenario | REMOTE_MODE | AUTO_DESIGN | MAX_PARALLEL | Human Touchpoints |
 |----------|-------------|-------------|--------------|-------------------|
-| Solo dev, local | false | false | 1 | Design choice, Refinement approval |
-| Solo dev, autonomous | false | true | 1 | Refinement approval only |
-| Team dev, remote | true | false | 1 | Design choice, Refinement approval, MR review |
-| Team dev, parallel | true | true | 3 | Refinement approval, MR review |
+| Solo dev, local | false | false | 1 | Design choice, Manual Testing approval |
+| Solo dev, autonomous | false | true | 1 | Manual Testing approval only |
+| Team dev, remote | true | false | 1 | Design choice, Manual Testing approval, MR review |
+| Team dev, parallel | true | true | 3 | Manual Testing approval, MR review |
 | Full autonomous (max) | true | true | 5 | MR review only (team gate) |
 
 ---
@@ -726,7 +727,7 @@ The system is designed for maximum autonomy with explicit, trackable pause point
 flowchart TD
     subgraph "Always Required"
         A["🧑 Ticket Conversion<br/>Approve stage breakdown<br/><i>To Convert → stages created</i>"]
-        B["🧑 Refinement Approval<br/>Formal sign-off per checklist<br/><i>Awaiting Refinement → Refinement</i>"]
+        B["🧑 Manual Testing Approval<br/>Formal sign-off per checklist<br/><i>Manual Testing → Automatic Testing</i>"]
     end
 
     subgraph "Conditional on Environment"
@@ -759,7 +760,7 @@ When a stage needs human input, the web UI shows:
 2. **Session monitor widget** — shows what Claude was doing when it paused, what question it asked.
 3. **Action buttons** — user can respond directly from the web UI:
    - Design Decision: select from presented options.
-   - Refinement Approval: approve/reject per checklist item.
+   - Manual Testing Approval: approve/reject per checklist item.
    - Review Cycle: view MR/PR comments, trigger comment-addressing cycle.
 4. **Prompt answering** — for any Claude session waiting for input, the user can type a response in the web UI. The response is relayed to the Claude session via the session monitor's bidirectional channel.
 
@@ -1006,9 +1007,9 @@ erDiagram
 | `ticket-stage-setup` | `/setup epic/ticket/stage` | N/A | Creates file structure with YAML frontmatter. |
 | `phase-design` | Workflow routes to Design | Design | Codebase exploration, brainstorming, approach selection. |
 | `phase-build` | Workflow routes to Build | Build | Spec writing, implementation, verification. |
-| `phase-refinement` | Workflow routes to Refinement | Refinement | Type-specific testing and approval cycle. |
+| `phase-refinement` | Workflow routes to Automatic Testing | Automatic Testing | Type-specific testing and approval cycle. |
 | `phase-finalize` | Workflow routes to Finalize | Finalize | Code review, tests, docs, commit, MR/PR, Jira sync. |
-| `review-cycle` | Stage in Awaiting Merge with comments | Post-Finalize | Fetch MR/PR comments → address → push → reply. |
+| `review-cycle` | Stage in PR Created with comments | Post-Finalize | Fetch MR/PR comments → address → push → reply. |
 | `convert-ticket` | Ticket with `stages: []` | Pre-Design | Brainstorm ticket into stages. |
 | `migrate-repo` | Old-format repo detected | N/A | Convert old epic-stage layout to new format. |
 | `brainstorming` | Called by phase-design / convert-ticket | Design | Explore approaches, present 2-3 options. |
@@ -1046,9 +1047,44 @@ erDiagram
 
 ---
 
-## 11. Master Flow Diagrams
+## 11. Modularity & Pipeline Configuration
 
-### 11.1 Complete Lifecycle of a Work Item
+The workflow pipeline is config-driven. The four-phase workflow (Design → Build → Automatic Testing → Finalize) is the **default pipeline** — one configuration among many possible ones.
+
+### Config Hierarchy
+
+- **Global**: `~/.config/kanban-workflow/config.yaml` — user's preferred defaults
+- **Per-repo**: `<repo>/.kanban-workflow.yaml` — overrides for a specific project
+- **Embedded default**: Ships with the tool, used when no config files exist
+
+Override semantics: If a repo config defines `phases`, it **replaces** the entire pipeline. `defaults` are **merged** (repo values override global, unset keys preserved).
+
+### State Types
+
+Every pipeline column maps to either a **skill** (spawns a Claude session) or a **resolver** (lightweight TypeScript function):
+
+| Type | Behavior | Example |
+|------|----------|---------|
+| Skill | Orchestration loop spawns a Claude session with this skill. Session does work and transitions. | Design, Build, Manual Testing |
+| Resolver | Orchestration loop calls a function each tick. Returns a transition target or null. | PR Created (polls for merge/comments) |
+
+### Custom Pipelines
+
+Users can define entirely custom phase pipelines. Branching and converging DAG pipelines are supported via resolver-based routing. Example: a pipeline that routes frontend vs backend stages to different testing phases.
+
+### Pipeline Validation
+
+`kanban-cli validate-pipeline` audits the config with four layers:
+1. **Config validation** — YAML structure, required fields, unique statuses
+2. **Graph validation** — all states reachable, all can reach Done
+3. **Skill content validation** — LLM checks skill text matches declared transitions
+4. **Resolver validation** — functions exist, dry-run execution, return value checking
+
+---
+
+## 12. Master Flow Diagrams
+
+### 12.1 Complete Lifecycle of a Work Item
 
 ```mermaid
 flowchart TD
@@ -1093,13 +1129,13 @@ flowchart TD
         G3 --> G4["Build complete"]
     end
 
-    subgraph "Refinement Phase"
+    subgraph "Automatic Testing Phase"
         G4 --> H1["Type-specific testing"]
         H1 --> H2["🧑 Formal approval"]
         H2 --> H3{Code changed?}
         H3 -->|Yes| H4["Reset ALL approvals"]
         H4 --> H1
-        H3 -->|No| H5["Refinement complete"]
+        H3 -->|No| H5["Automatic Testing complete"]
     end
 
     subgraph "Finalize Phase"
@@ -1117,7 +1153,7 @@ flowchart TD
         I8 --> J1["Jira → In Review"]
         J1 --> J2{SLACK_WEBHOOK?}
         J2 -->|Set| J3["Slack notification"]
-        J2 -->|Unset| J4["Awaiting Merge"]
+        J2 -->|Unset| J4["PR Created"]
         J3 --> J4
         J4 --> J5["🧑 Team reviews MR/PR"]
         J5 --> J6{Comments?}
@@ -1148,7 +1184,7 @@ flowchart TD
     style K7 fill:#27ae60,stroke:#333,color:#fff
 ```
 
-### 11.2 Parallel Orchestration Overview
+### 12.2 Parallel Orchestration Overview
 
 ```mermaid
 flowchart TD
@@ -1162,8 +1198,8 @@ flowchart TD
 
     subgraph "Priority Queue Result"
         PQ1["1. STAGE-001-001-002<br/>review comments pending<br/>needs_human: false"]
-        PQ2["2. STAGE-001-002-001<br/>refinement ready<br/>needs_human: false"]
-        PQ3["3. STAGE-002-001-001<br/>awaiting refinement<br/>needs_human: true ← SKIP"]
+        PQ2["2. STAGE-001-002-001<br/>automatic testing ready<br/>needs_human: false"]
+        PQ3["3. STAGE-002-001-001<br/>manual testing<br/>needs_human: true ← SKIP"]
     end
 
     subgraph "Active Worktrees"
@@ -1172,8 +1208,8 @@ flowchart TD
     end
 
     subgraph "Parked (Awaiting Human)"
-        P1["STAGE-002-001-001<br/>Awaiting Refinement<br/>🧑 Needs approval"]
-        P2["STAGE-003-001-001<br/>Awaiting Design Decision<br/>🧑 Needs selection"]
+        P1["STAGE-002-001-001<br/>Manual Testing<br/>🧑 Needs approval"]
+        P2["STAGE-003-001-001<br/>User Design Feedback<br/>🧑 Needs selection"]
     end
 
     subgraph "Web UI"
@@ -1199,7 +1235,7 @@ flowchart TD
     style WT2 fill:#2ecc71,stroke:#333,color:#fff
 ```
 
-### 11.3 Data Flow
+### 12.3 Data Flow
 
 ```mermaid
 flowchart LR
@@ -1243,7 +1279,7 @@ flowchart LR
     SM -->|"relay"| CS
 ```
 
-### 11.4 Environment Variable Decision Tree
+### 12.4 Environment Variable Decision Tree
 
 ```mermaid
 flowchart TD
@@ -1258,7 +1294,7 @@ flowchart TD
     D -->|auto| G["Detect from remote URL"]
 
     START --> H{WORKFLOW_AUTO_DESIGN?}
-    H -->|false| I["Design: Present options<br/>→ Awaiting Design Decision<br/>→ User selects"]
+    H -->|false| I["Design: Present options<br/>→ User Design Feedback<br/>→ User selects"]
     H -->|true| J["Design: Accept recommendation<br/>→ No pause<br/>→ Straight to Build"]
 
     START --> K{WORKFLOW_MAX_PARALLEL?}

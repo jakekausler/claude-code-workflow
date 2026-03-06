@@ -1,0 +1,30 @@
+{
+  "name": "orchestrator",
+  "version": "0.1.0",
+  "description": "Stage lifecycle orchestrator for Claude Code kanban workflow",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "orchestrator": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/index.ts",
+    "test": "vitest run",
+    "lint": "tsc --noEmit",
+    "verify": "npm run lint && npm run test"
+  },
+  "dependencies": {
+    "commander": "^12.1.0",
+    "gray-matter": "^4.0.3",
+    "kanban-cli": "file:../kanban-cli",
+    "ws": "^8.19.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/ws": "^8.18.1",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0",
+    "vitest": "^2.1.0"
+  }
+}
