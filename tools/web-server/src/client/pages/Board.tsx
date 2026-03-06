@@ -2,6 +2,7 @@ import { useMemo, useCallback, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useBoard, useEpics, useTickets, useConvertTicket } from '../api/hooks.js';
 import { useBoardStore } from '../store/board-store.js';
+import { usePermissions } from '../hooks/usePermissions.js';
 import type { SessionMapEntry } from '../store/board-store.js';
 import { useDrawerStore, type DrawerEntry } from '../store/drawer-store.js';
 import { FilterBar } from '../components/board/FilterBar.js';
@@ -44,6 +45,7 @@ function statusSortKey(status: string): number {
 }
 
 export function Board() {
+  const { canWrite } = usePermissions();
   const { selectedRepo, selectedEpic, selectedTicket } = useBoardStore();
   // TODO: Subscribes to entire sessionMap — any session change re-renders all cards.
   // If board card count grows large, refactor renderStageCard into a React component
@@ -225,7 +227,7 @@ export function Board() {
             return (
               <BoardColumn key={col.slug} title={col.title} color={col.color} count={toConvertTickets.length}>
                 {toConvertTickets.map((ticket) =>
-                  renderToConvertTicketCard(ticket, open, currentDrawerId, handleConvertClick, convertingTicketEpicId === ticket.id)
+                  renderToConvertTicketCard(ticket, open, currentDrawerId, handleConvertClick, convertingTicketEpicId === ticket.id, canWrite)
                 )}
               </BoardColumn>
             );
@@ -360,6 +362,7 @@ function renderToConvertTicketCard(
   currentDrawerId: string | null,
   onConvert: (ticket: TicketListItem, e: React.MouseEvent) => void,
   isConverting: boolean,
+  canWrite: boolean,
 ) {
   const badges: { label: string; color: string }[] = [];
   if (ticket.jira_key) {
@@ -378,7 +381,7 @@ function renderToConvertTicketCard(
       badges={badges.length > 0 ? badges : undefined}
       isSelected={currentDrawerId === ticket.id}
       onClick={() => open({ type: 'ticket', id: ticket.id })}
-      onConvert={isConverting ? undefined : (e) => onConvert(ticket, e)}
+      onConvert={isConverting || !canWrite ? undefined : (e) => onConvert(ticket, e)}
     />
   );
 }

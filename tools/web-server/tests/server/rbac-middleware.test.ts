@@ -104,7 +104,10 @@ describe('requireRole middleware', () => {
       await handler(request, reply);
 
       expect(reply._code).toBe(403);
-      expect((reply._body as Record<string, string>).error).toBe('Forbidden');
+      const body = reply._body as Record<string, string>;
+      expect(body.error).toBe('Insufficient permissions');
+      expect(body.required).toBe('developer');
+      expect(body.actual).toBe('viewer');
     });
 
     it('returns 403 when user has no role assigned', async () => {
@@ -116,6 +119,8 @@ describe('requireRole middleware', () => {
       await handler(request, reply);
 
       expect(reply._code).toBe(403);
+      const body = reply._body as Record<string, string>;
+      expect(body.actual).toBe('none');
     });
 
     it('returns 403 when developer tries to access admin-only endpoint', async () => {
@@ -128,7 +133,39 @@ describe('requireRole middleware', () => {
 
       expect(reply._code).toBe(403);
       const body = reply._body as Record<string, string>;
-      expect(body.message).toContain('admin');
+      expect(body.error).toBe('Insufficient permissions');
+      expect(body.required).toBe('admin');
+      expect(body.actual).toBe('developer');
+    });
+  });
+
+  describe('write enforcement for POST /api/tickets', () => {
+    it('returns 403 for viewer role trying to write', async () => {
+      const roleService = makeRoleService('viewer');
+      const handler = requireRole(roleService, 'developer');
+      const request = makeRequest('user-viewer');
+      const reply = makeReply();
+
+      await handler(request, reply);
+
+      expect(reply._code).toBe(403);
+      const body = reply._body as Record<string, string>;
+      expect(body.error).toBe('Insufficient permissions');
+      expect(body.required).toBe('developer');
+      expect(body.actual).toBe('viewer');
+    });
+
+    it('allows developer role to POST /api/tickets', async () => {
+      const roleService = makeRoleService('developer');
+      const handler = requireRole(roleService, 'developer');
+      const request = makeRequest('user-developer');
+      const reply = makeReply();
+
+      await handler(request, reply);
+
+      // Handler passes through — no code/send called
+      expect(reply._code).toBe(0);
+      expect(reply._body).toBeUndefined();
     });
   });
 

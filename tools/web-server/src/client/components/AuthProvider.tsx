@@ -22,6 +22,7 @@ interface AuthUser {
   username?: string;
   displayName?: string;
   avatarUrl?: string;
+  role?: string;
 }
 
 interface AuthContextValue {
@@ -56,6 +57,7 @@ function decodeJwtPayload(token: string): AuthUser | null {
       username?: string;
       displayName?: string;
       avatarUrl?: string;
+      role?: string;
     };
     if (!payload.sub || !payload.email) return null;
     return {
@@ -64,6 +66,7 @@ function decodeJwtPayload(token: string): AuthUser | null {
       username: payload.username,
       displayName: payload.displayName,
       avatarUrl: payload.avatarUrl,
+      role: payload.role,
     };
   } catch {
     return null;

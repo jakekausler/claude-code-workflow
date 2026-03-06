@@ -18,6 +18,7 @@ interface AccessTokenPayload {
   username?: string;
   displayName?: string;
   avatarUrl?: string;
+  role?: string;
 }
 
 /** Shape of the refresh-token JWT payload. */
@@ -133,6 +134,9 @@ export class HostedAuthProvider implements AuthProvider {
     const roleService = new RoleService(this.pool);
     await roleService.bootstrapFirstUser(user.id);
 
+    // 3c. Resolve the user's global role for embedding in the access token
+    const userRole = (await roleService.getUserRole(user.id, null)) ?? 'viewer';
+
     // 4. Create auth session
     const sessionId = crypto.randomUUID();
     const refreshTokenId = crypto.randomUUID();
@@ -144,7 +148,7 @@ export class HostedAuthProvider implements AuthProvider {
     );
 
     // 5. Issue tokens
-    const accessToken = this.signAccessToken(user);
+    const accessToken = this.signAccessToken(user, userRole);
     const refreshToken = this.signRefreshToken(
       user.id,
       refreshTokenId,
@@ -227,6 +231,10 @@ export class HostedAuthProvider implements AuthProvider {
     // Decrypt the GitHub token from the old refresh token
     const ghToken = this.decrypt(enc);
 
+    // Resolve the user's global role for embedding in the refreshed access token
+    const refreshRoleService = new RoleService(this.pool);
+    const refreshedRole = (await refreshRoleService.getUserRole(userId, null)) ?? 'viewer';
+
     // Issue new token pair
     const newRefreshTokenId = crypto.randomUUID();
 
@@ -237,7 +245,7 @@ export class HostedAuthProvider implements AuthProvider {
       [newRefreshTokenId, sessionId],
     );
 
-    const accessToken = this.signAccessToken(user);
+    const accessToken = this.signAccessToken(user, refreshedRole);
     const refreshToken = this.signRefreshToken(
       userId,
       newRefreshTokenId,
@@ -403,13 +411,14 @@ export class HostedAuthProvider implements AuthProvider {
     }
   }
 
-  private signAccessToken(user: User): string {
+  private signAccessToken(user: User, role?: string): string {
     const payload: AccessTokenPayload = {
       sub: user.id,
       email: user.email,
       username: user.username,
       displayName: user.displayName,
       avatarUrl: user.avatarUrl,
+      role,
     };
     return jwt.sign(payload, this.jwtSecret, { expiresIn: ACCESS_TOKEN_EXPIRY });
   }

@@ -5,6 +5,11 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, basename, extname, join } from 'node:path';
 import matter from 'gray-matter';
 import { parseRefinementType } from './utils.js';
+import type { RoleService } from '../deployment/hosted/rbac/role-service.js';
+
+export interface StageRouteOptions {
+  roleService?: RoleService;
+}
 
 /**
  * Phase display name → file suffix mapping.
@@ -66,7 +71,7 @@ const stageIdSchema = z.string().regex(/^STAGE-\d{3}-\d{3}-\d{3}$/);
 /** Zod schema for the optional query parameters. */
 const stageQuerySchema = z.object({ ticket: z.string().optional() });
 
-const stagePlugin: FastifyPluginCallback = (app, _opts, done) => {
+const stagePlugin: FastifyPluginCallback<StageRouteOptions> = (app, _opts, done) => {
   /**
    * GET /api/stages — List all stages with optional ticket filter.
    */

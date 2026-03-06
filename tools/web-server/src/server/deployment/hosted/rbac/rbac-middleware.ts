@@ -27,8 +27,9 @@ export function requireRole(
 
     if (!effectiveRole || ROLE_HIERARCHY[effectiveRole] < ROLE_HIERARCHY[minRole]) {
       reply.code(403).send({
-        error: 'Forbidden',
-        message: `Requires ${minRole} role or higher`,
+        error: 'Insufficient permissions',
+        required: minRole,
+        actual: effectiveRole ?? 'none',
       });
       return;
     }

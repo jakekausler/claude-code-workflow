@@ -308,7 +308,7 @@ export async function createServer(
   await app.register(boardRoutes);
   await app.register(epicRoutes, { roleService });
   await app.register(ticketRoutes, { roleService });
-  await app.register(stageRoutes);
+  await app.register(stageRoutes, { roleService });
   await app.register(graphRoutes);
   await app.register(sessionRoutes);
   await app.register(repoRoutes);
