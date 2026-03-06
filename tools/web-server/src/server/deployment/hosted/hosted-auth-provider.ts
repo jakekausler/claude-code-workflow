@@ -5,6 +5,7 @@ import type {
   FastifyInstance,
   FastifyPluginCallback,
 } from 'fastify';
+import fp from 'fastify-plugin';
 import jwt from 'jsonwebtoken';
 import type { AuthProvider, User } from '../types.js';
 import type { PgPool } from './db/pg-client.js';
@@ -81,17 +82,23 @@ export class HostedAuthProvider implements AuthProvider {
   }
 
   requireAuth(): FastifyPluginCallback {
-    return (app: FastifyInstance, _opts: Record<string, unknown>, done: () => void) => {
-      app.addHook('preHandler', async (request: FastifyRequest, reply: FastifyReply) => {
-        const user = await this.getAuthenticatedUser(request);
-        if (!user) {
-          reply.code(401).send({ error: 'Unauthorized' });
-          return;
-        }
-        (request as FastifyRequest & { user: User }).user = user;
-      });
-      done();
-    };
+    return fp(
+      (app: FastifyInstance, _opts: Record<string, unknown>, done: () => void) => {
+        app.addHook('preHandler', async (request: FastifyRequest, reply: FastifyReply) => {
+          // /auth/* routes are public (OAuth flow, token refresh, logout)
+          if (request.url.startsWith('/auth/')) return;
+
+          const user = await this.getAuthenticatedUser(request);
+          if (!user) {
+            reply.code(401).send({ error: 'Unauthorized' });
+            return;
+          }
+          (request as FastifyRequest & { user: User }).user = user;
+        });
+        done();
+      },
+      { name: 'hosted-auth' },
+    );
   }
 
   async getUserIdFromRequest(request: FastifyRequest): Promise<string> {

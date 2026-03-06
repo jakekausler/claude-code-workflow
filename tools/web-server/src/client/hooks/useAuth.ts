@@ -49,11 +49,16 @@ export function getAuthHeaders(): Record<string, string> {
 
 /**
  * Attempt a silent token refresh.
- * Returns the new tokens on success, or null if refresh fails.
+ * Returns the new tokens on success.
+ * On failure: clears tokens and redirects to /login.
  */
 export async function silentRefresh(): Promise<AuthTokens | null> {
   const refreshToken = getRefreshToken();
-  if (!refreshToken) return null;
+  if (!refreshToken) {
+    clearTokens();
+    window.location.href = '/login';
+    return null;
+  }
 
   try {
     const response = await fetch('/auth/refresh', {
@@ -64,6 +69,7 @@ export async function silentRefresh(): Promise<AuthTokens | null> {
 
     if (!response.ok) {
       clearTokens();
+      window.location.href = '/login';
       return null;
     }
 
@@ -72,6 +78,7 @@ export async function silentRefresh(): Promise<AuthTokens | null> {
     return data;
   } catch {
     clearTokens();
+    window.location.href = '/login';
     return null;
   }
 }
