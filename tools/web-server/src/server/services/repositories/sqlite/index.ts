@@ -65,7 +65,7 @@ function normaliseEpic(r: SqliteEpicRow): EpicRow {
 }
 
 function normaliseTicket(r: SqliteTicketRow): TicketRow {
-  return { ...r, has_stages: toBooleanNullable(r.has_stages) };
+  return { ...r, source_id: null, has_stages: toBooleanNullable(r.has_stages) };
 }
 
 function normaliseStage(r: SqliteStageRow): StageRow {

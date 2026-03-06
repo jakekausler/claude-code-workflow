@@ -169,8 +169,8 @@ export class PgTicketRepository implements ITicketRepository {
 
   async upsert(data: TicketUpsertData): Promise<void> {
     await this.pool.query(
-      `INSERT INTO tickets (id, epic_id, repo_id, title, status, jira_key, source, has_stages, file_path, last_synced)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      `INSERT INTO tickets (id, epic_id, repo_id, title, status, jira_key, source, source_id, has_stages, file_path, last_synced)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
        ON CONFLICT (id) DO UPDATE SET
          epic_id = EXCLUDED.epic_id,
          repo_id = EXCLUDED.repo_id,
@@ -178,10 +178,11 @@ export class PgTicketRepository implements ITicketRepository {
          status = EXCLUDED.status,
          jira_key = EXCLUDED.jira_key,
          source = EXCLUDED.source,
+         source_id = EXCLUDED.source_id,
          has_stages = EXCLUDED.has_stages,
          file_path = EXCLUDED.file_path,
          last_synced = EXCLUDED.last_synced`,
-      [data.id, data.epic_id, data.repo_id, data.title, data.status, data.jira_key, data.source, data.has_stages, data.file_path, data.last_synced],
+      [data.id, data.epic_id, data.repo_id, data.title, data.status, data.jira_key, data.source, data.source_id, data.has_stages, data.file_path, data.last_synced],
     );
   }
 }
