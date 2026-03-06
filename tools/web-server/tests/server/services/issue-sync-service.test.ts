@@ -306,6 +306,103 @@ describe('IssueSyncService', () => {
     });
   });
 
+  describe('syncConfig - hosted mode duplicate detection', () => {
+    it('skips issues where source+source_id already exist in DB', async () => {
+      const ghIssues = makeGitHubResponse([
+        { number: 10, title: 'Already imported' },
+        { number: 11, title: 'New issue' },
+      ]);
+      const mockFetch = makeMockFetch(ghIssues);
+
+      // Pool mock: issue 10 is a duplicate, issue 11 is new
+      const mockPool = {
+        query: vi.fn().mockImplementation((sql: string, params: unknown[]) => {
+          if (sql.includes('SELECT id FROM tickets')) {
+            const sourceId = (params as string[])[2];
+            // issue 10 exists, issue 11 does not
+            if (sourceId === '10') {
+              return Promise.resolve({ rows: [{ id: 'existing-ticket' }] });
+            }
+            return Promise.resolve({ rows: [] });
+          }
+          // INSERT or status upsert
+          return Promise.resolve({ rows: [], rowCount: 1 });
+        }),
+      };
+
+      const service = new IssueSyncService({
+        fetchFn: mockFetch,
+        pool: mockPool as any,
+      });
+
+      const result = await service.syncConfig(makeConfig());
+
+      expect(result.imported).toBe(1);
+      expect(result.skipped).toBe(1);
+      expect(result.error).toBeNull();
+    });
+
+    it('inserts non-duplicate issues with source and source_id', async () => {
+      const ghIssues = makeGitHubResponse([{ number: 99, title: 'Brand new issue' }]);
+      const mockFetch = makeMockFetch(ghIssues);
+
+      const insertCalls: unknown[][] = [];
+      const mockPool = {
+        query: vi.fn().mockImplementation((sql: string, params: unknown[]) => {
+          if (sql.includes('SELECT id FROM tickets')) {
+            return Promise.resolve({ rows: [] });
+          }
+          if (sql.includes('INSERT INTO tickets')) {
+            insertCalls.push(params);
+          }
+          return Promise.resolve({ rows: [], rowCount: 1 });
+        }),
+      };
+
+      const service = new IssueSyncService({
+        fetchFn: mockFetch,
+        pool: mockPool as any,
+      });
+
+      const result = await service.syncConfig(makeConfig());
+
+      expect(result.imported).toBe(1);
+      expect(result.skipped).toBe(0);
+      expect(insertCalls).toHaveLength(1);
+      // params: id, epic_id, repo_id, title, status, jira_key, source, source_id, has_stages, file_path, last_synced
+      const insertParams = insertCalls[0] as unknown[];
+      expect(insertParams[6]).toBe('github');   // source
+      expect(insertParams[7]).toBe('99');        // source_id
+    });
+
+    it('handles all duplicates returning zero imports', async () => {
+      const ghIssues = makeGitHubResponse([
+        { number: 1, title: 'Old 1' },
+        { number: 2, title: 'Old 2' },
+      ]);
+      const mockFetch = makeMockFetch(ghIssues);
+
+      const mockPool = {
+        query: vi.fn().mockImplementation((sql: string) => {
+          if (sql.includes('SELECT id FROM tickets')) {
+            return Promise.resolve({ rows: [{ id: 'existing' }] });
+          }
+          return Promise.resolve({ rows: [], rowCount: 0 });
+        }),
+      };
+
+      const service = new IssueSyncService({
+        fetchFn: mockFetch,
+        pool: mockPool as any,
+      });
+
+      const result = await service.syncConfig(makeConfig());
+
+      expect(result.imported).toBe(0);
+      expect(result.skipped).toBe(2);
+    });
+  });
+
   describe('syncAll', () => {
     it('skips disabled configs', async () => {
       const ghIssues = makeGitHubResponse([{ number: 100, title: 'Test' }]);

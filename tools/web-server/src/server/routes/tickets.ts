@@ -204,6 +204,7 @@ const ticketPlugin: FastifyPluginCallback<TicketRouteOptions> = (app, opts, done
       status,
       jira_key: null,
       source: null,
+      source_id: null,
       has_stages: 0,
       file_path,
       last_synced: new Date().toISOString(),

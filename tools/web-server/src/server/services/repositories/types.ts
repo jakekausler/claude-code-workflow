@@ -30,6 +30,7 @@ export interface TicketRow {
   status: string | null;
   jira_key: string | null;
   source: string | null;
+  source_id: string | null;
   has_stages: boolean | null;
   file_path: string;
   last_synced: string;
@@ -110,6 +111,7 @@ export interface TicketUpsertData {
   status: string | null;
   jira_key: string | null;
   source: string | null;
+  source_id: string | null;
   has_stages: number | null;
   file_path: string;
   last_synced: string;

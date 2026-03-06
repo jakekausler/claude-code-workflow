@@ -435,24 +435,48 @@ export class IssueSyncService {
       let imported = 0;
       let skipped = 0;
 
-      if (this.isHosted() && this.dataService) {
-        // Hosted mode: check DB for existing source_id
-        const tickets = await this.dataService.tickets.listByRepo(config.repo_id);
-        const existingIds = new Set(
-          tickets
-            .filter((t) => t.source === config.provider)
-            .map((t) => {
-              // source_id is stored in frontmatter; check jira_key field as fallback
-              return t.jira_key ?? '';
-            }),
-        );
-
+      if (this.isHosted() && this.pool) {
+        // Hosted mode: check DB for existing source_id via dedicated index
         for (const issue of filtered) {
-          if (existingIds.has(String(issue.number))) {
+          const sourceId = String(issue.number);
+          const dupCheck = await this.pool.query<{ id: string }>(
+            'SELECT id FROM tickets WHERE repo_id = $1 AND source = $2 AND source_id = $3',
+            [config.repo_id, config.provider, sourceId],
+          );
+
+          if (dupCheck.rows.length > 0) {
+            console.log(`Skipping duplicate: ${config.provider}/${sourceId}`);
             skipped++;
             continue;
           }
-          // Create ticket in DB
+
+          // Insert new ticket
+          const now = new Date().toISOString();
+          const ticketId = `imported-${config.provider}-${config.repo_id}-${sourceId}`;
+          const slug = issue.title
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '-')
+            .slice(0, 40)
+            .replace(/-$/, '');
+          await this.pool.query(
+            `INSERT INTO tickets
+               (id, epic_id, repo_id, title, status, jira_key, source, source_id, has_stages, file_path, last_synced)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+             ON CONFLICT (id) DO NOTHING`,
+            [
+              ticketId,
+              null,
+              config.repo_id,
+              issue.title,
+              'to_convert',
+              null,
+              config.provider,
+              sourceId,
+              false,
+              `imported/${slug}.md`,
+              now,
+            ],
+          );
           imported++;
         }
       } else {
