@@ -188,6 +188,11 @@ export async function createServer(
         spawnedAt: entry.spawnedAt,
       };
       broadcastEvent('session-status', sseEvent);
+
+      // Persist conversion sessions to ticket_sessions table
+      if (entry.stageId.startsWith('TICKET-') && dataService) {
+        dataService.ticketSessions.addSession(entry.stageId, entry.sessionId, 'convert').catch(() => {});
+      }
     });
 
     oc.on('session-status', (entry: SessionInfo) => {
@@ -230,6 +235,12 @@ export async function createServer(
         waitingType: null,
       };
       broadcastEvent('session-status', sseEvent);
+
+      // Update ended_at for conversion sessions in ticket_sessions table
+      if (entry.stageId.startsWith('TICKET-') && dataService) {
+        dataService.ticketSessions.endSession(entry.stageId, entry.sessionId).catch(() => {});
+      }
+
       // Clean up requestStageMap entries for this stage
       for (const [reqId, sid] of requestStageMap) {
         if (sid === entry.stageId) requestStageMap.delete(reqId);

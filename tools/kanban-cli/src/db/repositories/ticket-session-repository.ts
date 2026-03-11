@@ -30,6 +30,18 @@ export class TicketSessionRepository {
       .run(ticketId, sessionId, sessionType, now);
   }
 
+  /** Mark a session as ended. */
+  endSession(ticketId: string, sessionId: string): void {
+    const now = new Date().toISOString();
+    this.db
+      .raw()
+      .prepare(
+        `UPDATE ticket_sessions SET ended_at = ?
+         WHERE ticket_id = ? AND session_id = ? AND ended_at IS NULL`
+      )
+      .run(now, ticketId, sessionId);
+  }
+
   /** Delete all sessions for a ticket. */
   deleteByTicketId(ticketId: string): void {
     this.db

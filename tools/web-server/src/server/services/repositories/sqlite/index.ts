@@ -303,6 +303,10 @@ export class SqliteTicketSessionRepository implements ITicketSessionRepository {
     this.inner.addSession(ticketId, sessionId, sessionType);
   }
 
+  async endSession(ticketId: string, sessionId: string): Promise<void> {
+    this.inner.endSession(ticketId, sessionId);
+  }
+
   async deleteByTicketId(ticketId: string): Promise<void> {
     this.inner.deleteByTicketId(ticketId);
   }

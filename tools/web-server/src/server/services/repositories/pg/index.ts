@@ -523,6 +523,15 @@ export class PgTicketSessionRepository implements ITicketSessionRepository {
     );
   }
 
+  async endSession(ticketId: string, sessionId: string): Promise<void> {
+    const now = new Date().toISOString();
+    await this.pool.query(
+      `UPDATE ticket_sessions SET ended_at = $1
+       WHERE ticket_id = $2 AND session_id = $3 AND ended_at IS NULL`,
+      [now, ticketId, sessionId],
+    );
+  }
+
   async deleteByTicketId(ticketId: string): Promise<void> {
     await this.pool.query('DELETE FROM ticket_sessions WHERE ticket_id = $1', [ticketId]);
   }

@@ -100,6 +100,18 @@ export function TicketDetailContent({ ticketId }: TicketDetailContentProps) {
   );
   useSSE(['board-update'], handleSSE);
 
+  // Listen for session-status SSE to detect live conversion sessions immediately
+  const handleSessionStatus = useCallback(
+    (_channel: string, data: unknown) => {
+      const event = data as { stageId?: string };
+      if (event.stageId === ticketId) {
+        void refetchSessions();
+      }
+    },
+    [ticketId, refetchSessions],
+  );
+  useSSE(['session-status'], handleSessionStatus);
+
   // Conversion timeout: if no progress after 5 minutes, show error
   useEffect(() => {
     if (isConverting && !conversionTimedOut) {

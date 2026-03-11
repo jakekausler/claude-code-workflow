@@ -216,5 +216,6 @@ export interface IStageSessionRepository {
 export interface ITicketSessionRepository {
   getSessionsByTicketId(ticketId: string): Promise<TicketSessionRow[]>;
   addSession(ticketId: string, sessionId: string, sessionType: string): Promise<void>;
+  endSession(ticketId: string, sessionId: string): Promise<void>;
   deleteByTicketId(ticketId: string): Promise<void>;
 }
