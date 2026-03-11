@@ -446,6 +446,7 @@ export function createOrchestrator(config: OrchestratorConfig, deps: Orchestrato
             model: config.model,
             workflowEnv: config.workflowEnv,
             customPrompt: conversionPrompt,
+            autoCloseOnEndTurn: true,
             onSessionId: (sessionId: string) => {
               registry.activate(ticketId, sessionId);
             },

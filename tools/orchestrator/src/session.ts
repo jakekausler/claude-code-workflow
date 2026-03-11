@@ -1,7 +1,7 @@
 import { spawn as nodeSpawn } from 'node:child_process';
 import { PassThrough } from 'node:stream';
 import type { Writable } from 'node:stream';
-import { StreamParser } from './stream-parser.js';
+import { StreamParser, type StreamMessage } from './stream-parser.js';
 import { ProtocolPeer } from './protocol-peer.js';
 import { ApprovalService } from './approval-service.js';
 import { MessageQueue } from './message-queue.js';
@@ -22,6 +22,8 @@ export interface SpawnOptions {
   onPid?: (pid: number) => void;
   /** When set, this prompt is sent to Claude instead of the auto-assembled one. */
   customPrompt?: string;
+  /** When true, automatically close stdin when Claude responds with end_turn and no tool_use blocks. */
+  autoCloseOnEndTurn?: boolean;
 }
 
 /**
@@ -180,6 +182,35 @@ export function createSessionExecutor(deps: Partial<SessionDeps> = {}): SessionE
         parser.on('session-id', (sessionId: string) => {
           options.onSessionId?.(sessionId);
         });
+
+        // Auto-close stdin when Claude finishes without requesting tool use.
+        // This is needed because the Claude CLI in stream-json mode waits for
+        // more input after end_turn; for conversion sessions the logical end
+        // is when the assistant replies without invoking any tools.
+        if (options.autoCloseOnEndTurn) {
+          parser.on('message', (msg: StreamMessage) => {
+            if (
+              msg.type === 'assistant' &&
+              typeof msg.message === 'object' &&
+              msg.message !== null
+            ) {
+              const message = msg.message as Record<string, unknown>;
+              if (message.stop_reason === 'end_turn') {
+                const content = Array.isArray(message.content) ? message.content : [];
+                const hasToolUse = content.some(
+                  (block: Record<string, unknown>) => block.type === 'tool_use',
+                );
+                if (!hasToolUse) {
+                  // Session is logically complete — close stdin to trigger exit.
+                  // Small delay lets final output flush through the stream.
+                  setTimeout(() => {
+                    child.stdin.end();
+                  }, 1000);
+                }
+              }
+            }
+          });
+        }
 
         // Create a PassThrough stream to tee stdout to both StreamParser and ProtocolPeer
         const protocolStream = new PassThrough();
