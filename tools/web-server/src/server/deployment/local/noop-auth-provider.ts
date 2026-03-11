@@ -14,8 +14,10 @@ export class NoopAuthProvider implements AuthProvider {
   requireAuth(): FastifyPluginCallback {
     return fp(
       (app: FastifyInstance, _opts: Record<string, unknown>, done: () => void) => {
-        app.addHook('preHandler', (_request: FastifyRequest, _reply: FastifyReply, next: () => void) => {
-          next();
+        app.addHook('preHandler', async (_request: FastifyRequest, _reply: FastifyReply) => {
+          // Intentionally empty — all requests pass through in local mode.
+          // Uses async signature (not callback) to avoid interfering with
+          // reply.hijack() on SSE routes.
         });
         done();
       },
