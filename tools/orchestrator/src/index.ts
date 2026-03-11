@@ -21,6 +21,7 @@ const program = new Command()
   .option('--model <model>', 'Claude model for sessions', 'sonnet')
   .option('--verbose', 'Verbose output', false)
   .option('--mock', 'Full mock mode: auto-advance stages without Claude CLI')
+  .option('--ws-port <port>', 'WebSocket server port for session broadcasting', '3102')
   .action(async (options) => {
     try {
       // 1. Load config
@@ -32,6 +33,7 @@ const program = new Command()
         model: options.model,
         verbose: options.verbose,
         mock: options.mock,
+        wsPort: options.wsPort,
       });
 
       // 2. Propagate mock flag to child processes (e.g., MCP server)

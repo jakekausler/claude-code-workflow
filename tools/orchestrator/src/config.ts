@@ -15,6 +15,7 @@ export interface CliOptions {
   model: string;
   verbose: boolean;
   mock?: boolean;
+  wsPort?: string;
 }
 
 /**
@@ -97,6 +98,22 @@ export async function loadOrchestratorConfig(
     pipelineConfig,
     workflowEnv,
     mock: cliOptions.mock === true,
+    wsPort: resolveWsPort(cliOptions.wsPort, env['ORCHESTRATOR_WS_PORT']),
     slackWebhookUrl: env['WORKFLOW_SLACK_WEBHOOK'] || undefined,
   };
+}
+
+/**
+ * Resolve wsPort from CLI flag, env var, or default (3102).
+ */
+function resolveWsPort(
+  cliValue: string | undefined,
+  envValue: string | undefined,
+): number {
+  const raw = cliValue ?? envValue ?? '3102';
+  const parsed = parseInt(raw, 10);
+  if (Number.isNaN(parsed) || parsed < 0 || parsed > 65535) {
+    throw new Error(`Invalid ws-port value: "${raw}"`);
+  }
+  return parsed;
 }

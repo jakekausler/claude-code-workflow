@@ -16,7 +16,7 @@ const host = process.env.HOST || '0.0.0.0';
 const dbPath = process.env.KANBAN_DB_PATH;
 
 const orchestratorWsUrl =
-  process.env.ORCHESTRATOR_WS_URL ?? 'ws://localhost:3101';
+  process.env.ORCHESTRATOR_WS_URL ?? 'ws://localhost:3102';
 const orchestratorClient = new OrchestratorClient(orchestratorWsUrl);
 
 const isHosted = process.env.DEPLOYMENT_MODE === 'hosted';
