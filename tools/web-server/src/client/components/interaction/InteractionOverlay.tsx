@@ -12,9 +12,10 @@ import type { QuestionDef } from '../../store/interaction-store.js';
 export function InteractionOverlay() {
   const approvals = useInteractionStore((s) => s.pendingApprovals);
   const questions = useInteractionStore((s) => s.pendingQuestions);
+  const activeViewers = useInteractionStore((s) => s.activeViewers);
 
-  const firstApproval = approvals[0];
-  const firstQuestion = questions[0];
+  const firstApproval = approvals.find((a) => !activeViewers.has(a.stageId));
+  const firstQuestion = questions.find((q) => !activeViewers.has(q.stageId));
 
   // Intentionally a no-op: modals in the overlay must be explicitly resolved
   // (Allow/Deny/Submit) rather than dismissed via Escape or clicking away.

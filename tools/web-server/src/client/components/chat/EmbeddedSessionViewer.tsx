@@ -3,12 +3,15 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Loader2, AlertCircle, Lock } from 'lucide-react';
 import { ChatHistory } from './ChatHistory.js';
 import { MessageInput } from './MessageInput.js';
+import { InlineApproval } from './InlineApproval.js';
+import { InlineQuestion } from './InlineQuestion.js';
 import { ContextAccordion } from './context/ContextAccordion.js';
 import { useSessionDetail } from '../../api/hooks.js';
 import { useSSE } from '../../api/use-sse.js';
 import { transformChunksToConversation } from '../../utils/group-transformer.js';
 import { processSessionContextWithPhases } from '../../utils/context-tracker.js';
 import { useSessionViewStore } from '../../store/session-store.js';
+import { useInteractionStore } from '../../store/interaction-store.js';
 
 interface EmbeddedSessionViewerProps {
   projectId: string;
@@ -32,6 +35,21 @@ export function EmbeddedSessionViewer({
   });
   const resetView = useSessionViewStore((s) => s.resetView);
   const queryClient = useQueryClient();
+  const registerViewer = useInteractionStore((s) => s.registerViewer);
+  const unregisterViewer = useInteractionStore((s) => s.unregisterViewer);
+  const pendingApprovals = useInteractionStore((s) =>
+    s.pendingApprovals.filter((a) => a.stageId === interactionId),
+  );
+  const pendingQuestions = useInteractionStore((s) =>
+    s.pendingQuestions.filter((q) => q.stageId === interactionId),
+  );
+
+  // Register/unregister this viewer so the modal overlay skips our approvals
+  useEffect(() => {
+    if (!interactionId) return;
+    registerViewer(interactionId);
+    return () => unregisterViewer(interactionId);
+  }, [interactionId, registerViewer, unregisterViewer]);
 
   // Reset view state when session changes
   useEffect(() => {
@@ -120,6 +138,33 @@ export function EmbeddedSessionViewer({
           contextStats={contextResult?.statsMap}
         />
       </div>
+
+      {/* Inline approval / question for this session */}
+      {interactionId && pendingApprovals[0] ? (
+        <div className="flex-shrink-0">
+          <InlineApproval
+            stageId={interactionId}
+            approval={{
+              requestId: pendingApprovals[0].requestId,
+              toolName: pendingApprovals[0].toolName,
+              toolInput: pendingApprovals[0].input as Record<string, unknown>,
+            }}
+            onResolved={() => {}}
+          />
+        </div>
+      ) : interactionId && pendingQuestions[0] ? (
+        <div className="flex-shrink-0">
+          <InlineQuestion
+            stageId={interactionId}
+            question={{
+              requestId: pendingQuestions[0].requestId,
+              question: pendingQuestions[0].questions[0]?.question ?? '',
+              options: pendingQuestions[0].questions[0]?.options?.map((o) => o.label),
+            }}
+            onResolved={() => {}}
+          />
+        </div>
+      ) : null}
 
       {/* Message input for active (non-read-only) sessions */}
       {!isReadOnly && interactionId && (

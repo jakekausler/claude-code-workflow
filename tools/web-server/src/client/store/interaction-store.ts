@@ -32,6 +32,7 @@ interface InteractionState {
   pendingApprovals: PendingApprovalUI[];
   pendingQuestions: PendingQuestionUI[];
   queuedMessages: Map<string, string>;
+  activeViewers: Set<string>;
 
   addApproval: (approval: PendingApprovalUI) => void;
   removeApproval: (requestId: string) => void;
@@ -39,6 +40,8 @@ interface InteractionState {
   removeQuestion: (requestId: string) => void;
   setQueuedMessage: (stageId: string, message: string) => void;
   clearQueuedMessage: (stageId: string) => void;
+  registerViewer: (stageId: string) => void;
+  unregisterViewer: (stageId: string) => void;
   getPendingCountForStage: (stageId: string) => number;
   reset: () => void;
 }
@@ -47,6 +50,7 @@ export const useInteractionStore = create<InteractionState>((set, get) => ({
   pendingApprovals: [],
   pendingQuestions: [],
   queuedMessages: new Map(),
+  activeViewers: new Set(),
 
   addApproval: (approval) =>
     set((s) => {
@@ -80,6 +84,20 @@ export const useInteractionStore = create<InteractionState>((set, get) => ({
       return { queuedMessages: next };
     }),
 
+  registerViewer: (stageId) =>
+    set((s) => {
+      const next = new Set(s.activeViewers);
+      next.add(stageId);
+      return { activeViewers: next };
+    }),
+
+  unregisterViewer: (stageId) =>
+    set((s) => {
+      const next = new Set(s.activeViewers);
+      next.delete(stageId);
+      return { activeViewers: next };
+    }),
+
   getPendingCountForStage: (stageId) => {
     const s = get();
     return (
@@ -93,5 +111,6 @@ export const useInteractionStore = create<InteractionState>((set, get) => ({
       pendingApprovals: [],
       pendingQuestions: [],
       queuedMessages: new Map(),
+      activeViewers: new Set(),
     }),
 }));
