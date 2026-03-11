@@ -36,8 +36,6 @@ export function NewEpicButton() {
   const queryClient = useQueryClient();
   const mutation = useCreateEpic();
 
-  if (!can(me, 'create:epic')) return null;
-
   const handleClose = useCallback(() => {
     setOpen(false);
     setTitle('');
@@ -53,6 +51,8 @@ export function NewEpicButton() {
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
   }, [open, handleClose]);
+
+  if (!can(me, 'create:epic')) return null;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
