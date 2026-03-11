@@ -7,6 +7,7 @@ import { join, dirname } from 'node:path';
 import matter from 'gray-matter';
 import type { RoleService } from '../deployment/hosted/rbac/role-service.js';
 import { requireRole } from '../deployment/hosted/rbac/rbac-middleware.js';
+import { broadcastEvent } from './events.js';
 
 export interface TicketRouteOptions {
   roleService?: RoleService;
@@ -208,6 +209,12 @@ const ticketPlugin: FastifyPluginCallback<TicketRouteOptions> = (app, opts, done
       has_stages: 0,
       file_path,
       last_synced: new Date().toISOString(),
+    });
+
+    broadcastEvent('board-update', {
+      type: 'ticket_created',
+      ticketId: id,
+      epicId: epic_id,
     });
 
     return reply.status(201).send({ id, title, status, epic_id, file_path });

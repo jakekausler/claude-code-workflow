@@ -6,6 +6,7 @@ import { join, dirname } from 'node:path';
 import matter from 'gray-matter';
 import type { RoleService } from '../deployment/hosted/rbac/role-service.js';
 import { requireRole } from '../deployment/hosted/rbac/rbac-middleware.js';
+import { broadcastEvent } from './events.js';
 
 export interface EpicRouteOptions {
   roleService?: RoleService;
@@ -169,6 +170,11 @@ const epicPlugin: FastifyPluginCallback<EpicRouteOptions> = (app, opts, done) =>
       jira_key: null,
       file_path,
       last_synced: new Date().toISOString(),
+    });
+
+    broadcastEvent('board-update', {
+      type: 'epic_created',
+      epicId: id,
     });
 
     return reply.status(201).send({ id, title, status, file_path });
