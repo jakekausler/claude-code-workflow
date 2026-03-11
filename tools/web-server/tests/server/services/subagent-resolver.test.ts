@@ -158,7 +158,7 @@ describe('SubagentResolver', () => {
       expect(result[0].description).toBe('Search files');
     });
 
-    it('omits unmatched agents and emits a warning', async () => {
+    it('includes unmatched agents for timing fallback and emits a warning', async () => {
       const tmpDir = createTempProject();
       const subagentDir = join(tmpDir, 'test-session', 'subagents');
       mkdirSync(subagentDir, { recursive: true });
@@ -195,7 +195,7 @@ describe('SubagentResolver', () => {
         projectDir: tmpDir,
         sessionId: 'test-session',
       });
-      expect(result).toHaveLength(0);
+      expect(result).toHaveLength(1);
       expect(warnSpy).toHaveBeenCalledWith(
         expect.stringContaining('Could not resolve subagent abc123'),
       );
