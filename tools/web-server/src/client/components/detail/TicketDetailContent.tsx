@@ -50,6 +50,7 @@ export function TicketDetailContent({ ticketId }: TicketDetailContentProps) {
   const [showEpicModal, setShowEpicModal] = useState(false);
   const [convertError, setConvertError] = useState<string | null>(null);
   const [isConverting, setIsConverting] = useState(false);
+  const [conversionStarted, setConversionStarted] = useState(false);
   const [conversionTimedOut, setConversionTimedOut] = useState(false);
   const conversionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -79,6 +80,15 @@ export function TicketDetailContent({ ticketId }: TicketDetailContentProps) {
     }
   }, [ticketActiveTab, activeTicketSession, sessions, setTicketSession]);
 
+  // Poll for sessions while conversion is in progress (every 5 seconds)
+  useEffect(() => {
+    if (!isConverting) return;
+    const interval = setInterval(() => {
+      void refetchSessions();
+    }, 5_000);
+    return () => clearInterval(interval);
+  }, [isConverting, refetchSessions]);
+
   // Listen for board-update SSE to refresh ticket data after conversion completes
   const handleSSE = useCallback(
     (_channel: string, _data: unknown) => {
@@ -90,12 +100,12 @@ export function TicketDetailContent({ ticketId }: TicketDetailContentProps) {
   );
   useSSE(['board-update'], handleSSE);
 
-  // Conversion timeout: if no progress after 30 seconds, show error
+  // Conversion timeout: if no progress after 5 minutes, show error
   useEffect(() => {
     if (isConverting && !conversionTimedOut) {
       conversionTimerRef.current = setTimeout(() => {
         setConversionTimedOut(true);
-      }, 30_000);
+      }, 300_000);
     } else if (conversionTimerRef.current) {
       clearTimeout(conversionTimerRef.current);
       conversionTimerRef.current = null;
@@ -112,6 +122,7 @@ export function TicketDetailContent({ ticketId }: TicketDetailContentProps) {
   useEffect(() => {
     if (isConverting && ticket && ticket.stages.length > 0) {
       setIsConverting(false);
+      setConversionStarted(false);
       setConversionTimedOut(false);
     }
   }, [isConverting, ticket]);
@@ -136,11 +147,13 @@ export function TicketDetailContent({ ticketId }: TicketDetailContentProps) {
       {
         onSuccess: () => {
           // Switch to session tab so user can watch progress
+          setConversionStarted(true);
           setTicketActiveTab('session');
           void refetchSessions();
         },
         onError: (err) => {
           setIsConverting(false);
+          setConversionStarted(false);
           setConvertError(err instanceof Error ? err.message : 'Conversion failed');
         },
       },
@@ -377,6 +390,7 @@ export function TicketDetailContent({ ticketId }: TicketDetailContentProps) {
                 <button
                   onClick={() => {
                     setIsConverting(false);
+                    setConversionStarted(false);
                     setConversionTimedOut(false);
                     setConvertError(null);
                   }}
@@ -388,8 +402,12 @@ export function TicketDetailContent({ ticketId }: TicketDetailContentProps) {
             ) : (
               <div className="flex flex-col items-center justify-center gap-3 py-12 text-sm text-slate-500">
                 <Loader2 className="animate-spin text-indigo-400" size={24} />
-                <p>Conversion session starting…</p>
-                <p className="text-xs text-slate-400">The session will appear here once it begins.</p>
+                <p>{conversionStarted ? 'Conversion session active — Claude is working…' : 'Conversion session starting…'}</p>
+                <p className="text-xs text-slate-400">
+                  {conversionStarted
+                    ? 'The session viewer will appear once the session is recorded.'
+                    : 'The session will appear here once it begins.'}
+                </p>
               </div>
             )
           ) : null}
