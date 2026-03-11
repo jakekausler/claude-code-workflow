@@ -101,14 +101,30 @@ export function TicketDetailContent({ ticketId }: TicketDetailContentProps) {
   useSSE(['board-update'], handleSSE);
 
   // Listen for session-status SSE to detect live conversion sessions immediately
+  // and handle session completion to transition from conversion spinner to stages
   const handleSessionStatus = useCallback(
     (_channel: string, data: unknown) => {
-      const event = data as { stageId?: string };
+      const event = data as { stageId?: string; status?: string };
       if (event.stageId === ticketId) {
         void refetchSessions();
+
+        if (event.status === 'ended') {
+          // Session finished — sync has already run on the orchestrator side,
+          // so the DB has the new stages. Clear conversion state and refresh.
+          setIsConverting(false);
+          setConversionStarted(false);
+          setConversionTimedOut(false);
+          void queryClient.invalidateQueries({ queryKey: ['tickets', ticketId] });
+          void queryClient.invalidateQueries({ queryKey: ['tickets'] });
+          void queryClient.invalidateQueries({ queryKey: ['board'] });
+          void queryClient.invalidateQueries({ queryKey: ['stages'] });
+        } else if (event.status === 'active') {
+          // Session became active — reflect that in the UI
+          setConversionStarted(true);
+        }
       }
     },
-    [ticketId, refetchSessions],
+    [ticketId, refetchSessions, queryClient],
   );
   useSSE(['session-status'], handleSessionStatus);
 
