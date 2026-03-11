@@ -10,11 +10,27 @@ import type {
 
 type PendingEntry = (PendingApproval | PendingQuestion) & { type: 'approval' | 'question' };
 
+/**
+ * Tool names that the orchestrator intercepts as signals rather than real tools.
+ * When Claude "calls" one of these, the orchestrator emits a session-signal event
+ * and immediately denies the tool call with an acknowledgement message.
+ */
+export const SIGNAL_TOOL_NAMES = ['conversion_complete', 'transition_stage'] as const;
+export type SignalToolName = (typeof SIGNAL_TOOL_NAMES)[number];
+
+export interface SessionSignal {
+  stageId: string;
+  signalName: SignalToolName;
+  input: unknown;
+  requestId: string;
+}
+
 export interface ApprovalServiceEvents {
   'approval-requested': (entry: PendingApproval & { type: 'approval' }) => void;
   'question-requested': (entry: PendingQuestion & { type: 'question' }) => void;
   'approval-cancelled': (requestId: string) => void;
   'result': (msg: ResultMessage) => void;
+  'session-signal': (signal: SessionSignal) => void;
 }
 
 export declare interface ApprovalService {
@@ -50,6 +66,18 @@ export class ApprovalService extends EventEmitter implements ProtocolHandler {
     request: InboundControlRequest['request'],
   ): Promise<void> {
     if (request.subtype !== 'can_use_tool') return;
+
+    // Intercept orchestrator signal tools — these are not real tools.
+    // Emit a signal event and let the session layer send the response.
+    if ((SIGNAL_TOOL_NAMES as readonly string[]).includes(request.tool_name)) {
+      this.emit('session-signal', {
+        stageId: this.currentStageId,
+        signalName: request.tool_name as SignalToolName,
+        input: request.input,
+        requestId,
+      });
+      return;
+    }
 
     const isQuestion = request.tool_name === 'AskUserQuestion';
 

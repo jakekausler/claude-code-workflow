@@ -3,7 +3,7 @@ import { PassThrough } from 'node:stream';
 import type { Writable } from 'node:stream';
 import { StreamParser, type StreamMessage } from './stream-parser.js';
 import { ProtocolPeer } from './protocol-peer.js';
-import { ApprovalService } from './approval-service.js';
+import { ApprovalService, type SessionSignal } from './approval-service.js';
 import { MessageQueue } from './message-queue.js';
 
 /**
@@ -22,7 +22,10 @@ export interface SpawnOptions {
   onPid?: (pid: number) => void;
   /** When set, this prompt is sent to Claude instead of the auto-assembled one. */
   customPrompt?: string;
-  /** When true, automatically close stdin when Claude responds with end_turn and no tool_use blocks. */
+  /**
+   * @deprecated Use session-signal events (conversion_complete / transition_stage) instead.
+   * When true, automatically close stdin when Claude responds with end_turn and no tool_use blocks.
+   */
   autoCloseOnEndTurn?: boolean;
 }
 
@@ -241,6 +244,28 @@ export function createSessionExecutor(deps: Partial<SessionDeps> = {}): SessionE
         const peer = new ProtocolPeer(child.stdin as unknown as Writable, protocolStream, approvalService);
         peers.set(options.stageId, peer);
 
+        // Listen for orchestrator signal tools and respond immediately.
+        // Signal tools (conversion_complete, transition_stage) are not real tools;
+        // denying them with an acknowledgement message tells Claude the signal was
+        // received without triggering any actual tool execution.
+        const signalHandler = (signal: SessionSignal) => {
+          if (signal.stageId === options.stageId) {
+            peer.sendApprovalResponse(signal.requestId, {
+              behavior: 'deny',
+              message: `Signal received: ${signal.signalName} acknowledged by orchestrator`,
+            });
+
+            // Close stdin after a short delay to let the denial response flush.
+            // This terminates the Claude process gracefully, triggering the 'close' event.
+            if (signal.signalName === 'conversion_complete' || signal.signalName === 'transition_stage') {
+              setTimeout(() => {
+                child.stdin.end();
+              }, 1500);
+            }
+          }
+        };
+        approvalService.on('session-signal', signalHandler);
+
         let settled = false;
 
         child.on('close', (code: number | null) => {
@@ -253,7 +278,8 @@ export function createSessionExecutor(deps: Partial<SessionDeps> = {}): SessionE
             activeSessions.delete(child.pid);
           }
 
-          // Clean up peer and approval service
+          // Clean up peer, signal listener, and approval service
+          approvalService.removeListener('session-signal', signalHandler);
           const peer = peers.get(options.stageId);
           if (peer) {
             peer.destroy();
@@ -275,7 +301,8 @@ export function createSessionExecutor(deps: Partial<SessionDeps> = {}): SessionE
             activeSessions.delete(child.pid);
           }
 
-          // Clean up peer and approval service
+          // Clean up peer, signal listener, and approval service
+          approvalService.removeListener('session-signal', signalHandler);
           const peer = peers.get(options.stageId);
           if (peer) {
             peer.destroy();

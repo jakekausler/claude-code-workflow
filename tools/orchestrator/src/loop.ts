@@ -415,23 +415,15 @@ export function createOrchestrator(config: OrchestratorConfig, deps: Orchestrato
           `Epic: ${epicId}`,
           `Repository: ${config.repoPath}`,
           '',
-          'Read the ticket file to understand the work described.',
-          'Then help the user break this ticket into concrete, implementable stages.',
+          'Invoke the `convert-ticket` skill to guide your workflow.',
           '',
-          'For each stage you create:',
-          '1. Create a markdown file at the ticket directory with proper frontmatter',
-          '2. Stage IDs follow the pattern STAGE-XXX-YYY-NNN (derived from the ticket ID)',
-          '3. Each stage should have: id, ticket, epic, title, status (Not Started), depends_on',
-          '4. Chain dependencies so stages execute in order',
-          '',
-          'After creating all stage files, update the ticket frontmatter to:',
-          '- Add a `stages` list with all stage IDs',
-          '- Add `stage_statuses` mapping each stage to "Not Started"',
-          '- Change status from "to_convert" to "In Progress"',
-          '',
-          'After creating all stage files and updating the ticket, your work is done. The system will sync the database automatically.',
-          '',
-          'Ask the user what stages make sense before creating files.',
+          'IMPORTANT INSTRUCTIONS:',
+          '- Do NOT run kanban-cli sync or validate commands.',
+          '- Do NOT modify the status field in the ticket frontmatter.',
+          '- When you have finished creating all stage files and updating the ticket',
+          '  frontmatter (adding stages list), call the `conversion_complete` tool',
+          '  to signal completion.',
+          '- The system will handle syncing, status updates, and column computation.',
         ].join('\n');
 
         const sessionLogger = logger.createSessionLogger(ticketId, config.logDir);
@@ -446,7 +438,6 @@ export function createOrchestrator(config: OrchestratorConfig, deps: Orchestrato
             model: config.model,
             workflowEnv: config.workflowEnv,
             customPrompt: conversionPrompt,
-            autoCloseOnEndTurn: true,
             onSessionId: (sessionId: string) => {
               registry.activate(ticketId, sessionId);
             },
@@ -457,20 +448,55 @@ export function createOrchestrator(config: OrchestratorConfig, deps: Orchestrato
           sessionLogger,
         );
 
+        // Helper to run kanban-cli sync
+        const runSync = (): Promise<void> => {
+          const __dirname = path.dirname(fileURLToPath(import.meta.url));
+          const kanbanCliBin = path.resolve(__dirname, '../../kanban-cli/dist/cli/index.js');
+          return new Promise<void>((resolve) => {
+            execFile('node', [kanbanCliBin, 'sync', '--repo', config.repoPath], { timeout: 30_000 }, (err, _stdout, stderr) => {
+              if (err) {
+                logger.warn('Sync after conversion failed', { ticketId, error: stderr || err.message });
+              }
+              resolve();
+            });
+          });
+        };
+
+        // Listen for conversion_complete signal from the Claude session.
+        // When received: sync, update ticket status to Converted, sync again.
+        // The session stdin is closed by session.ts after the signal is acknowledged.
+        const conversionSignalHandler = async (signal: { stageId: string; signalName: string }) => {
+          if (signal.stageId !== ticketId || signal.signalName !== 'conversion_complete') return;
+
+          logger.info('Conversion complete signal received', { ticketId, epicId });
+
+          try {
+            // 1. Sync to pick up new stage files
+            await runSync();
+
+            // 2. Update ticket status to "Converted"
+            const ticketFm = await readFrontmatter(ticketFilePath);
+            ticketFm.data.status = 'Converted';
+            await writeFrontmatter(ticketFilePath, ticketFm.data, ticketFm.content);
+
+            // 3. Sync again to recompute kanban columns
+            await runSync();
+
+            logger.info('Post-conversion sync complete', { ticketId });
+          } catch (err) {
+            logger.warn('Post-conversion processing failed', { ticketId, error: String(err) });
+          }
+        };
+        approvalService.on('session-signal', conversionSignalHandler);
+
         // Handle session completion: run sync and clean up registry
         sessionPromise
           .then(async (result) => {
+            // Remove signal handler to avoid leaks
+            approvalService.removeListener('session-signal', conversionSignalHandler);
+
             // Run sync after conversion session completes
-            const __dirname = path.dirname(fileURLToPath(import.meta.url));
-            const kanbanCliBin = path.resolve(__dirname, '../../kanban-cli/dist/cli/index.js');
-            await new Promise<void>((resolve) => {
-              execFile('node', [kanbanCliBin, 'sync', '--repo', config.repoPath], { timeout: 30_000 }, (err, _stdout, stderr) => {
-                if (err) {
-                  logger.warn('Sync after conversion failed', { ticketId, error: stderr || err.message });
-                }
-                resolve();
-              });
-            });
+            await runSync();
 
             logger.info('Conversion session completed', {
               ticketId,
@@ -482,6 +508,7 @@ export function createOrchestrator(config: OrchestratorConfig, deps: Orchestrato
             registry.end(ticketId);
           })
           .catch(async (err: unknown) => {
+            approvalService.removeListener('session-signal', conversionSignalHandler);
             const msg = err instanceof Error ? err.message : String(err);
             logger.error('Conversion session failed', { ticketId, epicId, error: msg });
             await sessionLogger.close();
@@ -765,6 +792,13 @@ export function createOrchestrator(config: OrchestratorConfig, deps: Orchestrato
             spawnedAt: now,
           });
 
+          // Determine valid transitions for the current phase so Claude knows
+          // which target values are accepted by the transition_stage signal.
+          const currentPhase = config.pipelineConfig.workflow.phases.find(
+            (p: PipelineState) => p.status === statusBefore,
+          );
+          const validTransitions = currentPhase?.transitions_to ?? [];
+
           const sessionPromise = sessionExecutor.spawn(
             {
               stageId: stage.id,
@@ -773,7 +807,10 @@ export function createOrchestrator(config: OrchestratorConfig, deps: Orchestrato
               worktreePath: worktreeInfo.path,
               worktreeIndex: worktreeInfo.index,
               model: config.model,
-              workflowEnv: config.workflowEnv,
+              workflowEnv: {
+                ...config.workflowEnv,
+                VALID_TRANSITIONS: validTransitions.join(','),
+              },
               // TODO: Persist session_id to DB via stages.updateSessionId(stageId, sessionId)
               // Deferred: OrchestratorDeps does not have a stages repository dependency yet.
               // The web server reads session_id from the registry via WebSocket for now.
@@ -787,9 +824,64 @@ export function createOrchestrator(config: OrchestratorConfig, deps: Orchestrato
             sessionLogger,
           );
 
+          // Listen for transition_stage signals from the Claude session.
+          // Validates the transition against the pipeline config and updates frontmatter.
+          // The session stdin is closed by session.ts after the signal is acknowledged.
+          const transitionSignalHandler = async (signal: { stageId: string; signalName: string; input: unknown }) => {
+            if (signal.stageId !== stage.id || signal.signalName !== 'transition_stage') return;
+
+            const input = signal.input as Record<string, unknown> | null;
+            const target = input?.target as string | undefined;
+            if (!target) {
+              logger.warn('transition_stage signal missing target', { stageId: stage.id });
+              return;
+            }
+
+            // Validate transition against pipeline config
+            const currentPhase = config.pipelineConfig.workflow.phases.find(
+              (p: PipelineState) => p.status === statusBefore,
+            );
+            if (!currentPhase || !currentPhase.transitions_to.includes(target)) {
+              logger.warn('Invalid transition requested', {
+                stageId: stage.id,
+                from: statusBefore,
+                to: target,
+                validTransitions: currentPhase?.transitions_to ?? [],
+              });
+              return;
+            }
+
+            // Look up the target phase to get its status value
+            const targetPhase = config.pipelineConfig.workflow.phases.find(
+              (p: PipelineState) => p.name === target,
+            );
+            const newStatus = target === 'Done' ? 'Complete' : (targetPhase?.status ?? target);
+
+            try {
+              const { data, content } = await readFrontmatter(stageFilePath);
+              data.status = newStatus;
+              await writeFrontmatter(stageFilePath, data, content);
+              logger.info('Stage transition applied', {
+                stageId: stage.id,
+                from: statusBefore,
+                to: newStatus,
+              });
+            } catch (err) {
+              logger.warn('Failed to apply stage transition', {
+                stageId: stage.id,
+                error: String(err),
+              });
+            }
+          };
+          approvalService.on('session-signal', transitionSignalHandler);
+
           sessionPromise
-            .then((sessionResult) => handleSessionExit(stage.id, workerInfo, sessionResult, sessionLogger))
+            .then((sessionResult) => {
+              approvalService.removeListener('session-signal', transitionSignalHandler);
+              return handleSessionExit(stage.id, workerInfo, sessionResult, sessionLogger);
+            })
             .catch((err: unknown) => {
+              approvalService.removeListener('session-signal', transitionSignalHandler);
               const error = err instanceof Error ? err : new Error(String(err));
               return handleSessionError(stage.id, workerInfo, error, sessionLogger);
             });
