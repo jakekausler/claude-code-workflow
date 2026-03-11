@@ -1,6 +1,7 @@
-import { Fragment, useEffect } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useStage, useStageSession, useStageSessionHistory } from '../../api/hooks.js';
+import { useQueryClient } from '@tanstack/react-query';
+import { useStage, useStageSession, useStageSessionHistory, useDeletePreview, useDeleteStage } from '../../api/hooks.js';
 import { useDrawerStore } from '../../store/drawer-store.js';
 import { useDrawerSessionStore } from '../../store/drawer-session-store.js';
 import { useBoardStore, selectSessionStatus } from '../../store/board-store.js';
@@ -14,6 +15,7 @@ import { SessionHistoryDropdown } from '../chat/SessionHistoryDropdown.js';
 import { EmbeddedSessionViewer } from '../chat/EmbeddedSessionViewer.js';
 import { LiveSessionSection } from '../stage/LiveSessionSection.js';
 import { slugToTitle } from '../../utils/formatters.js';
+import { DeleteConfirmationDialog } from '../shared/DeleteConfirmationDialog.js';
 import {
   ExternalLink,
   GitBranch,
@@ -22,6 +24,7 @@ import {
   FileCode,
   CheckSquare,
   Square,
+  Trash2,
 } from 'lucide-react';
 
 interface StageDetailContentProps {
@@ -30,7 +33,24 @@ interface StageDetailContentProps {
 
 export function StageDetailContent({ stageId }: StageDetailContentProps) {
   const { data: stage, isLoading, error } = useStage(stageId);
-  const { open } = useDrawerStore();
+  const { open, closeAll } = useDrawerStore();
+  const queryClient = useQueryClient();
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const { data: deletePreview } = useDeletePreview('stages', showDeleteDialog ? stageId : null);
+  const deleteStage = useDeleteStage();
+
+  const handleDelete = () => {
+    deleteStage.mutate(stageId, {
+      onSuccess: () => {
+        void queryClient.invalidateQueries({ queryKey: ['stages'] });
+        void queryClient.invalidateQueries({ queryKey: ['board'] });
+        void queryClient.invalidateQueries({ queryKey: ['tickets'] });
+        void queryClient.invalidateQueries({ queryKey: ['graph'] });
+        setShowDeleteDialog(false);
+        closeAll();
+      },
+    });
+  };
   const { stageActiveTab, setStageActiveTab, activeStageSession, setStageSession } = useDrawerSessionStore();
   const { data: sessionHistoryData } = useStageSessionHistory(stageId);
   const sessions = sessionHistoryData?.sessions ?? [];
@@ -256,6 +276,26 @@ export function StageDetailContent({ stageId }: StageDetailContentProps) {
               </div>
             </div>
           )}
+
+          {/* Delete */}
+          <div className="border-t border-slate-200 pt-4">
+            <button
+              onClick={() => setShowDeleteDialog(true)}
+              className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
+            >
+              <Trash2 size={14} />
+              Delete Stage
+            </button>
+          </div>
+
+          <DeleteConfirmationDialog
+            isOpen={showDeleteDialog}
+            onClose={() => setShowDeleteDialog(false)}
+            onConfirm={handleDelete}
+            isDeleting={deleteStage.isPending}
+            preview={deletePreview ?? null}
+            error={deleteStage.isError ? String(deleteStage.error) : null}
+          />
         </div>
       )}
 

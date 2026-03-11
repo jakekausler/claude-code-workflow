@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { useTicket, useTicketSessions, useConvertTicket } from '../../api/hooks.js';
+import { useTicket, useTicketSessions, useConvertTicket, useDeletePreview, useDeleteTicket } from '../../api/hooks.js';
 import { useDrawerStore } from '../../store/drawer-store.js';
 import { useDrawerSessionStore } from '../../store/drawer-session-store.js';
 import { StatusBadge } from './StatusBadge.js';
@@ -11,7 +11,8 @@ import { EmbeddedSessionViewer } from '../chat/EmbeddedSessionViewer.js';
 import { EpicSelectModal } from '../ticket/EpicSelectModal.js';
 import { slugToTitle, columnColor } from '../../utils/formatters.js';
 import { useSSE } from '../../api/use-sse.js';
-import { ExternalLink, Loader2, AlertCircle, Zap } from 'lucide-react';
+import { DeleteConfirmationDialog } from '../shared/DeleteConfirmationDialog.js';
+import { ExternalLink, Loader2, AlertCircle, Zap, Trash2 } from 'lucide-react';
 import { JIRA_BASE_URL } from '../../utils/constants.js';
 
 interface TicketDetailContentProps {
@@ -20,12 +21,30 @@ interface TicketDetailContentProps {
 
 export function TicketDetailContent({ ticketId }: TicketDetailContentProps) {
   const { data: ticket, isLoading, error } = useTicket(ticketId);
-  const { open } = useDrawerStore();
+  const { open, closeAll } = useDrawerStore();
   const { ticketActiveTab, setTicketActiveTab, activeTicketSession, setTicketSession } = useDrawerSessionStore();
   const { data: sessionHistoryData, refetch: refetchSessions } = useTicketSessions(ticketId);
   const sessions = sessionHistoryData?.sessions ?? [];
   const hasSessions = sessions.length > 0;
   const queryClient = useQueryClient();
+
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const { data: deletePreview } = useDeletePreview('tickets', showDeleteDialog ? ticketId : null);
+  const deleteTicket = useDeleteTicket();
+
+  const handleDelete = () => {
+    deleteTicket.mutate(ticketId, {
+      onSuccess: () => {
+        void queryClient.invalidateQueries({ queryKey: ['tickets'] });
+        void queryClient.invalidateQueries({ queryKey: ['board'] });
+        void queryClient.invalidateQueries({ queryKey: ['epics'] });
+        void queryClient.invalidateQueries({ queryKey: ['stages'] });
+        void queryClient.invalidateQueries({ queryKey: ['graph'] });
+        setShowDeleteDialog(false);
+        closeAll();
+      },
+    });
+  };
 
   const [showEpicModal, setShowEpicModal] = useState(false);
   const [convertError, setConvertError] = useState<string | null>(null);
@@ -269,6 +288,26 @@ export function TicketDetailContent({ ticketId }: TicketDetailContentProps) {
               Content available in future update
             </p>
           </div>
+
+          {/* Delete */}
+          <div className="border-t border-slate-200 pt-4">
+            <button
+              onClick={() => setShowDeleteDialog(true)}
+              className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
+            >
+              <Trash2 size={14} />
+              Delete Ticket
+            </button>
+          </div>
+
+          <DeleteConfirmationDialog
+            isOpen={showDeleteDialog}
+            onClose={() => setShowDeleteDialog(false)}
+            onConfirm={handleDelete}
+            isDeleting={deleteTicket.isPending}
+            preview={deletePreview ?? null}
+            error={deleteTicket.isError ? String(deleteTicket.error) : null}
+          />
         </div>
       )}
 

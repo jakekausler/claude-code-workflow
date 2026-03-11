@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useEpic } from '../../api/hooks.js';
+import { useEpic, useDeletePreview, useDeleteEpic } from '../../api/hooks.js';
 import { useDrawerStore } from '../../store/drawer-store.js';
 import { StatusBadge } from './StatusBadge.js';
-import { ExternalLink, Loader2, AlertCircle, Plus, X } from 'lucide-react';
+import { DeleteConfirmationDialog } from '../shared/DeleteConfirmationDialog.js';
+import { ExternalLink, Loader2, AlertCircle, Plus, X, Trash2 } from 'lucide-react';
 import { JIRA_BASE_URL } from '../../utils/constants.js';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '../../api/client.js';
@@ -152,9 +153,27 @@ interface EpicDetailContentProps {
 
 export function EpicDetailContent({ epicId }: EpicDetailContentProps) {
   const { data: epic, isLoading, error } = useEpic(epicId);
-  const { open } = useDrawerStore();
+  const { open, closeAll } = useDrawerStore();
   const [newTicketOpen, setNewTicketOpen] = useState(false);
   const handleNewTicketClose = useCallback(() => setNewTicketOpen(false), []);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const { data: deletePreview } = useDeletePreview('epics', showDeleteDialog ? epicId : null);
+  const deleteEpic = useDeleteEpic();
+  const queryClient = useQueryClient();
+
+  const handleDelete = () => {
+    deleteEpic.mutate(epicId, {
+      onSuccess: () => {
+        void queryClient.invalidateQueries({ queryKey: ['epics'] });
+        void queryClient.invalidateQueries({ queryKey: ['board'] });
+        void queryClient.invalidateQueries({ queryKey: ['tickets'] });
+        void queryClient.invalidateQueries({ queryKey: ['stages'] });
+        void queryClient.invalidateQueries({ queryKey: ['graph'] });
+        setShowDeleteDialog(false);
+        closeAll();
+      },
+    });
+  };
 
   if (isLoading) {
     return (
@@ -268,6 +287,26 @@ export function EpicDetailContent({ epicId }: EpicDetailContentProps) {
       {newTicketOpen && (
         <NewTicketModal epicId={epicId} onClose={handleNewTicketClose} />
       )}
+
+      {/* Delete */}
+      <div className="border-t border-slate-200 pt-4">
+        <button
+          onClick={() => setShowDeleteDialog(true)}
+          className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
+        >
+          <Trash2 size={14} />
+          Delete Epic
+        </button>
+      </div>
+
+      <DeleteConfirmationDialog
+        isOpen={showDeleteDialog}
+        onClose={() => setShowDeleteDialog(false)}
+        onConfirm={handleDelete}
+        isDeleting={deleteEpic.isPending}
+        preview={deletePreview ?? null}
+        error={deleteEpic.isError ? String(deleteEpic.error) : null}
+      />
     </div>
   );
 }

@@ -468,6 +468,48 @@ export function useCurrentUser() {
   });
 }
 
+// Delete ----------------------------------------------------------------------
+
+interface DeletePreviewItem {
+  id: string;
+  title: string;
+  type: string;
+}
+
+export interface DeletePreview {
+  item: DeletePreviewItem;
+  childrenToDelete: DeletePreviewItem[];
+  dependenciesRemoved: number;
+  dependenciesCreated: { from: string; to: string }[];
+}
+
+/** Fetch a preview of what a delete operation will affect. Only runs when id is non-null. */
+export function useDeletePreview(type: 'epics' | 'tickets' | 'stages', id: string | null) {
+  return useQuery({
+    queryKey: ['delete-preview', type, id],
+    queryFn: () => apiFetch<DeletePreview>(`/${type}/${id}/delete-preview`),
+    enabled: !!id,
+  });
+}
+
+export function useDeleteEpic() {
+  return useMutation({
+    mutationFn: (id: string) => apiFetch(`/epics/${id}`, { method: 'DELETE' }),
+  });
+}
+
+export function useDeleteTicket() {
+  return useMutation({
+    mutationFn: (id: string) => apiFetch(`/tickets/${id}`, { method: 'DELETE' }),
+  });
+}
+
+export function useDeleteStage() {
+  return useMutation({
+    mutationFn: (id: string) => apiFetch(`/stages/${id}`, { method: 'DELETE' }),
+  });
+}
+
 // Conversion ------------------------------------------------------------------
 
 export interface ConvertTicketResponse {
