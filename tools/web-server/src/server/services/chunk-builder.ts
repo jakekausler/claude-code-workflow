@@ -238,17 +238,18 @@ export function extractSemanticSteps(
 
         case 'tool_use': {
           const exec = execMap.get(block.id);
+          const isSubagent = block.name === 'Task' || block.name === 'Agent';
           const step: SemanticStep = {
-            type: block.name === 'Task' ? 'subagent' : 'tool_call',
+            type: isSubagent ? 'subagent' : 'tool_call',
             content:
-              block.name === 'Task'
+              isSubagent
                 ? (block.input.description as string | undefined) ?? block.name
                 : block.name,
             toolName: block.name,
             toolCallId: block.id,
             durationMs: exec?.durationMs,
           };
-          if (block.name === 'Task') {
+          if (isSubagent) {
             step.subagentId = block.id;
           }
           steps.push(step);

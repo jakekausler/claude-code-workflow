@@ -69,7 +69,7 @@ export function buildDisplayItems(
         const tool = linkedTools.get(step.toolCallId ?? '');
         if (!tool) break;
         // Skip Task calls that have subagents
-        if (tool.name === 'Task' && taskIdsWithSubagents.has(tool.id)) break;
+        if ((tool.name === 'Task' || tool.name === 'Agent') && taskIdsWithSubagents.has(tool.id)) break;
         items.push({ type: 'tool', tool });
         break;
       }
@@ -245,7 +245,7 @@ export function buildDisplayItemsFromMessages(
   // Pass 2: Build LinkedToolItems by matching tool_use to tool_result
   for (const [toolCallId, toolUse] of toolUseMap) {
     // Skip Task calls with associated subagents
-    if (toolUse.name === 'Task' && taskIdsWithSubagents.has(toolCallId)) continue;
+    if ((toolUse.name === 'Task' || toolUse.name === 'Agent') && taskIdsWithSubagents.has(toolCallId)) continue;
 
     const resultData = toolResultMap.get(toolCallId);
     const skillInfo = skillInstructionsMap.get(toolCallId);
