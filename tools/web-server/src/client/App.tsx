@@ -48,11 +48,10 @@ function AppContent() {
   useSessionMap();
 
   return (
-    <>
+    <BrowserRouter>
       <InteractionOverlay />
       <GlobalSearch />
-      <BrowserRouter>
-        <Layout>
+      <Layout>
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/board" element={<Board />} />
@@ -77,8 +76,7 @@ function AppContent() {
             <Route path="/import" element={<ImportIssues />} />
           </Routes>
         </Layout>
-      </BrowserRouter>
-    </>
+    </BrowserRouter>
   );
 }
 
