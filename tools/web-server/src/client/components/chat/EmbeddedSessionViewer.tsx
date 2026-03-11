@@ -120,7 +120,8 @@ export function EmbeddedSessionViewer({
       {!isReadOnly && (
         <MessageInput
           stageId={sessionId}
-          disabled={!session?.isOngoing}
+          disabled={!isActive}
+          light
         />
       )}
     </div>

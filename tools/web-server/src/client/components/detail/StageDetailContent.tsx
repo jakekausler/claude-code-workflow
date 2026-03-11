@@ -320,6 +320,7 @@ export function StageDetailContent({ stageId }: StageDetailContentProps) {
               projectId={activeStageSession.projectId}
               sessionId={activeStageSession.sessionId}
               isReadOnly={!sessions.find((s) => s.sessionId === activeStageSession.sessionId)?.isCurrent}
+              isActive={!!sessions.find((s) => s.sessionId === activeStageSession.sessionId)?.isCurrent}
             />
           )}
         </div>
