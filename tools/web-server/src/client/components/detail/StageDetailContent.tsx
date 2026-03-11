@@ -13,6 +13,7 @@ import { DrawerTabs } from './DrawerTabs.js';
 import type { TabDef } from './DrawerTabs.js';
 import { SessionHistoryDropdown } from '../chat/SessionHistoryDropdown.js';
 import { EmbeddedSessionViewer } from '../chat/EmbeddedSessionViewer.js';
+import { SessionViewerErrorBoundary } from '../chat/SessionViewerErrorBoundary.js';
 import { LiveSessionSection } from '../stage/LiveSessionSection.js';
 import { slugToTitle } from '../../utils/formatters.js';
 import { DeleteConfirmationDialog } from '../shared/DeleteConfirmationDialog.js';
@@ -316,13 +317,15 @@ export function StageDetailContent({ stageId }: StageDetailContentProps) {
 
           {/* Embedded session viewer */}
           {activeStageSession && (
-            <EmbeddedSessionViewer
-              projectId={activeStageSession.projectId}
-              sessionId={activeStageSession.sessionId}
-              interactionId={stageId}
-              isReadOnly={!sessions.find((s) => s.sessionId === activeStageSession.sessionId)?.isCurrent}
-              isActive={!!sessions.find((s) => s.sessionId === activeStageSession.sessionId)?.isCurrent}
-            />
+            <SessionViewerErrorBoundary>
+              <EmbeddedSessionViewer
+                projectId={activeStageSession.projectId}
+                sessionId={activeStageSession.sessionId}
+                interactionId={stageId}
+                isReadOnly={!sessions.find((s) => s.sessionId === activeStageSession.sessionId)?.isCurrent}
+                isActive={!!sessions.find((s) => s.sessionId === activeStageSession.sessionId)?.isCurrent}
+              />
+            </SessionViewerErrorBoundary>
           )}
         </div>
       )}

@@ -8,6 +8,7 @@ import { DrawerTabs } from './DrawerTabs.js';
 import type { TabDef } from './DrawerTabs.js';
 import { SessionHistoryDropdown } from '../chat/SessionHistoryDropdown.js';
 import { EmbeddedSessionViewer } from '../chat/EmbeddedSessionViewer.js';
+import { SessionViewerErrorBoundary } from '../chat/SessionViewerErrorBoundary.js';
 import { EpicSelectModal } from '../ticket/EpicSelectModal.js';
 import { slugToTitle, columnColor } from '../../utils/formatters.js';
 import { useSSE } from '../../api/use-sse.js';
@@ -405,13 +406,15 @@ export function TicketDetailContent({ ticketId }: TicketDetailContentProps) {
                 const selectedSession = sessions.find((s) => s.sessionId === activeTicketSession.sessionId);
                 const isEnded = !!selectedSession?.endedAt;
                 return (
-                  <EmbeddedSessionViewer
-                    projectId={activeTicketSession.projectId}
-                    sessionId={activeTicketSession.sessionId}
-                    interactionId={ticketId}
-                    isReadOnly={isEnded}
-                    isActive={!isEnded}
-                  />
+                  <SessionViewerErrorBoundary>
+                    <EmbeddedSessionViewer
+                      projectId={activeTicketSession.projectId}
+                      sessionId={activeTicketSession.sessionId}
+                      interactionId={ticketId}
+                      isReadOnly={isEnded}
+                      isActive={!isEnded}
+                    />
+                  </SessionViewerErrorBoundary>
                 );
               })()}
             </>
