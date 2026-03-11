@@ -2,8 +2,8 @@
  * New Relic custom instrumentation helpers.
  *
  * All functions are safe to call regardless of whether the New Relic agent is
- * active — when the agent is disabled (no license key) the `newrelic` module
- * exports no-op stubs, so every call here is a no-op at runtime.
+ * active — each call guards against missing API methods so the instrumentation
+ * is a no-op when the agent is disabled.
  */
 import * as newrelic from 'newrelic';
 
@@ -28,11 +28,13 @@ export function recordSessionLifecycle(
   sessionId: string,
   extra?: Record<string, string | number | boolean>,
 ): void {
-  newrelic.recordCustomEvent('SessionLifecycle', {
-    event,
-    sessionId,
-    ...extra,
-  });
+  if (typeof newrelic.recordCustomEvent === 'function') {
+    newrelic.recordCustomEvent('SessionLifecycle', {
+      event,
+      sessionId,
+      ...extra,
+    });
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -50,7 +52,9 @@ export function recordSSEConnection(
   event: SSEConnectionEvent,
   extra?: Record<string, string | number | boolean>,
 ): void {
-  newrelic.recordCustomEvent('SSEConnection', { event, ...extra });
+  if (typeof newrelic.recordCustomEvent === 'function') {
+    newrelic.recordCustomEvent('SSEConnection', { event, ...extra });
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -68,6 +72,9 @@ export async function withApiSegment<T>(
   name: string,
   fn: () => Promise<T>,
 ): Promise<T> {
+  if (typeof newrelic.startSegment !== 'function') {
+    return fn();
+  }
   return new Promise<T>((resolve, reject) => {
     newrelic.startSegment(name, true, async () => {
       try {
