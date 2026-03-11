@@ -123,8 +123,11 @@ export async function resolveSubagents(
   for (const agent of stillUnmatchedAgents) {
     console.warn(
       `[subagent-resolver] Could not resolve subagent ${agent.agentId} to any task call. ` +
-        `It will be omitted from the process list.`,
+        `Including without parentTaskId for timing-based fallback.`,
     );
+    // Still include unmatched subagents — the timing-based fallback in
+    // linkSubagentsToChunks will place them on the correct chunk
+    processes.push(buildProcess(agent, {}));
   }
 
   // 6. Detect parallel subagents (start times within PARALLEL_THRESHOLD_MS)

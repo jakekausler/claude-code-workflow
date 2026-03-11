@@ -270,7 +270,7 @@ function extractToolCalls(content: ContentBlock[]): ToolCall[] {
   for (const block of content) {
     if (block.type === 'tool_use') {
       const toolUse = block as ToolUseContent;
-      const isTask = toolUse.name === 'Task';
+      const isTask = toolUse.name === 'Task' || toolUse.name === 'Agent';
       calls.push({
         id: toolUse.id,
         name: toolUse.name,
