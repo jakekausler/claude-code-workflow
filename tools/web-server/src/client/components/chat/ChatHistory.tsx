@@ -61,7 +61,7 @@ export function ChatHistory({ items, contextStats, totalPhases }: Props) {
   return (
     <div
       ref={parentRef}
-      className="flex-1 overflow-y-auto px-4 py-6"
+      className="h-full overflow-y-auto px-4 py-6"
       onScroll={handleScroll}
     >
       {items.map((item, i) => (
@@ -127,7 +127,7 @@ function VirtualizedItemList({
   return (
     <div
       ref={parentRef}
-      className="flex-1 overflow-y-auto px-4"
+      className="h-full overflow-y-auto px-4"
       onScroll={onScroll}
     >
       <div

@@ -108,11 +108,13 @@ export function EmbeddedSessionViewer({
 
       {/* Context accordion (collapsed by default) */}
       {metrics && (
-        <ContextAccordion metrics={metrics} chunks={chunks} model={model} />
+        <div className="flex-shrink-0">
+          <ContextAccordion metrics={metrics} chunks={chunks} model={model} />
+        </div>
       )}
 
       {/* Chat history (fills remaining space) */}
-      <div className="flex-1 min-h-0">
+      <div className="flex-1 min-h-0 overflow-hidden">
         <ChatHistory
           items={conversation?.items ?? []}
           contextStats={contextResult?.statsMap}
@@ -121,11 +123,13 @@ export function EmbeddedSessionViewer({
 
       {/* Message input for active (non-read-only) sessions */}
       {!isReadOnly && interactionId && (
-        <MessageInput
-          stageId={interactionId}
-          disabled={!isActive}
-          light
-        />
+        <div className="flex-shrink-0">
+          <MessageInput
+            stageId={interactionId}
+            disabled={!isActive}
+            light
+          />
+        </div>
       )}
     </div>
   );
