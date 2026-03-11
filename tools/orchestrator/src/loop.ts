@@ -341,65 +341,151 @@ export function createOrchestrator(config: OrchestratorConfig, deps: Orchestrato
       const ticketDir = path.join(config.repoPath, 'epics', epicId, ticketId);
       const ticketFilePath = path.join(ticketDir, `${ticketId}.md`);
 
-      // Read the ticket file
-      const ticketFm = await readFrontmatter(ticketFilePath);
+      if (config.mock) {
+        // ── Mock mode: create 3 stub stages instantly ──
+        const ticketFm = await readFrontmatter(ticketFilePath);
 
-      // Derive stage IDs from the ticket ID
-      // TICKET-XXX-YYY -> STAGE-XXX-YYY-001, STAGE-XXX-YYY-002, STAGE-XXX-YYY-003
-      const ticketSuffix = ticketId.replace(/^TICKET-/, '');
-      const stageIds = [
-        `STAGE-${ticketSuffix}-001`,
-        `STAGE-${ticketSuffix}-002`,
-        `STAGE-${ticketSuffix}-003`,
-      ];
+        const ticketSuffix = ticketId.replace(/^TICKET-/, '');
+        const stageIds = [
+          `STAGE-${ticketSuffix}-001`,
+          `STAGE-${ticketSuffix}-002`,
+          `STAGE-${ticketSuffix}-003`,
+        ];
 
-      const stageDefinitions = [
-        { id: stageIds[0], title: 'Design', dependsOn: [] as string[] },
-        { id: stageIds[1], title: 'Build', dependsOn: [stageIds[0]] },
-        { id: stageIds[2], title: 'Verification', dependsOn: [stageIds[1]] },
-      ];
+        const stageDefinitions = [
+          { id: stageIds[0], title: 'Design', dependsOn: [] as string[] },
+          { id: stageIds[1], title: 'Build', dependsOn: [stageIds[0]] },
+          { id: stageIds[2], title: 'Verification', dependsOn: [stageIds[1]] },
+        ];
 
-      // Create stage files
-      await mkdir(ticketDir, { recursive: true });
-      for (const stageDef of stageDefinitions) {
-        const stageContent = `\n## Overview\n\n${stageDef.title} stage for ${ticketId}.\n`;
-        const stageData: Record<string, unknown> = {
-          id: stageDef.id,
-          ticket: ticketId,
-          epic: epicId,
-          title: stageDef.title,
-          status: 'Not Started',
-          session_active: false,
-          depends_on: stageDef.dependsOn,
-          priority: 0,
+        await mkdir(ticketDir, { recursive: true });
+        for (const stageDef of stageDefinitions) {
+          const stageContent = `\n## Overview\n\n${stageDef.title} stage for ${ticketId}.\n`;
+          const stageData: Record<string, unknown> = {
+            id: stageDef.id,
+            ticket: ticketId,
+            epic: epicId,
+            title: stageDef.title,
+            status: 'Not Started',
+            session_active: false,
+            depends_on: stageDef.dependsOn,
+            priority: 0,
+          };
+          const stageFilePath = path.join(ticketDir, `${stageDef.id}.md`);
+          await writeFrontmatter(stageFilePath, stageData, stageContent);
+        }
+
+        ticketFm.data.stages = stageIds;
+        ticketFm.data.status = 'In Progress';
+        ticketFm.data.stage_statuses = {
+          [stageIds[0]]: 'Not Started',
+          [stageIds[1]]: 'Not Started',
+          [stageIds[2]]: 'Not Started',
         };
-        const stageFilePath = path.join(ticketDir, `${stageDef.id}.md`);
-        await writeFrontmatter(stageFilePath, stageData, stageContent);
-      }
+        await writeFrontmatter(ticketFilePath, ticketFm.data, ticketFm.content);
 
-      // Update the ticket frontmatter
-      ticketFm.data.stages = stageIds;
-      ticketFm.data.status = 'In Progress';
-      ticketFm.data.stage_statuses = {
-        [stageIds[0]]: 'Not Started',
-        [stageIds[1]]: 'Not Started',
-        [stageIds[2]]: 'Not Started',
-      };
-      await writeFrontmatter(ticketFilePath, ticketFm.data, ticketFm.content);
-
-      // Run sync
-      const __dirname = path.dirname(fileURLToPath(import.meta.url));
-      const kanbanCliBin = path.resolve(__dirname, '../../kanban-cli/dist/cli/index.js');
-      await new Promise<void>((resolve) => {
-        execFile('node', [kanbanCliBin, 'sync', '--repo', config.repoPath], { timeout: 30_000 }, (err, _stdout, stderr) => {
-          if (err) {
-            logger.warn('Sync after conversion failed', { ticketId, error: stderr || err.message });
-          }
-          resolve();
+        const __dirname = path.dirname(fileURLToPath(import.meta.url));
+        const kanbanCliBin = path.resolve(__dirname, '../../kanban-cli/dist/cli/index.js');
+        await new Promise<void>((resolve) => {
+          execFile('node', [kanbanCliBin, 'sync', '--repo', config.repoPath], { timeout: 30_000 }, (err, _stdout, stderr) => {
+            if (err) {
+              logger.warn('Sync after conversion failed', { ticketId, error: stderr || err.message });
+            }
+            resolve();
+          });
         });
-      });
 
-      logger.info('Converted ticket to stages', { ticketId, epicId, stages: stageIds });
+        logger.info('Converted ticket to stages (mock)', { ticketId, epicId, stages: stageIds });
+      } else {
+        // ── Real mode: spawn an interactive Claude session for conversion ──
+        const now = (deps.now ?? Date.now)();
+
+        registry.register({
+          stageId: ticketId,
+          sessionId: '',
+          processId: 0,
+          worktreePath: config.repoPath,
+          spawnedAt: now,
+        });
+
+        const conversionPrompt = [
+          `You are converting ticket ${ticketId} into implementable stages.`,
+          '',
+          `Ticket file: ${ticketFilePath}`,
+          `Epic: ${epicId}`,
+          `Repository: ${config.repoPath}`,
+          '',
+          'Read the ticket file to understand the work described.',
+          'Then help the user break this ticket into concrete, implementable stages.',
+          '',
+          'For each stage you create:',
+          '1. Create a markdown file at the ticket directory with proper frontmatter',
+          '2. Stage IDs follow the pattern STAGE-XXX-YYY-NNN (derived from the ticket ID)',
+          '3. Each stage should have: id, ticket, epic, title, status (Not Started), depends_on',
+          '4. Chain dependencies so stages execute in order',
+          '',
+          'After creating all stage files, update the ticket frontmatter to:',
+          '- Add a `stages` list with all stage IDs',
+          '- Add `stage_statuses` mapping each stage to "Not Started"',
+          '- Change status from "to_convert" to "In Progress"',
+          '',
+          `Then run: kanban-cli sync --repo ${config.repoPath}`,
+          '',
+          'Ask the user what stages make sense before creating files.',
+        ].join('\n');
+
+        const sessionLogger = logger.createSessionLogger(ticketId, config.logDir);
+
+        const sessionPromise = sessionExecutor.spawn(
+          {
+            stageId: ticketId,
+            stageFilePath: ticketFilePath,
+            skillName: 'ticket-conversion',
+            worktreePath: config.repoPath,
+            worktreeIndex: 0,
+            model: config.model,
+            workflowEnv: config.workflowEnv,
+            customPrompt: conversionPrompt,
+            onSessionId: (sessionId: string) => {
+              registry.activate(ticketId, sessionId);
+            },
+          },
+          sessionLogger,
+        );
+
+        // Handle session completion: run sync and clean up registry
+        sessionPromise
+          .then(async (result) => {
+            // Run sync after conversion session completes
+            const __dirname = path.dirname(fileURLToPath(import.meta.url));
+            const kanbanCliBin = path.resolve(__dirname, '../../kanban-cli/dist/cli/index.js');
+            await new Promise<void>((resolve) => {
+              execFile('node', [kanbanCliBin, 'sync', '--repo', config.repoPath], { timeout: 30_000 }, (err, _stdout, stderr) => {
+                if (err) {
+                  logger.warn('Sync after conversion failed', { ticketId, error: stderr || err.message });
+                }
+                resolve();
+              });
+            });
+
+            logger.info('Conversion session completed', {
+              ticketId,
+              epicId,
+              exitCode: result.exitCode,
+              durationMs: result.durationMs,
+            });
+            await sessionLogger.close();
+            registry.end(ticketId);
+          })
+          .catch(async (err: unknown) => {
+            const msg = err instanceof Error ? err.message : String(err);
+            logger.error('Conversion session failed', { ticketId, epicId, error: msg });
+            await sessionLogger.close();
+            registry.end(ticketId);
+          });
+
+        logger.info('Launched conversion session', { ticketId, epicId });
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       logger.error('launch_conversion failed', { ticketId, epicId, error: msg });

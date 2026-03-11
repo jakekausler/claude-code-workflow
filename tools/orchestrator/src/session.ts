@@ -18,6 +18,8 @@ export interface SpawnOptions {
   model: string;
   workflowEnv: Record<string, string>;
   onSessionId?: (sessionId: string) => void;
+  /** When set, this prompt is sent to Claude instead of the auto-assembled one. */
+  customPrompt?: string;
 }
 
 /**
@@ -155,7 +157,7 @@ export function createSessionExecutor(deps: Partial<SessionDeps> = {}): SessionE
   return {
     spawn(options: SpawnOptions, sessionLogger: SessionLoggerLike): Promise<SessionResult> {
       return new Promise((resolve, reject) => {
-        const prompt = assemblePrompt(options);
+        const prompt = options.customPrompt ?? assemblePrompt(options);
         const startTime = resolved.now();
 
         const spawnArgs = buildSpawnArgs({ model: options.model });
