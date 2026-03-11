@@ -2,41 +2,107 @@ import { useEffect, useRef } from 'react';
 
 export type SSEEventHandler = (channel: string, data: unknown) => void;
 
+// ---------------------------------------------------------------------------
+// Shared singleton EventSource – avoids hitting the browser's 6-connection-
+// per-origin limit when multiple components each call useSSE().
+// ---------------------------------------------------------------------------
+
+let sharedSource: EventSource | null = null;
+let refCount = 0;
+const channelHandlers = new Map<string, (e: MessageEvent) => void>();
+const channelListeners = new Map<string, Set<SSEEventHandler>>();
+
+function ensureConnection(): EventSource {
+  if (!sharedSource || sharedSource.readyState === EventSource.CLOSED) {
+    sharedSource = new EventSource('/api/events');
+    // EventSource auto-reconnects on error; nothing extra needed here.
+  }
+  return sharedSource;
+}
+
+function addChannelListener(
+  channel: string,
+  callback: SSEEventHandler,
+): void {
+  if (!channelListeners.has(channel)) {
+    channelListeners.set(channel, new Set());
+
+    const source = ensureConnection();
+    const handler = (event: MessageEvent) => {
+      let data: unknown;
+      try {
+        data = JSON.parse(event.data);
+      } catch {
+        data = event.data;
+      }
+      const cbs = channelListeners.get(channel);
+      if (cbs) {
+        for (const cb of cbs) cb(channel, data);
+      }
+    };
+    source.addEventListener(channel, handler as EventListener);
+    channelHandlers.set(channel, handler);
+  }
+  channelListeners.get(channel)!.add(callback);
+}
+
+function removeChannelListener(
+  channel: string,
+  callback: SSEEventHandler,
+): void {
+  const cbs = channelListeners.get(channel);
+  if (!cbs) return;
+  cbs.delete(callback);
+
+  // If no listeners remain for this channel, remove the EventSource handler
+  if (cbs.size === 0) {
+    channelListeners.delete(channel);
+    const handler = channelHandlers.get(channel);
+    if (handler && sharedSource) {
+      sharedSource.removeEventListener(channel, handler as EventListener);
+    }
+    channelHandlers.delete(channel);
+  }
+}
+
+function releaseConnection(): void {
+  refCount--;
+  if (refCount <= 0 && sharedSource) {
+    sharedSource.close();
+    sharedSource = null;
+    channelListeners.clear();
+    channelHandlers.clear();
+    refCount = 0;
+  }
+}
+
 /**
  * Connect to SSE endpoint and subscribe to named channels.
- * Returns a cleanup function that removes listeners and closes the connection.
+ * Uses a shared singleton EventSource under the hood.
+ * Returns a cleanup function that removes listeners and, if this was the last
+ * consumer, closes the connection.
  */
 export function connectSSE(
   channels: string[],
   onEvent: SSEEventHandler,
 ): () => void {
-  const source = new EventSource('/api/events');
-  const handlers: Array<{ channel: string; handler: (e: MessageEvent) => void }> = [];
+  refCount++;
 
   for (const channel of channels) {
-    const handler = (event: MessageEvent) => {
-      try {
-        const data: unknown = JSON.parse(event.data);
-        onEvent(channel, data);
-      } catch {
-        // Ignore malformed JSON
-      }
-    };
-    source.addEventListener(channel, handler as EventListener);
-    handlers.push({ channel, handler });
+    addChannelListener(channel, onEvent);
   }
 
   return () => {
-    for (const { channel, handler } of handlers) {
-      source.removeEventListener(channel, handler as EventListener);
+    for (const channel of channels) {
+      removeChannelListener(channel, onEvent);
     }
-    source.close();
+    releaseConnection();
   };
 }
 
 /**
  * React hook wrapping connectSSE with proper lifecycle management.
- * EventSource has built-in auto-reconnect — no manual retry needed.
+ * All hook instances share a single EventSource connection.
  */
 export function useSSE(
   channels: string[],
@@ -53,9 +119,13 @@ export function useSSE(
     if (!enabled || channelsKey === '') return;
 
     const activeChannels = channelsKey.split('\0');
-    const cleanup = connectSSE(activeChannels, (channel, data) => {
+
+    // Stable callback that always dispatches through the latest ref
+    const stableCallback: SSEEventHandler = (channel, data) => {
       onEventRef.current(channel, data);
-    });
+    };
+
+    const cleanup = connectSSE(activeChannels, stableCallback);
 
     return cleanup;
   }, [channelsKey, enabled]);
