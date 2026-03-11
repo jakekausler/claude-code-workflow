@@ -30,6 +30,7 @@ import { importRoutes } from './routes/import.js';
 import { syncRoutes } from './routes/sync.js';
 import { meRoutes } from './routes/me.js';
 import { authRoutes } from './routes/auth.js';
+import { devLogsRoutes } from './routes/dev-logs.js';
 import type { IssueSyncService } from './services/issue-sync-service.js';
 import type { IssueSyncScheduler } from './services/issue-sync-scheduler.js';
 
@@ -109,6 +110,11 @@ export async function createServer(
   if (deploymentContext.mode === 'hosted') {
     const hostedCtx = deploymentContext as HostedDeploymentContext;
     await app.register(authRoutes, { authProvider: hostedCtx.getHostedAuthProvider() });
+  }
+
+  // Dev-only frontend log forwarding (registered before auth so it stays unauthenticated)
+  if (isDev) {
+    await app.register(devLogsRoutes);
   }
 
   // Register auth plugin (no-op for local mode)

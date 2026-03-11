@@ -19,6 +19,12 @@ export default defineConfig({
       port: 3101,
       clientPort: 3101,
     },
+    proxy: {
+      '/api': {
+        target: 'http://localhost:3100',
+        changeOrigin: true,
+      },
+    },
   },
   build: {
     outDir: 'dist/client',

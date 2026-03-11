@@ -5,7 +5,7 @@
  * active — when the agent is disabled (no license key) the `newrelic` module
  * exports no-op stubs, so every call here is a no-op at runtime.
  */
-import newrelic from 'newrelic';
+import * as newrelic from 'newrelic';
 
 // ---------------------------------------------------------------------------
 // Session lifecycle events

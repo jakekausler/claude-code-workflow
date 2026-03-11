@@ -161,6 +161,7 @@ export const ALTER_TABLE_MIGRATIONS = [
   'ALTER TABLE dependencies ADD COLUMN target_repo_name TEXT',
   CREATE_REPOS_NAME_UNIQUE_INDEX,
   'ALTER TABLE stages ADD COLUMN session_id TEXT DEFAULT NULL',
+  CREATE_STAGES_SESSION_ID_INDEX,
   // Migrate existing stages.session_id values into the stage_sessions junction table.
   // Uses INSERT OR IGNORE so it is idempotent — safe to run on every database open.
   `INSERT OR IGNORE INTO stage_sessions (stage_id, session_id, phase, started_at, is_current)
@@ -182,7 +183,6 @@ export const ALL_CREATE_STATEMENTS = [
   CREATE_TICKETS_JIRA_KEY_INDEX,
   CREATE_PARENT_TRACKING_CHILD_INDEX,
   CREATE_PARENT_TRACKING_PARENT_INDEX,
-  CREATE_STAGES_SESSION_ID_INDEX,
   CREATE_STAGE_SESSIONS_TABLE,
   CREATE_TICKET_SESSIONS_TABLE,
   CREATE_STAGE_SESSIONS_STAGE_INDEX,
