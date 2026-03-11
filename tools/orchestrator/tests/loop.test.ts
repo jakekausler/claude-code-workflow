@@ -171,7 +171,7 @@ function makeMockDeps(): {
     killAll: vi.fn(),
     getPeer: vi.fn(() => undefined),
     getApprovalService: vi.fn(() => ({
-      on: vi.fn(), emit: vi.fn(),
+      on: vi.fn(), emit: vi.fn(), removeListener: vi.fn(),
       handleControlRequest: vi.fn(), handleCancelRequest: vi.fn(),
       handleResult: vi.fn(), setCurrentStageId: vi.fn(),
     })),
@@ -332,7 +332,7 @@ describe('createOrchestrator', () => {
       expect(spawnCall.stageId).toBe('STAGE-001-001-001');
       expect(spawnCall.skillName).toBe('design');
       expect(spawnCall.model).toBe('sonnet');
-      expect(spawnCall.workflowEnv).toEqual({ WORKFLOW_AUTO_DESIGN: 'true' });
+      expect(spawnCall.workflowEnv).toEqual({ WORKFLOW_AUTO_DESIGN: 'true', VALID_TRANSITIONS: 'Build' });
 
       deferred.resolve({ exitCode: 0, durationMs: 1000 });
       await startPromise;
@@ -1625,7 +1625,7 @@ describe('createOrchestrator', () => {
         on: vi.fn((event: string, listener: (entry: { stageId: string; requestId: string }) => void) => {
           if (event === 'question-requested') questionListener = listener;
         }),
-        emit: vi.fn(),
+        emit: vi.fn(), removeListener: vi.fn(),
         handleControlRequest: vi.fn(),
         handleCancelRequest: vi.fn(),
         handleResult: vi.fn(),
@@ -1655,7 +1655,7 @@ describe('createOrchestrator', () => {
         on: vi.fn((event: string, listener: (entry: { stageId: string; requestId: string; toolName: string }) => void) => {
           if (event === 'approval-requested') approvalListener = listener;
         }),
-        emit: vi.fn(),
+        emit: vi.fn(), removeListener: vi.fn(),
         handleControlRequest: vi.fn(),
         handleCancelRequest: vi.fn(),
         handleResult: vi.fn(),
@@ -1682,7 +1682,7 @@ describe('createOrchestrator', () => {
       const onMock = vi.fn();
       sessionExecutor.getApprovalService.mockReturnValue({
         on: onMock,
-        emit: vi.fn(),
+        emit: vi.fn(), removeListener: vi.fn(),
         handleControlRequest: vi.fn(),
         handleCancelRequest: vi.fn(),
         handleResult: vi.fn(),

@@ -109,7 +109,7 @@ function makeSessionExecutor(): SessionExecutor & {
     killAll: vi.fn(),
     getPeer: vi.fn(() => undefined),
     getApprovalService: vi.fn(() => ({
-      on: vi.fn(), emit: vi.fn(),
+      on: vi.fn(), emit: vi.fn(), removeListener: vi.fn(),
       handleControlRequest: vi.fn(), handleCancelRequest: vi.fn(),
       handleResult: vi.fn(), setCurrentStageId: vi.fn(),
     })) as SessionExecutor['getApprovalService'],
