@@ -449,6 +449,9 @@ export function createOrchestrator(config: OrchestratorConfig, deps: Orchestrato
             onSessionId: (sessionId: string) => {
               registry.activate(ticketId, sessionId);
             },
+            onPid: (pid: number) => {
+              registry.setPid(ticketId, pid);
+            },
           },
           sessionLogger,
         );
@@ -509,6 +512,7 @@ export function createOrchestrator(config: OrchestratorConfig, deps: Orchestrato
   let running = false;
   let pendingSleep: { cancel: () => void } | undefined;
   let workerWaiter: { promise: Promise<void>; resolve: () => void } | undefined;
+  let zombieCheckInterval: ReturnType<typeof setInterval> | undefined;
 
   // Cache for isolation strategy validation per start() call
   let isolationValidated: boolean | undefined;
@@ -632,6 +636,14 @@ export function createOrchestrator(config: OrchestratorConfig, deps: Orchestrato
       running = true;
       isolationValidated = undefined;
 
+      // Periodic zombie session detection (every 60 s)
+      zombieCheckInterval = setInterval(() => {
+        const cleaned = registry.checkZombies();
+        for (const id of cleaned) {
+          logger.warn('Zombie session detected and cleaned up', { stageId: id });
+        }
+      }, 60_000);
+
       // Start cron scheduler if configured
       if (cronScheduler) {
         cronScheduler.start();
@@ -644,6 +656,14 @@ export function createOrchestrator(config: OrchestratorConfig, deps: Orchestrato
       }
 
       while (running) {
+        // Detect and clean up zombie sessions at the start of each tick
+        {
+          const zombies = registry.checkZombies();
+          for (const id of zombies) {
+            logger.warn('Zombie session detected and cleaned up (tick)', { stageId: id });
+          }
+        }
+
         // Run resolver checks at top of each tick
         {
           const resolverContext: ResolverContext = {
@@ -759,6 +779,9 @@ export function createOrchestrator(config: OrchestratorConfig, deps: Orchestrato
               onSessionId: (sessionId: string) => {
                 registry.activate(stage.id, sessionId);
               },
+              onPid: (pid: number) => {
+                registry.setPid(stage.id, pid);
+              },
             },
             sessionLogger,
           );
@@ -799,6 +822,12 @@ export function createOrchestrator(config: OrchestratorConfig, deps: Orchestrato
 
     async stop(): Promise<void> {
       running = false;
+
+      // Stop zombie check interval
+      if (zombieCheckInterval !== undefined) {
+        clearInterval(zombieCheckInterval);
+        zombieCheckInterval = undefined;
+      }
 
       // Stop cron scheduler if running
       if (cronScheduler) {

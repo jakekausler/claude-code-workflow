@@ -18,6 +18,8 @@ export interface SpawnOptions {
   model: string;
   workflowEnv: Record<string, string>;
   onSessionId?: (sessionId: string) => void;
+  /** Called with the child process PID immediately after spawn. */
+  onPid?: (pid: number) => void;
   /** When set, this prompt is sent to Claude instead of the auto-assembled one. */
   customPrompt?: string;
 }
@@ -262,6 +264,7 @@ export function createSessionExecutor(deps: Partial<SessionDeps> = {}): SessionE
             },
           };
           activeSessions.set(child.pid, session);
+          options.onPid?.(child.pid);
         }
 
         // Only write to stdin if the process spawned successfully (has a pid).

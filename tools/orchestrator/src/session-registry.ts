@@ -8,6 +8,7 @@ export interface SessionEntry {
   status: 'starting' | 'active' | 'ended';
   spawnedAt: number; // epoch ms
   lastActivity: number; // epoch ms
+  pid?: number; // OS process ID for zombie detection
 }
 
 export interface SessionRegistryEvents {
@@ -68,7 +69,44 @@ export class SessionRegistry extends EventEmitter {
     return Array.from(this.sessions.values());
   }
 
+  setPid(stageId: string, pid: number): void {
+    const entry = this.sessions.get(stageId);
+    if (!entry) return;
+    entry.pid = pid;
+  }
+
+  /**
+   * Check for zombie sessions — entries whose OS process has died without
+   * the registry being updated.  Cleans up any zombies found and returns
+   * the list of affected stageIds.
+   */
+  checkZombies(): string[] {
+    const cleaned: string[] = [];
+    for (const entry of this.sessions.values()) {
+      if (entry.pid === undefined) continue;
+      const alive = isProcessAlive(entry.pid);
+      if (!alive) {
+        cleaned.push(entry.stageId);
+        this.end(entry.stageId);
+      }
+    }
+    return cleaned;
+  }
+
   size(): number {
     return this.sessions.size;
+  }
+}
+
+/**
+ * Check whether an OS process is still running.
+ * `process.kill(pid, 0)` throws if the process does not exist.
+ */
+function isProcessAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
   }
 }
