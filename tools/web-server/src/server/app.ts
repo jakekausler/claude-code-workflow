@@ -172,6 +172,9 @@ export async function createServer(
     // Map requestId → stageId so approval-cancelled can resolve the stageId
     const requestStageMap = new Map<string, string>();
 
+    // Track ticket stageIds whose session row has been persisted with a real sessionId
+    const persistedTicketSessions = new Set<string>();
+
     oc.on('session-registered', (entry: SessionInfo) => {
       recordSessionLifecycle('start', entry.sessionId, { stageId: entry.stageId });
       broadcastEvent('stage-transition', {
@@ -188,11 +191,6 @@ export async function createServer(
         spawnedAt: entry.spawnedAt,
       };
       broadcastEvent('session-status', sseEvent);
-
-      // Persist conversion sessions to ticket_sessions table
-      if (entry.stageId.startsWith('TICKET-') && dataService) {
-        dataService.ticketSessions.addSession(entry.stageId, entry.sessionId, 'convert').catch(() => {});
-      }
     });
 
     oc.on('session-status', (entry: SessionInfo) => {
@@ -201,6 +199,18 @@ export async function createServer(
       } else if ((entry.status as string) === 'resumed') {
         recordSessionLifecycle('resume', entry.sessionId, { stageId: entry.stageId });
       }
+
+      // Persist conversion sessions once the real sessionId is available
+      if (
+        entry.stageId.startsWith('TICKET-') &&
+        entry.sessionId &&
+        dataService &&
+        !persistedTicketSessions.has(entry.stageId)
+      ) {
+        persistedTicketSessions.add(entry.stageId);
+        dataService.ticketSessions.addSession(entry.stageId, entry.sessionId, 'convert').catch(() => {});
+      }
+
       broadcastEvent('board-update', {
         type: 'session_status',
         stageId: entry.stageId,
@@ -239,6 +249,7 @@ export async function createServer(
       // Update ended_at for conversion sessions in ticket_sessions table
       if (entry.stageId.startsWith('TICKET-') && dataService) {
         dataService.ticketSessions.endSession(entry.stageId, entry.sessionId).catch(() => {});
+        persistedTicketSessions.delete(entry.stageId);
       }
 
       // Clean up requestStageMap entries for this stage
