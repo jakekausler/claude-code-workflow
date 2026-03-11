@@ -399,6 +399,8 @@ export function useSessionDetail(
         `/sessions/${encodeURIComponent(projectId)}/${sessionId}`,
       ),
     enabled: !!projectId && !!sessionId,
+    staleTime: 8000,
+    refetchIntervalInBackground: false,
     ...(options?.refetchInterval !== undefined && { refetchInterval: options.refetchInterval }),
   });
 }

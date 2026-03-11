@@ -16,7 +16,7 @@ interface EmbeddedSessionViewerProps {
   /** The orchestrator stage/ticket ID used for interaction endpoints (message, approve, etc.). */
   interactionId?: string;
   isReadOnly?: boolean;
-  /** When true, poll for session updates every 3 seconds (for active/ongoing sessions). */
+  /** When true, poll for session updates every 10 seconds (for active/ongoing sessions). */
   isActive?: boolean;
 }
 
@@ -28,7 +28,7 @@ export function EmbeddedSessionViewer({
   isActive = false,
 }: EmbeddedSessionViewerProps) {
   const { data: session, isLoading, error } = useSessionDetail(projectId, sessionId, {
-    refetchInterval: isActive ? 3000 : false,
+    refetchInterval: isActive ? 10000 : false,
   });
   const resetView = useSessionViewStore((s) => s.resetView);
   const queryClient = useQueryClient();
