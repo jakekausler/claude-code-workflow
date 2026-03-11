@@ -109,4 +109,82 @@ export class DependencyRepository {
       .prepare('DELETE FROM dependencies WHERE repo_id = ?')
       .run(repoId);
   }
+
+  /**
+   * Re-link dependencies around an item, then delete all its edges.
+   * Children of the item become children of the item's parents.
+   *
+   * The entire operation is wrapped in a transaction so the graph stays
+   * consistent if any step fails.
+   */
+  relinkAndDelete(itemId: string): { removed: number; created: number } {
+    const db = this.db.raw();
+
+    return db.transaction(() => {
+      const parents = db
+        .prepare('SELECT * FROM dependencies WHERE from_id = ?')
+        .all(itemId) as DependencyRow[];
+      const children = db
+        .prepare('SELECT * FROM dependencies WHERE to_id = ?')
+        .all(itemId) as DependencyRow[];
+
+      // O(C*P) loop — acceptable because dependency counts per item are
+      // typically small (< 10).
+      let created = 0;
+      for (const child of children) {
+        for (const parent of parents) {
+          // Skip edges that would create a self-referencing dependency.
+          if (child.from_id === parent.to_id) continue;
+
+          const exists = db
+            .prepare('SELECT 1 FROM dependencies WHERE from_id = ? AND to_id = ?')
+            .get(child.from_id, parent.to_id);
+          if (!exists) {
+            db
+              .prepare(
+                'INSERT INTO dependencies (from_id, from_type, to_id, to_type, resolved, repo_id, target_repo_name) VALUES (?, ?, ?, ?, ?, ?, ?)'
+              )
+              .run(
+                child.from_id,
+                child.from_type,
+                parent.to_id,
+                parent.to_type,
+                // Re-linked edges start unresolved (conservative) since the
+                // dependency path changed and hasn't been verified yet.
+                0,
+                // New edges inherit repo context from the parent (prerequisite)
+                // edge, which owns the "to" side of the relationship.
+                parent.repo_id,
+                parent.target_repo_name
+              );
+            created++;
+          }
+        }
+      }
+
+      const result = db
+        .prepare('DELETE FROM dependencies WHERE from_id = ? OR to_id = ?')
+        .run(itemId, itemId);
+
+      return { removed: result.changes, created };
+    })();
+  }
+
+  /**
+   * Delete all dependencies where from_id or to_id is in the given list.
+   * Note: uses IN(...) placeholders (doubled for from_id + to_id) — assumes
+   * item counts stay well below SQLite's SQLITE_MAX_VARIABLE_NUMBER limit
+   * (default 999).
+   */
+  deleteByItemIds(itemIds: string[]): number {
+    if (itemIds.length === 0) return 0;
+    const placeholders = itemIds.map(() => '?').join(',');
+    const result = this.db
+      .raw()
+      .prepare(
+        `DELETE FROM dependencies WHERE from_id IN (${placeholders}) OR to_id IN (${placeholders})`
+      )
+      .run(...itemIds, ...itemIds);
+    return result.changes;
+  }
 }

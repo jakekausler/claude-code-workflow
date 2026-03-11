@@ -171,4 +171,53 @@ export class StageRepository {
       .prepare('UPDATE stages SET pending_merge_parents = ? WHERE id = ?')
       .run(json, stageId);
   }
+
+  /**
+   * Delete a stage by id.
+   */
+  deleteById(id: string): void {
+    this.db.raw().prepare('DELETE FROM stages WHERE id = ?').run(id);
+  }
+
+  /**
+   * Delete all stages for a ticket, returning the deleted stage ids.
+   * Note: uses IN(...) placeholders — assumes item counts stay well below
+   * SQLite's SQLITE_MAX_VARIABLE_NUMBER limit (default 999).
+   */
+  deleteByTicketId(ticketId: string): string[] {
+    const stages = this.db
+      .raw()
+      .prepare('SELECT id FROM stages WHERE ticket_id = ?')
+      .all(ticketId) as { id: string }[];
+    if (stages.length > 0) {
+      const ids = stages.map((s) => s.id);
+      const placeholders = ids.map(() => '?').join(',');
+      this.db
+        .raw()
+        .prepare(`DELETE FROM stages WHERE id IN (${placeholders})`)
+        .run(...ids);
+    }
+    return stages.map((s) => s.id);
+  }
+
+  /**
+   * Delete all stages for an epic, returning the deleted stage ids.
+   * Note: uses IN(...) placeholders — assumes item counts stay well below
+   * SQLite's SQLITE_MAX_VARIABLE_NUMBER limit (default 999).
+   */
+  deleteByEpicId(epicId: string): string[] {
+    const stages = this.db
+      .raw()
+      .prepare('SELECT id FROM stages WHERE epic_id = ?')
+      .all(epicId) as { id: string }[];
+    if (stages.length > 0) {
+      const ids = stages.map((s) => s.id);
+      const placeholders = ids.map(() => '?').join(',');
+      this.db
+        .raw()
+        .prepare(`DELETE FROM stages WHERE id IN (${placeholders})`)
+        .run(...ids);
+    }
+    return stages.map((s) => s.id);
+  }
 }

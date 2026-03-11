@@ -73,4 +73,11 @@ export class EpicRepository {
       .get(jiraKey, repoId) as EpicRow | undefined;
     return row ?? null;
   }
+
+  /**
+   * Delete an epic by id.
+   */
+  deleteById(id: string): void {
+    this.db.raw().prepare('DELETE FROM epics WHERE id = ?').run(id);
+  }
 }

@@ -95,4 +95,32 @@ export class TicketRepository {
       .get(jiraKey, repoId) as TicketRow | undefined;
     return row ?? null;
   }
+
+  /**
+   * Delete a ticket by id.
+   */
+  deleteById(id: string): void {
+    this.db.raw().prepare('DELETE FROM tickets WHERE id = ?').run(id);
+  }
+
+  /**
+   * Delete all tickets for an epic, returning the deleted ticket ids.
+   * Note: uses IN(...) placeholders — assumes item counts stay well below
+   * SQLite's SQLITE_MAX_VARIABLE_NUMBER limit (default 999).
+   */
+  deleteByEpicId(epicId: string): string[] {
+    const tickets = this.db
+      .raw()
+      .prepare('SELECT id FROM tickets WHERE epic_id = ?')
+      .all(epicId) as { id: string }[];
+    if (tickets.length > 0) {
+      const ids = tickets.map((t) => t.id);
+      const placeholders = ids.map(() => '?').join(',');
+      this.db
+        .raw()
+        .prepare(`DELETE FROM tickets WHERE id IN (${placeholders})`)
+        .run(...ids);
+    }
+    return tickets.map((t) => t.id);
+  }
 }
