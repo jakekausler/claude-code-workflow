@@ -429,7 +429,7 @@ export function createOrchestrator(config: OrchestratorConfig, deps: Orchestrato
           '- Add `stage_statuses` mapping each stage to "Not Started"',
           '- Change status from "to_convert" to "In Progress"',
           '',
-          `Then run: kanban-cli sync --repo ${config.repoPath}`,
+          'After creating all stage files and updating the ticket, your work is done. The system will sync the database automatically.',
           '',
           'Ask the user what stages make sense before creating files.',
         ].join('\n');
