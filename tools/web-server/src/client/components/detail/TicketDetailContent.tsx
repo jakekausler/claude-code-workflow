@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTicket, useTicketSessions, useConvertTicket, useDeletePreview, useDeleteTicket } from '../../api/hooks.js';
 import { useDrawerStore } from '../../store/drawer-store.js';
@@ -50,6 +50,8 @@ export function TicketDetailContent({ ticketId }: TicketDetailContentProps) {
   const [showEpicModal, setShowEpicModal] = useState(false);
   const [convertError, setConvertError] = useState<string | null>(null);
   const [isConverting, setIsConverting] = useState(false);
+  const [conversionTimedOut, setConversionTimedOut] = useState(false);
+  const conversionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const { mutate: convertTicket } = useConvertTicket();
 
@@ -87,6 +89,32 @@ export function TicketDetailContent({ ticketId }: TicketDetailContentProps) {
     [queryClient, ticketId, refetchSessions],
   );
   useSSE(['board-update'], handleSSE);
+
+  // Conversion timeout: if no progress after 30 seconds, show error
+  useEffect(() => {
+    if (isConverting && !conversionTimedOut) {
+      conversionTimerRef.current = setTimeout(() => {
+        setConversionTimedOut(true);
+      }, 30_000);
+    } else if (conversionTimerRef.current) {
+      clearTimeout(conversionTimerRef.current);
+      conversionTimerRef.current = null;
+    }
+    return () => {
+      if (conversionTimerRef.current) {
+        clearTimeout(conversionTimerRef.current);
+        conversionTimerRef.current = null;
+      }
+    };
+  }, [isConverting, conversionTimedOut]);
+
+  // Clear converting state when stages appear (conversion succeeded)
+  useEffect(() => {
+    if (isConverting && ticket && ticket.stages.length > 0) {
+      setIsConverting(false);
+      setConversionTimedOut(false);
+    }
+  }, [isConverting, ticket]);
 
   function handleConvertClick() {
     setConvertError(null);
@@ -341,11 +369,29 @@ export function TicketDetailContent({ ticketId }: TicketDetailContentProps) {
               )}
             </>
           ) : isConverting ? (
-            <div className="flex flex-col items-center justify-center gap-3 py-12 text-sm text-slate-500">
-              <Loader2 className="animate-spin text-indigo-400" size={24} />
-              <p>Conversion session starting…</p>
-              <p className="text-xs text-slate-400">The session will appear here once it begins.</p>
-            </div>
+            conversionTimedOut ? (
+              <div className="flex flex-col items-center justify-center gap-3 py-12 text-sm text-red-600">
+                <AlertCircle size={24} />
+                <p>Conversion timed out. The orchestrator may not be connected.</p>
+                <p className="text-xs text-slate-400">Try refreshing or retrying the conversion.</p>
+                <button
+                  onClick={() => {
+                    setIsConverting(false);
+                    setConversionTimedOut(false);
+                    setConvertError(null);
+                  }}
+                  className="mt-2 inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+                >
+                  Retry
+                </button>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center gap-3 py-12 text-sm text-slate-500">
+                <Loader2 className="animate-spin text-indigo-400" size={24} />
+                <p>Conversion session starting…</p>
+                <p className="text-xs text-slate-400">The session will appear here once it begins.</p>
+              </div>
+            )
           ) : null}
         </div>
       )}
