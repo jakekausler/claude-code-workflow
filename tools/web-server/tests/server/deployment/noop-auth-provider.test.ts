@@ -39,9 +39,7 @@ describe('NoopAuthProvider', () => {
     expect(handlers).toHaveLength(1);
     expect(handlers[0].name).toBe('preHandler');
 
-    // Verify the preHandler calls done() without error
-    let doneCalled = false;
-    await handlers[0].handler({}, {}, () => { doneCalled = true; });
-    expect(doneCalled).toBe(true);
+    // Verify the async preHandler resolves without error
+    await expect(handlers[0].handler({}, {})).resolves.toBeUndefined();
   });
 });

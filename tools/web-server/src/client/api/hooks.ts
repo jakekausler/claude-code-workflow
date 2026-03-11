@@ -87,6 +87,7 @@ export interface EpicDetail {
   status: string;
   jira_key: string | null;
   file_path: string;
+  body: string;
   tickets: TicketSummary[];
 }
 
@@ -126,6 +127,7 @@ export interface TicketDetail {
   source: string;
   has_stages: boolean;
   file_path: string;
+  body: string;
   stages: StageSummary[];
 }
 

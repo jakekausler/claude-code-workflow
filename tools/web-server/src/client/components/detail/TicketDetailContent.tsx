@@ -14,6 +14,7 @@ import { useSSE } from '../../api/use-sse.js';
 import { DeleteConfirmationDialog } from '../shared/DeleteConfirmationDialog.js';
 import { ExternalLink, Loader2, AlertCircle, Zap, Trash2 } from 'lucide-react';
 import { JIRA_BASE_URL } from '../../utils/constants.js';
+import { MarkdownContent } from './MarkdownContent.js';
 
 interface TicketDetailContentProps {
   ticketId: string;
@@ -281,13 +282,15 @@ export function TicketDetailContent({ ticketId }: TicketDetailContentProps) {
             )}
           </div>
 
-          {/* Markdown content placeholder */}
-          <div>
-            <h3 className="mb-2 text-sm font-semibold text-slate-700">Content</h3>
-            <p className="text-sm italic text-slate-400">
-              Content available in future update
-            </p>
-          </div>
+          {/* Markdown body content */}
+          {ticket.body && (
+            <div className="space-y-2">
+              <h3 className="text-sm font-semibold text-slate-700">Content</h3>
+              <div className="rounded-lg border border-slate-200 bg-white p-4">
+                <MarkdownContent content={ticket.body} />
+              </div>
+            </div>
+          )}
 
           {/* Delete */}
           <div className="border-t border-slate-200 pt-4">

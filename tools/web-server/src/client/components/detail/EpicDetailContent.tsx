@@ -5,6 +5,7 @@ import { StatusBadge } from './StatusBadge.js';
 import { DeleteConfirmationDialog } from '../shared/DeleteConfirmationDialog.js';
 import { ExternalLink, Loader2, AlertCircle, Plus, X, Trash2 } from 'lucide-react';
 import { JIRA_BASE_URL } from '../../utils/constants.js';
+import { MarkdownContent } from './MarkdownContent.js';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '../../api/client.js';
 
@@ -276,13 +277,15 @@ export function EpicDetailContent({ epicId }: EpicDetailContentProps) {
 
       {/* TODO: Add dependencies section when /api/epics/:id returns depends_on data */}
 
-      {/* Markdown content placeholder */}
-      <div>
-        <h3 className="mb-2 text-sm font-semibold text-slate-700">Content</h3>
-        <p className="text-sm italic text-slate-400">
-          Content available in future update
-        </p>
-      </div>
+      {/* Markdown body content */}
+      {epic.body && (
+        <div className="space-y-2">
+          <h3 className="text-sm font-semibold text-slate-700">Content</h3>
+          <div className="rounded-lg border border-slate-200 bg-white p-4">
+            <MarkdownContent content={epic.body} />
+          </div>
+        </div>
+      )}
 
       {newTicketOpen && (
         <NewTicketModal epicId={epicId} onClose={handleNewTicketClose} />

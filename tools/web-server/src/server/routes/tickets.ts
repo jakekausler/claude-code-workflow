@@ -2,7 +2,7 @@ import type { FastifyPluginCallback } from 'fastify';
 import fp from 'fastify-plugin';
 import { z } from 'zod';
 import { parseRefinementType } from './utils.js';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import matter from 'gray-matter';
 import type { RoleService } from '../deployment/hosted/rbac/role-service.js';
@@ -116,6 +116,18 @@ const ticketPlugin: FastifyPluginCallback<TicketRouteOptions> = (app, opts, done
       pr_url: s.pr_url,
     }));
 
+    // Read markdown body in local mode
+    let body = '';
+    if (app.deploymentContext.mode === 'local' && ticket.file_path && existsSync(ticket.file_path)) {
+      try {
+        const raw = readFileSync(ticket.file_path, 'utf-8');
+        const parsed = matter(raw);
+        body = parsed.content.trim();
+      } catch {
+        // Silent fail on read errors
+      }
+    }
+
     return reply.send({
       id: ticket.id,
       title: ticket.title ?? '',
@@ -126,6 +138,7 @@ const ticketPlugin: FastifyPluginCallback<TicketRouteOptions> = (app, opts, done
       has_stages: (ticket.has_stages ?? false) !== false,
       file_path: ticket.file_path,
       stages: stageList,
+      body,
     });
   });
 

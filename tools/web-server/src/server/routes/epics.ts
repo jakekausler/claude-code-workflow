@@ -1,7 +1,7 @@
 import type { FastifyPluginCallback } from 'fastify';
 import fp from 'fastify-plugin';
 import { z } from 'zod';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import matter from 'gray-matter';
 import type { RoleService } from '../deployment/hosted/rbac/role-service.js';
@@ -102,6 +102,18 @@ const epicPlugin: FastifyPluginCallback<EpicRouteOptions> = (app, opts, done) =>
       stage_count: stageCountByTicket.get(t.id) ?? 0,
     }));
 
+    // Read markdown body in local mode
+    let body = '';
+    if (app.deploymentContext.mode === 'local' && epic.file_path && existsSync(epic.file_path)) {
+      try {
+        const raw = readFileSync(epic.file_path, 'utf-8');
+        const parsed = matter(raw);
+        body = parsed.content.trim();
+      } catch {
+        // Silent fail on read errors
+      }
+    }
+
     return reply.send({
       id: epic.id,
       title: epic.title ?? '',
@@ -109,6 +121,7 @@ const epicPlugin: FastifyPluginCallback<EpicRouteOptions> = (app, opts, done) =>
       jira_key: epic.jira_key,
       file_path: epic.file_path,
       tickets: ticketList,
+      body,
     });
   });
 
