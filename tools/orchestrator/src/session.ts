@@ -267,7 +267,12 @@ export function createSessionExecutor(deps: Partial<SessionDeps> = {}): SessionE
         // Only write to stdin if the process spawned successfully (has a pid).
         // If pid is undefined, the spawn failed and stdin operations should be skipped.
         if (child.pid !== undefined) {
-          child.stdin.write(prompt + '\n');
+          // stdin uses stream-json input format, so the prompt must be sent as a JSON user message
+          const userMessage = JSON.stringify({
+            type: 'user',
+            message: { role: 'user', content: prompt },
+          });
+          child.stdin.write(userMessage + '\n');
           // Do NOT call stdin.end() — ProtocolPeer needs stdin open for bidirectional communication
           // stdin will be closed when the peer is destroyed on session exit
         }
