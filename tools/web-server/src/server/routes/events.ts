@@ -34,7 +34,7 @@ export function getClientCount(): number {
 const KEEPALIVE_MS = 30_000;
 
 const eventsPlugin: FastifyPluginCallback = (app, _opts, done) => {
-  app.get('/api/events', (request, reply) => {
+  app.get('/api/events', async (request, reply) => {
     const eventBroadcaster = app.deploymentContext.getEventBroadcaster();
 
     reply.hijack();
@@ -70,8 +70,12 @@ const eventsPlugin: FastifyPluginCallback = (app, _opts, done) => {
       recordSSEConnection('drop');
     });
 
-    // Keep the connection open — do not call reply.send()
-    // Fastify handles this via the raw response after hijack()
+    // Keep the connection open — do not call reply.send().
+    // Returning reply after hijack() prevents Fastify from attempting
+    // to send a response through its normal lifecycle (avoids
+    // "Reply was already sent" when an async preHandler like the
+    // auth middleware runs ahead of this handler).
+    return reply;
   });
 
   done();
