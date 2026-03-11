@@ -2,6 +2,7 @@ import { useMemo, useEffect, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Loader2, AlertCircle, Lock } from 'lucide-react';
 import { ChatHistory } from './ChatHistory.js';
+import { MessageInput } from './MessageInput.js';
 import { ContextAccordion } from './context/ContextAccordion.js';
 import { useSessionDetail } from '../../api/hooks.js';
 import { useSSE } from '../../api/use-sse.js';
@@ -114,6 +115,14 @@ export function EmbeddedSessionViewer({
           contextStats={contextResult?.statsMap}
         />
       </div>
+
+      {/* Message input for active (non-read-only) sessions */}
+      {!isReadOnly && (
+        <MessageInput
+          stageId={sessionId}
+          disabled={!session?.isOngoing}
+        />
+      )}
     </div>
   );
 }
