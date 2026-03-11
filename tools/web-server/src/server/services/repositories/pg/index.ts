@@ -495,6 +495,10 @@ export class PgStageSessionRepository implements IStageSessionRepository {
     );
     return rows[0] ?? null;
   }
+
+  async deleteByStageId(stageId: string): Promise<void> {
+    await this.pool.query('DELETE FROM stage_sessions WHERE stage_id = $1', [stageId]);
+  }
 }
 
 // ── Ticket Session ───────────────────────────────────────────────────
@@ -517,6 +521,10 @@ export class PgTicketSessionRepository implements ITicketSessionRepository {
        VALUES ($1, $2, $3, $4)`,
       [ticketId, sessionId, sessionType, now],
     );
+  }
+
+  async deleteByTicketId(ticketId: string): Promise<void> {
+    await this.pool.query('DELETE FROM ticket_sessions WHERE ticket_id = $1', [ticketId]);
   }
 }
 

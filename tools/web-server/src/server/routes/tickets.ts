@@ -275,6 +275,124 @@ const ticketPlugin: FastifyPluginCallback<TicketRouteOptions> = (app, opts, done
     return reply.status(202).send({ ticketId: id, epicId, status: 'conversion_started' });
   });
 
+  /**
+   * GET /api/tickets/:id/delete-preview — Preview the effects of deleting a ticket.
+   */
+  const deletePreviewOpts = roleService
+    ? { preHandler: requireRole(roleService, 'developer') }
+    : {};
+
+  app.get('/api/tickets/:id/delete-preview', deletePreviewOpts, async (request, reply) => {
+    if (!app.dataService) {
+      return reply.status(503).send({ error: 'Database not initialized' });
+    }
+
+    const { id } = request.params as { id: string };
+    const parsedId = ticketIdSchema.safeParse(id);
+    if (!parsedId.success) {
+      return reply.status(400).send({ error: 'Invalid ticket ID format' });
+    }
+
+    const ticket = await app.dataService.tickets.findById(id);
+    if (!ticket) {
+      return reply.status(404).send({ error: 'Ticket not found' });
+    }
+
+    // Repo-scoped access check
+    if (request.allowedRepoIds && !request.allowedRepoIds.includes(String(ticket.repo_id))) {
+      return reply.status(404).send({ error: 'Ticket not found' });
+    }
+
+    const stages = await app.dataService.stages.listByTicket(id, ticket.repo_id);
+    const allItemIds = new Set([id, ...stages.map((s) => s.id)]);
+
+    // Gather dependencies for all items being deleted
+    let totalDepsRemoved = 0;
+    const relinks: Array<{ from: string; to: string }> = [];
+    const relinkSet = new Set<string>();
+
+    for (const itemId of allItemIds) {
+      const parents = await app.dataService.dependencies.listByTarget(itemId);
+      const children = await app.dataService.dependencies.listBySource(itemId);
+      totalDepsRemoved += parents.length + children.length;
+
+      for (const child of children) {
+        // Skip re-links where the child is also being deleted
+        if (allItemIds.has(child.from_id)) continue;
+        for (const parent of parents) {
+          if (child.from_id !== parent.to_id) {
+            const key = `${child.from_id}->${parent.to_id}`;
+            if (!relinkSet.has(key)) {
+              relinkSet.add(key);
+              relinks.push({ from: child.from_id, to: parent.to_id });
+            }
+          }
+        }
+      }
+    }
+
+    return reply.send({
+      item: { id: ticket.id, title: ticket.title ?? '', type: 'ticket' },
+      childrenToDelete: stages.map((s) => ({ id: s.id, title: s.title ?? '', type: 'stage' })),
+      dependenciesRemoved: totalDepsRemoved,
+      dependenciesCreated: relinks,
+    });
+  });
+
+  /**
+   * DELETE /api/tickets/:id — Delete a ticket, its stages, and relink dependencies.
+   */
+  const deleteTicketOpts = roleService
+    ? { preHandler: requireRole(roleService, 'developer') }
+    : {};
+
+  app.delete('/api/tickets/:id', deleteTicketOpts, async (request, reply) => {
+    if (!app.dataService) {
+      return reply.status(503).send({ error: 'Database not initialized' });
+    }
+
+    const { id } = request.params as { id: string };
+    const parsedId = ticketIdSchema.safeParse(id);
+    if (!parsedId.success) {
+      return reply.status(400).send({ error: 'Invalid ticket ID format' });
+    }
+
+    const ticket = await app.dataService.tickets.findById(id);
+    if (!ticket) {
+      return reply.status(404).send({ error: 'Ticket not found' });
+    }
+
+    // Repo-scoped access check
+    if (request.allowedRepoIds && !request.allowedRepoIds.includes(String(ticket.repo_id))) {
+      return reply.status(404).send({ error: 'Ticket not found' });
+    }
+
+    try {
+      const stages = await app.dataService.stages.listByTicket(id, ticket.repo_id);
+      const allItemIds = [id, ...stages.map((s) => s.id)];
+
+      for (const itemId of allItemIds) {
+        await app.dataService.dependencies.relinkAndDelete(itemId);
+      }
+
+      // Clean up session records before deleting stages and ticket
+      for (const stage of stages) {
+        await app.dataService.stageSessions.deleteByStageId(stage.id);
+      }
+      await app.dataService.ticketSessions.deleteByTicketId(id);
+
+      await app.dataService.stages.deleteByTicketId(id);
+      await app.dataService.tickets.deleteById(id);
+    } catch (err) {
+      request.log.error(err, `Failed to delete ticket ${id}`);
+      return reply.status(500).send({ error: `Failed to delete ticket ${id}` });
+    }
+
+    broadcastEvent('board-update', { type: 'ticket_deleted', ticketId: id });
+
+    return reply.status(200).send({ ok: true });
+  });
+
   done();
 };
 

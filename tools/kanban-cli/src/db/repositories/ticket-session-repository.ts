@@ -29,4 +29,12 @@ export class TicketSessionRepository {
       )
       .run(ticketId, sessionId, sessionType, now);
   }
+
+  /** Delete all sessions for a ticket. */
+  deleteByTicketId(ticketId: string): void {
+    this.db
+      .raw()
+      .prepare('DELETE FROM ticket_sessions WHERE ticket_id = ?')
+      .run(ticketId);
+  }
 }

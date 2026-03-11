@@ -180,6 +180,171 @@ const epicPlugin: FastifyPluginCallback<EpicRouteOptions> = (app, opts, done) =>
     return reply.status(201).send({ id, title, status, file_path });
   });
 
+  /**
+   * GET /api/epics/:id/delete-preview — Preview the effects of deleting an epic.
+   */
+  const deletePreviewOpts = roleService
+    ? { preHandler: requireRole(roleService, 'developer') }
+    : {};
+
+  app.get('/api/epics/:id/delete-preview', deletePreviewOpts, async (request, reply) => {
+    if (!app.dataService) {
+      return reply.status(503).send({ error: 'Database not initialized' });
+    }
+
+    const { id } = request.params as { id: string };
+    const parsed = epicIdSchema.safeParse(id);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: 'Invalid epic ID format' });
+    }
+
+    const epic = await app.dataService.epics.findById(id);
+    if (!epic) {
+      return reply.status(404).send({ error: 'Epic not found' });
+    }
+
+    // Repo-scoped access check
+    if (request.allowedRepoIds && !request.allowedRepoIds.includes(String(epic.repo_id))) {
+      return reply.status(404).send({ error: 'Epic not found' });
+    }
+
+    const tickets = await app.dataService.tickets.listByEpic(id, epic.repo_id);
+
+    // Collect stages: directly by epic and also by each ticket
+    const epicStages = await app.dataService.stages.listByRepo(epic.repo_id);
+    const epicDirectStages = epicStages.filter((s) => s.epic_id === id);
+    const ticketStageArrays = await Promise.all(
+      tickets.map((t) => app.dataService!.stages.listByTicket(t.id, epic.repo_id)),
+    );
+    const ticketStages = ticketStageArrays.flat();
+
+    // Deduplicate stages by id
+    const stageMap = new Map<string, (typeof epicDirectStages)[number]>();
+    for (const s of [...epicDirectStages, ...ticketStages]) {
+      stageMap.set(s.id, s);
+    }
+    const allStages = Array.from(stageMap.values());
+
+    const ticketIds = tickets.map((t) => t.id);
+    const stageIds = allStages.map((s) => s.id);
+    const allItemIds = new Set([id, ...ticketIds, ...stageIds]);
+
+    // Gather dependencies for all items being deleted
+    let totalDepsRemoved = 0;
+    const relinks: Array<{ from: string; to: string }> = [];
+    const relinkSet = new Set<string>();
+
+    for (const itemId of allItemIds) {
+      const parents = await app.dataService.dependencies.listByTarget(itemId);
+      const children = await app.dataService.dependencies.listBySource(itemId);
+      totalDepsRemoved += parents.length + children.length;
+
+      for (const child of children) {
+        if (allItemIds.has(child.from_id)) continue;
+        for (const parent of parents) {
+          if (child.from_id !== parent.to_id) {
+            const key = `${child.from_id}->${parent.to_id}`;
+            if (!relinkSet.has(key)) {
+              relinkSet.add(key);
+              relinks.push({ from: child.from_id, to: parent.to_id });
+            }
+          }
+        }
+      }
+    }
+
+    return reply.send({
+      item: { id: epic.id, title: epic.title ?? '', type: 'epic' },
+      childrenToDelete: [
+        ...tickets.map((t) => ({ id: t.id, title: t.title ?? '', type: 'ticket' as const })),
+        ...allStages.map((s) => ({ id: s.id, title: s.title ?? '', type: 'stage' as const })),
+      ],
+      dependenciesRemoved: totalDepsRemoved,
+      dependenciesCreated: relinks,
+    });
+  });
+
+  /**
+   * DELETE /api/epics/:id — Delete an epic, its tickets and stages, and relink dependencies.
+   */
+  const deleteEpicOpts = roleService
+    ? { preHandler: requireRole(roleService, 'developer') }
+    : {};
+
+  app.delete('/api/epics/:id', deleteEpicOpts, async (request, reply) => {
+    if (!app.dataService) {
+      return reply.status(503).send({ error: 'Database not initialized' });
+    }
+
+    const { id } = request.params as { id: string };
+    const parsed = epicIdSchema.safeParse(id);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: 'Invalid epic ID format' });
+    }
+
+    const epic = await app.dataService.epics.findById(id);
+    if (!epic) {
+      return reply.status(404).send({ error: 'Epic not found' });
+    }
+
+    // Repo-scoped access check
+    if (request.allowedRepoIds && !request.allowedRepoIds.includes(String(epic.repo_id))) {
+      return reply.status(404).send({ error: 'Epic not found' });
+    }
+
+    try {
+      const tickets = await app.dataService.tickets.listByEpic(id, epic.repo_id);
+
+      // Collect all stages (by epic and by each ticket)
+      const epicStages = await app.dataService.stages.listByRepo(epic.repo_id);
+      const epicDirectStages = epicStages.filter((s) => s.epic_id === id);
+      const ticketStageArrays = await Promise.all(
+        tickets.map((t) => app.dataService!.stages.listByTicket(t.id, epic.repo_id)),
+      );
+      const ticketStages = ticketStageArrays.flat();
+
+      const stageMap = new Map<string, string>();
+      for (const s of [...epicDirectStages, ...ticketStages]) {
+        stageMap.set(s.id, s.id);
+      }
+      const allStageIds = Array.from(stageMap.keys());
+      const ticketIds = tickets.map((t) => t.id);
+      const allItemIds = [id, ...ticketIds, ...allStageIds];
+
+      // Relink dependencies for all items
+      for (const itemId of allItemIds) {
+        await app.dataService.dependencies.relinkAndDelete(itemId);
+      }
+
+      // Clean up session records before deleting stages and tickets
+      for (const stageId of allStageIds) {
+        await app.dataService.stageSessions.deleteByStageId(stageId);
+      }
+      for (const ticketId of ticketIds) {
+        await app.dataService.ticketSessions.deleteByTicketId(ticketId);
+      }
+
+      // Delete stages by each ticket, then by epic directly
+      for (const t of tickets) {
+        await app.dataService.stages.deleteByTicketId(t.id);
+      }
+      await app.dataService.stages.deleteByEpicId(id);
+
+      // Delete tickets
+      await app.dataService.tickets.deleteByEpicId(id);
+
+      // Delete epic
+      await app.dataService.epics.deleteById(id);
+    } catch (err) {
+      request.log.error(err, `Failed to delete epic ${id}`);
+      return reply.status(500).send({ error: `Failed to delete epic ${id}` });
+    }
+
+    broadcastEvent('board-update', { type: 'epic_deleted', epicId: id });
+
+    return reply.status(200).send({ ok: true });
+  });
+
   done();
 };
 

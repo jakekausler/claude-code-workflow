@@ -67,4 +67,12 @@ export class StageSessionRepository {
       .get(stageId) as StageSessionRow | undefined;
     return row ?? null;
   }
+
+  /** Delete all sessions for a stage. */
+  deleteByStageId(stageId: string): void {
+    this.db
+      .raw()
+      .prepare('DELETE FROM stage_sessions WHERE stage_id = ?')
+      .run(stageId);
+  }
 }

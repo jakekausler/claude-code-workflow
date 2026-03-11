@@ -6,6 +6,8 @@ import { dirname, basename, extname, join } from 'node:path';
 import matter from 'gray-matter';
 import { parseRefinementType } from './utils.js';
 import type { RoleService } from '../deployment/hosted/rbac/role-service.js';
+import { requireRole } from '../deployment/hosted/rbac/rbac-middleware.js';
+import { broadcastEvent } from './events.js';
 
 export interface StageRouteOptions {
   roleService?: RoleService;
@@ -71,7 +73,8 @@ const stageIdSchema = z.string().regex(/^STAGE-\d{3}-\d{3}-\d{3}$/);
 /** Zod schema for the optional query parameters. */
 const stageQuerySchema = z.object({ ticket: z.string().optional() });
 
-const stagePlugin: FastifyPluginCallback<StageRouteOptions> = (app, _opts, done) => {
+const stagePlugin: FastifyPluginCallback<StageRouteOptions> = (app, opts, done) => {
+  const { roleService } = opts;
   /**
    * GET /api/stages — List all stages with optional ticket filter.
    */
@@ -213,6 +216,99 @@ const stagePlugin: FastifyPluginCallback<StageRouteOptions> = (app, _opts, done)
       frontmatter_fields: frontmatterFields,
       phase_contents: phaseContents,
     });
+  });
+
+  /**
+   * GET /api/stages/:id/delete-preview — Preview the effects of deleting a stage.
+   */
+  const deletePreviewOpts = roleService
+    ? { preHandler: requireRole(roleService, 'developer') }
+    : {};
+
+  app.get('/api/stages/:id/delete-preview', deletePreviewOpts, async (request, reply) => {
+    if (!app.dataService) {
+      return reply.status(503).send({ error: 'Database not initialized' });
+    }
+
+    const { id } = request.params as { id: string };
+    const parsed = stageIdSchema.safeParse(id);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: 'Invalid stage ID format' });
+    }
+
+    const stage = await app.dataService.stages.findById(id);
+    if (!stage) {
+      return reply.status(404).send({ error: 'Stage not found' });
+    }
+
+    // Repo-scoped access check
+    if (request.allowedRepoIds && !request.allowedRepoIds.includes(String(stage.repo_id))) {
+      return reply.status(404).send({ error: 'Stage not found' });
+    }
+
+    // parents: dependencies OF this stage (from_id = id → to_id = prerequisite)
+    const parents = await app.dataService.dependencies.listByTarget(id);
+    // children: items that depend on this stage (to_id = id → from_id = dependent)
+    const children = await app.dataService.dependencies.listBySource(id);
+
+    // Compute re-links: reconnect each child to each parent
+    const relinks: Array<{ from: string; to: string }> = [];
+    for (const child of children) {
+      for (const parent of parents) {
+        if (child.from_id !== parent.to_id) {
+          relinks.push({ from: child.from_id, to: parent.to_id });
+        }
+      }
+    }
+
+    return reply.send({
+      item: { id: stage.id, title: stage.title ?? '', type: 'stage' },
+      childrenToDelete: [],
+      dependenciesRemoved: parents.length + children.length,
+      dependenciesCreated: relinks,
+    });
+  });
+
+  /**
+   * DELETE /api/stages/:id — Delete a stage and relink its dependencies.
+   */
+  const deleteStageOpts = roleService
+    ? { preHandler: requireRole(roleService, 'developer') }
+    : {};
+
+  app.delete('/api/stages/:id', deleteStageOpts, async (request, reply) => {
+    if (!app.dataService) {
+      return reply.status(503).send({ error: 'Database not initialized' });
+    }
+
+    const { id } = request.params as { id: string };
+    const parsed = stageIdSchema.safeParse(id);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: 'Invalid stage ID format' });
+    }
+
+    const stage = await app.dataService.stages.findById(id);
+    if (!stage) {
+      return reply.status(404).send({ error: 'Stage not found' });
+    }
+
+    // Repo-scoped access check
+    if (request.allowedRepoIds && !request.allowedRepoIds.includes(String(stage.repo_id))) {
+      return reply.status(404).send({ error: 'Stage not found' });
+    }
+
+    try {
+      await app.dataService.dependencies.relinkAndDelete(id);
+      await app.dataService.stageSessions.deleteByStageId(id);
+      await app.dataService.stages.deleteById(id);
+    } catch (err) {
+      request.log.error(err, `Failed to delete stage ${id}`);
+      return reply.status(500).send({ error: `Failed to delete stage ${id}` });
+    }
+
+    broadcastEvent('board-update', { type: 'stage_deleted', stageId: id });
+
+    return reply.status(200).send({ ok: true });
   });
 
   done();

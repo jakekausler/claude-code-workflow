@@ -210,9 +210,11 @@ export interface IStageSessionRepository {
   addSession(stageId: string, sessionId: string, phase: string): Promise<void>;
   endSession(stageId: string, sessionId: string): Promise<void>;
   getCurrentSession(stageId: string): Promise<StageSessionRow | null>;
+  deleteByStageId(stageId: string): Promise<void>;
 }
 
 export interface ITicketSessionRepository {
   getSessionsByTicketId(ticketId: string): Promise<TicketSessionRow[]>;
   addSession(ticketId: string, sessionId: string, sessionType: string): Promise<void>;
+  deleteByTicketId(ticketId: string): Promise<void>;
 }

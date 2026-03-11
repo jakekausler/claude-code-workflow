@@ -286,6 +286,10 @@ export class SqliteStageSessionRepository implements IStageSessionRepository {
     const row = this.inner.getCurrentSession(stageId);
     return row ? normaliseStageSession(row) : null;
   }
+
+  async deleteByStageId(stageId: string): Promise<void> {
+    this.inner.deleteByStageId(stageId);
+  }
 }
 
 export class SqliteTicketSessionRepository implements ITicketSessionRepository {
@@ -297,6 +301,10 @@ export class SqliteTicketSessionRepository implements ITicketSessionRepository {
 
   async addSession(ticketId: string, sessionId: string, sessionType: string): Promise<void> {
     this.inner.addSession(ticketId, sessionId, sessionType);
+  }
+
+  async deleteByTicketId(ticketId: string): Promise<void> {
+    this.inner.deleteByTicketId(ticketId);
   }
 }
 
