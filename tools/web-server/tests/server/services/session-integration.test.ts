@@ -223,8 +223,8 @@ describe('Session Integration', () => {
     expect(session.metrics.totalCost).toBeGreaterThanOrEqual(0);
 
     // Subagents: agent-sub1.jsonl is discovered but cannot be matched to a Task call
-    // in the parent session (no toolUseResult or description link), so it is omitted.
-    expect(session.subagents.length).toBe(0);
+    // in the parent session. Unmatched agents are now included for timing-based fallback.
+    expect(session.subagents.length).toBe(1);
 
     // Last message is assistant → not ongoing
     expect(session.isOngoing).toBe(false);
@@ -301,8 +301,8 @@ describe('Session Integration', () => {
       expect(body.metrics.toolCallCount).toBe(1);
       expect(body.metrics.duration).toBe(15_000);
 
-      // sub1 has no Task call link in parent — omitted by resolver
-      expect(body.subagents.length).toBe(0);
+      // sub1 has no Task call link in parent — included via timing-based fallback
+      expect(body.subagents.length).toBe(1);
       expect(body.isOngoing).toBe(false);
     });
 
@@ -330,15 +330,16 @@ describe('Session Integration', () => {
       expect(body.turnCount).toBe(2);
     });
 
-    it('GET .../subagents/sub1 returns 404 (sub1 has no Task call link in parent)', async () => {
+    it('GET .../subagents/sub1 returns 200 (sub1 included via timing-based fallback)', async () => {
       const response = await app.inject({
         method: 'GET',
         url: `/api/sessions/test-project/${sessionId}/subagents/sub1`,
       });
 
-      expect(response.statusCode).toBe(404);
+      expect(response.statusCode).toBe(200);
       const body = response.json();
-      expect(body.error).toBe('Subagent not found');
+      expect(body).toHaveProperty('id');
+      expect(body.id).toBe('sub1');
     });
 
     it('GET .../subagents/nonexistent returns 404', async () => {
