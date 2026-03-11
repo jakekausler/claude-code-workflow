@@ -121,6 +121,10 @@ export class PgEpicRepository implements IEpicRepository {
       [data.id, data.repo_id, data.title, data.status, data.jira_key, data.file_path, data.last_synced],
     );
   }
+
+  async deleteById(id: string): Promise<void> {
+    await this.pool.query('DELETE FROM epics WHERE id = $1', [id]);
+  }
 }
 
 // ── Ticket ───────────────────────────────────────────────────────────
@@ -184,6 +188,15 @@ export class PgTicketRepository implements ITicketRepository {
          last_synced = EXCLUDED.last_synced`,
       [data.id, data.epic_id, data.repo_id, data.title, data.status, data.jira_key, data.source, data.source_id, data.has_stages, data.file_path, data.last_synced],
     );
+  }
+
+  async deleteById(id: string): Promise<void> {
+    await this.pool.query('DELETE FROM tickets WHERE id = $1', [id]);
+  }
+
+  async deleteByEpicId(epicId: string): Promise<string[]> {
+    const result = await this.pool.query<{ id: string }>('DELETE FROM tickets WHERE epic_id = $1 RETURNING id', [epicId]);
+    return result.rows.map(r => r.id);
   }
 }
 
@@ -298,6 +311,20 @@ export class PgStageRepository implements IStageRepository {
       ],
     );
   }
+
+  async deleteById(id: string): Promise<void> {
+    await this.pool.query('DELETE FROM stages WHERE id = $1', [id]);
+  }
+
+  async deleteByTicketId(ticketId: string): Promise<string[]> {
+    const result = await this.pool.query<{ id: string }>('DELETE FROM stages WHERE ticket_id = $1 RETURNING id', [ticketId]);
+    return result.rows.map(r => r.id);
+  }
+
+  async deleteByEpicId(epicId: string): Promise<string[]> {
+    const result = await this.pool.query<{ id: string }>('DELETE FROM stages WHERE epic_id = $1 RETURNING id', [epicId]);
+    return result.rows.map(r => r.id);
+  }
 }
 
 // ── Dependency ───────────────────────────────────────────────────────
@@ -363,6 +390,53 @@ export class PgDependencyRepository implements IDependencyRepository {
       'DELETE FROM dependencies WHERE repo_id = $1',
       [repoId],
     );
+  }
+
+  async relinkAndDelete(itemId: string): Promise<{ removed: number; created: number }> {
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      const parents = await client.query('SELECT * FROM dependencies WHERE from_id = $1', [itemId]);
+      const children = await client.query('SELECT * FROM dependencies WHERE to_id = $1', [itemId]);
+
+      let created = 0;
+      for (const child of children.rows) {
+        for (const parent of parents.rows) {
+          if (child.from_id === parent.to_id) continue;
+          const exists = await client.query(
+            'SELECT 1 FROM dependencies WHERE from_id = $1 AND to_id = $2',
+            [child.from_id, parent.to_id],
+          );
+          if (exists.rowCount === 0) {
+            // Re-linked edges start as unresolved (resolved=false) — conservative approach matching SQLite version
+            await client.query(
+              'INSERT INTO dependencies (from_id, from_type, to_id, to_type, resolved, repo_id, target_repo_name) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+              [child.from_id, child.from_type, parent.to_id, parent.to_type, false, parent.repo_id, parent.target_repo_name],
+            );
+            created++;
+          }
+        }
+      }
+
+      const result = await client.query('DELETE FROM dependencies WHERE from_id = $1 OR to_id = $1', [itemId]);
+      await client.query('COMMIT');
+      return { removed: result.rowCount ?? 0, created };
+    } catch (e) {
+      await client.query('ROLLBACK');
+      throw e;
+    } finally {
+      client.release();
+    }
+  }
+
+  async deleteByItemIds(itemIds: string[]): Promise<number> {
+    if (itemIds.length === 0) return 0;
+    const placeholders = itemIds.map((_, i) => `$${i + 1}`).join(',');
+    const result = await this.pool.query(
+      `DELETE FROM dependencies WHERE from_id IN (${placeholders}) OR to_id IN (${placeholders})`,
+      itemIds,
+    );
+    return result.rowCount ?? 0;
   }
 }
 

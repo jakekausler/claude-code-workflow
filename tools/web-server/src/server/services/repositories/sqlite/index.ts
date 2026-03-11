@@ -137,6 +137,10 @@ export class SqliteEpicRepository implements IEpicRepository {
   async upsert(data: EpicUpsertData): Promise<void> {
     this.inner.upsert(data);
   }
+
+  async deleteById(id: string): Promise<void> {
+    this.inner.deleteById(id);
+  }
 }
 
 export class SqliteTicketRepository implements ITicketRepository {
@@ -162,6 +166,14 @@ export class SqliteTicketRepository implements ITicketRepository {
 
   async upsert(data: TicketUpsertData): Promise<void> {
     this.inner.upsert(data);
+  }
+
+  async deleteById(id: string): Promise<void> {
+    this.inner.deleteById(id);
+  }
+
+  async deleteByEpicId(epicId: string): Promise<string[]> {
+    return this.inner.deleteByEpicId(epicId);
   }
 }
 
@@ -201,6 +213,18 @@ export class SqliteStageRepository implements IStageRepository {
   async upsert(data: StageUpsertData): Promise<void> {
     this.inner.upsert(data);
   }
+
+  async deleteById(id: string): Promise<void> {
+    this.inner.deleteById(id);
+  }
+
+  async deleteByTicketId(ticketId: string): Promise<string[]> {
+    return this.inner.deleteByTicketId(ticketId);
+  }
+
+  async deleteByEpicId(epicId: string): Promise<string[]> {
+    return this.inner.deleteByEpicId(epicId);
+  }
 }
 
 export class SqliteDependencyRepository implements IDependencyRepository {
@@ -232,6 +256,14 @@ export class SqliteDependencyRepository implements IDependencyRepository {
 
   async deleteByRepo(repoId: number): Promise<void> {
     this.inner.deleteByRepo(repoId);
+  }
+
+  async relinkAndDelete(itemId: string): Promise<{ removed: number; created: number }> {
+    return this.inner.relinkAndDelete(itemId);
+  }
+
+  async deleteByItemIds(itemIds: string[]): Promise<number> {
+    return this.inner.deleteByItemIds(itemIds);
   }
 }
 

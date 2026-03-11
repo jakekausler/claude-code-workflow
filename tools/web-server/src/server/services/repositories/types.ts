@@ -166,6 +166,7 @@ export interface IEpicRepository {
   listByRepo(repoId: number): Promise<EpicRow[]>;
   findByJiraKey(repoId: number, jiraKey: string): Promise<EpicRow | null>;
   upsert(data: EpicUpsertData): Promise<void>;
+  deleteById(id: string): Promise<void>;
 }
 
 export interface ITicketRepository {
@@ -174,6 +175,8 @@ export interface ITicketRepository {
   listByEpic(epicId: string, repoId?: number): Promise<TicketRow[]>;
   findByJiraKey(repoId: number, jiraKey: string): Promise<TicketRow | null>;
   upsert(data: TicketUpsertData): Promise<void>;
+  deleteById(id: string): Promise<void>;
+  deleteByEpicId(epicId: string): Promise<string[]>;
 }
 
 export interface IStageRepository {
@@ -185,6 +188,9 @@ export interface IStageRepository {
   findBySessionId(sessionId: string): Promise<StageRow | null>;
   updateSessionId(stageId: string, sessionId: string | null): Promise<void>;
   upsert(data: StageUpsertData): Promise<void>;
+  deleteById(id: string): Promise<void>;
+  deleteByTicketId(ticketId: string): Promise<string[]>;
+  deleteByEpicId(epicId: string): Promise<string[]>;
 }
 
 export interface IDependencyRepository {
@@ -195,6 +201,8 @@ export interface IDependencyRepository {
   allResolved(fromId: string): Promise<boolean>;
   upsert(data: DependencyUpsertData): Promise<void>;
   deleteByRepo(repoId: number): Promise<void>;
+  relinkAndDelete(itemId: string): Promise<{ removed: number; created: number }>;
+  deleteByItemIds(itemIds: string[]): Promise<number>;
 }
 
 export interface IStageSessionRepository {
