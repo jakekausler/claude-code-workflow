@@ -384,14 +384,19 @@ export function TicketDetailContent({ ticketId }: TicketDetailContentProps) {
                 }}
               />
 
-              {/* Embedded session viewer — all ticket sessions are read-only */}
-              {activeTicketSession && (
-                <EmbeddedSessionViewer
-                  projectId={activeTicketSession.projectId}
-                  sessionId={activeTicketSession.sessionId}
-                  isReadOnly={true}
-                />
-              )}
+              {/* Embedded session viewer — read-only only for completed sessions */}
+              {activeTicketSession && (() => {
+                const selectedSession = sessions.find((s) => s.sessionId === activeTicketSession.sessionId);
+                const isEnded = !!selectedSession?.endedAt;
+                return (
+                  <EmbeddedSessionViewer
+                    projectId={activeTicketSession.projectId}
+                    sessionId={activeTicketSession.sessionId}
+                    isReadOnly={isEnded}
+                    isActive={!isEnded}
+                  />
+                );
+              })()}
             </>
           ) : isConverting ? (
             conversionTimedOut ? (

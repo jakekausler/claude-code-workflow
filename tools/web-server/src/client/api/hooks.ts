@@ -387,7 +387,11 @@ export function useRepos() {
 
 // Session Detail ----------------------------------------------------------
 
-export function useSessionDetail(projectId: string, sessionId: string) {
+export function useSessionDetail(
+  projectId: string,
+  sessionId: string,
+  options?: { refetchInterval?: number | false },
+) {
   return useQuery({
     queryKey: ['session', projectId, sessionId],
     queryFn: () =>
@@ -395,6 +399,7 @@ export function useSessionDetail(projectId: string, sessionId: string) {
         `/sessions/${encodeURIComponent(projectId)}/${sessionId}`,
       ),
     enabled: !!projectId && !!sessionId,
+    ...(options?.refetchInterval !== undefined && { refetchInterval: options.refetchInterval }),
   });
 }
 
