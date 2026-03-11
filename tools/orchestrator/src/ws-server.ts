@@ -12,7 +12,8 @@ export type InboundWsMessage =
   | { type: 'send_message'; stageId: string; message: string }
   | { type: 'approve_tool'; stageId: string; requestId: string; decision: 'allow' | 'deny'; reason?: string }
   | { type: 'answer_question'; stageId: string; requestId: string; answers: Record<string, string> }
-  | { type: 'interrupt'; stageId: string };
+  | { type: 'interrupt'; stageId: string }
+  | { type: 'launch_conversion'; ticketId: string; epicId: string };
 
 export interface WsServerOptions {
   port: number;
@@ -22,6 +23,7 @@ export interface WsServerOptions {
   onApproveTool?: (stageId: string, requestId: string, decision: 'allow' | 'deny', reason?: string) => void;
   onAnswerQuestion?: (stageId: string, requestId: string, answers: Record<string, string>) => void;
   onInterrupt?: (stageId: string) => void;
+  onLaunchConversion?: (ticketId: string, epicId: string) => void;
 }
 
 export interface WsServerHandle {
@@ -30,7 +32,7 @@ export interface WsServerHandle {
 }
 
 export function createWsServer(options: WsServerOptions): WsServerHandle {
-  const { port, registry, approvalService, onSendMessage, onApproveTool, onAnswerQuestion, onInterrupt } = options;
+  const { port, registry, approvalService, onSendMessage, onApproveTool, onAnswerQuestion, onInterrupt, onLaunchConversion } = options;
   let wss: WebSocketServer | null = null;
 
   function broadcast(msg: WsMessage): void {
@@ -90,6 +92,9 @@ export function createWsServer(options: WsServerOptions): WsServerHandle {
               break;
             case 'interrupt':
               onInterrupt?.(msg.stageId);
+              break;
+            case 'launch_conversion':
+              onLaunchConversion?.(msg.ticketId, msg.epicId);
               break;
           }
         } catch {

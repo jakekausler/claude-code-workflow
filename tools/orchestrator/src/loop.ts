@@ -19,6 +19,8 @@ import { createMRCommentPoller } from './mr-comment-poller.js';
 import type { MRChainManager } from './mr-chain-manager.js';
 import { createMRChainManager } from './mr-chain-manager.js';
 import { execFile } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { createInsightsThresholdChecker } from './insights-threshold.js';
 import type { LearningsResult } from './insights-threshold.js';
 import { SessionRegistry } from './session-registry.js';
@@ -334,6 +336,76 @@ export function createOrchestrator(config: OrchestratorConfig, deps: Orchestrato
     }
   };
 
+  const onLaunchConversion = async (ticketId: string, epicId: string) => {
+    try {
+      const ticketDir = path.join(config.repoPath, 'epics', epicId, ticketId);
+      const ticketFilePath = path.join(ticketDir, `${ticketId}.md`);
+
+      // Read the ticket file
+      const ticketFm = await readFrontmatter(ticketFilePath);
+
+      // Derive stage IDs from the ticket ID
+      // TICKET-XXX-YYY -> STAGE-XXX-YYY-001, STAGE-XXX-YYY-002, STAGE-XXX-YYY-003
+      const ticketSuffix = ticketId.replace(/^TICKET-/, '');
+      const stageIds = [
+        `STAGE-${ticketSuffix}-001`,
+        `STAGE-${ticketSuffix}-002`,
+        `STAGE-${ticketSuffix}-003`,
+      ];
+
+      const stageDefinitions = [
+        { id: stageIds[0], title: 'Design', dependsOn: [] as string[] },
+        { id: stageIds[1], title: 'Build', dependsOn: [stageIds[0]] },
+        { id: stageIds[2], title: 'Verification', dependsOn: [stageIds[1]] },
+      ];
+
+      // Create stage files
+      await mkdir(ticketDir, { recursive: true });
+      for (const stageDef of stageDefinitions) {
+        const stageContent = `\n## Overview\n\n${stageDef.title} stage for ${ticketId}.\n`;
+        const stageData: Record<string, unknown> = {
+          id: stageDef.id,
+          ticket: ticketId,
+          epic: epicId,
+          title: stageDef.title,
+          status: 'Not Started',
+          session_active: false,
+          depends_on: stageDef.dependsOn,
+          priority: 0,
+        };
+        const stageFilePath = path.join(ticketDir, `${stageDef.id}.md`);
+        await writeFrontmatter(stageFilePath, stageData, stageContent);
+      }
+
+      // Update the ticket frontmatter
+      ticketFm.data.stages = stageIds;
+      ticketFm.data.status = 'In Progress';
+      ticketFm.data.stage_statuses = {
+        [stageIds[0]]: 'Not Started',
+        [stageIds[1]]: 'Not Started',
+        [stageIds[2]]: 'Not Started',
+      };
+      await writeFrontmatter(ticketFilePath, ticketFm.data, ticketFm.content);
+
+      // Run sync
+      const __dirname = path.dirname(fileURLToPath(import.meta.url));
+      const kanbanCliBin = path.resolve(__dirname, '../../kanban-cli/dist/cli/index.js');
+      await new Promise<void>((resolve) => {
+        execFile('node', [kanbanCliBin, 'sync', '--repo', config.repoPath], { timeout: 30_000 }, (err, _stdout, stderr) => {
+          if (err) {
+            logger.warn('Sync after conversion failed', { ticketId, error: stderr || err.message });
+          }
+          resolve();
+        });
+      });
+
+      logger.info('Converted ticket to stages', { ticketId, epicId, stages: stageIds });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      logger.error('launch_conversion failed', { ticketId, epicId, error: msg });
+    }
+  };
+
   // WebSocket server for real-time session broadcasting (optional — only when wsPort is set)
   const wsServer: WsServerHandle | null = config.wsPort != null
     ? createWsServer({
@@ -344,6 +416,7 @@ export function createOrchestrator(config: OrchestratorConfig, deps: Orchestrato
         onApproveTool,
         onAnswerQuestion,
         onInterrupt,
+        onLaunchConversion,
       })
     : null;
 
