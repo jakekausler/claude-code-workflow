@@ -62,6 +62,8 @@ function NewTicketModal({ epicId, onClose }: NewTicketModalProps) {
         onSuccess: () => {
           void queryClient.invalidateQueries({ queryKey: ['epics', epicId] });
           void queryClient.invalidateQueries({ queryKey: ['board'] });
+          void queryClient.invalidateQueries({ queryKey: ['tickets'] });
+          void queryClient.invalidateQueries({ queryKey: ['stages'] });
           onClose();
         },
       },
