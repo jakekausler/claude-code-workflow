@@ -44,6 +44,19 @@ export function buildDisplayItems(
     if (p.parentTaskId) taskIdsWithSubagents.add(p.parentTaskId);
   }
 
+  // Build a lookup of processes that can be matched by subagentId (tool_use block ID).
+  // Processes with parentTaskId match via parentTaskId === step.subagentId.
+  // Processes without parentTaskId are collected as unmatched for positional fallback.
+  const unmatchedProcesses: Process[] = [];
+  for (const p of processes) {
+    if (p.parentTaskId) {
+      // Will be matched by parentTaskId === step.subagentId
+    } else {
+      unmatchedProcesses.push(p);
+    }
+  }
+  let unmatchedProcessIdx = 0;
+
   // Find the index of the step that produced lastOutput (to skip it in display)
   const lastOutputStepIndex = findLastOutputStepIndex(steps, lastOutput);
 
@@ -82,9 +95,14 @@ export function buildDisplayItems(
         // step.subagentId is the tool_use block ID (from the Task tool call),
         // while process.id is the agent ID from the filename. The link between
         // them is process.parentTaskId which matches the tool call ID.
-        const process = processes.find(
+        let process = processes.find(
           (p) => p.id === step.subagentId || p.parentTaskId === step.subagentId,
         );
+        // Fallback: when parentTaskId is null (unmatched subagent), link by
+        // positional order among unmatched processes.
+        if (!process && unmatchedProcessIdx < unmatchedProcesses.length) {
+          process = unmatchedProcesses[unmatchedProcessIdx++];
+        }
         if (process) {
           items.push({ type: 'subagent', subagent: process });
         }
