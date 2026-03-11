@@ -37,11 +37,15 @@ export function EmbeddedSessionViewer({
   const queryClient = useQueryClient();
   const registerViewer = useInteractionStore((s) => s.registerViewer);
   const unregisterViewer = useInteractionStore((s) => s.unregisterViewer);
-  const pendingApprovals = useInteractionStore((s) =>
-    s.pendingApprovals.filter((a) => a.stageId === interactionId),
+  const allApprovals = useInteractionStore((s) => s.pendingApprovals);
+  const allQuestions = useInteractionStore((s) => s.pendingQuestions);
+  const pendingApprovals = useMemo(
+    () => allApprovals.filter((a) => a.stageId === interactionId),
+    [allApprovals, interactionId],
   );
-  const pendingQuestions = useInteractionStore((s) =>
-    s.pendingQuestions.filter((q) => q.stageId === interactionId),
+  const pendingQuestions = useMemo(
+    () => allQuestions.filter((q) => q.stageId === interactionId),
+    [allQuestions, interactionId],
   );
 
   // Register/unregister this viewer so the modal overlay skips our approvals
