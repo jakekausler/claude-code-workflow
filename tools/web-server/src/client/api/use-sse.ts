@@ -33,7 +33,8 @@ function addChannelListener(
       try {
         data = JSON.parse(event.data);
       } catch {
-        data = event.data;
+        // Malformed JSON – silently ignore the event
+        return;
       }
       const cbs = channelListeners.get(channel);
       if (cbs) {

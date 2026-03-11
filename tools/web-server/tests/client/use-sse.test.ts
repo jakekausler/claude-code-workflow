@@ -36,6 +36,7 @@ class MockEventSource {
 
 describe('connectSSE', () => {
   beforeEach(() => {
+    vi.resetModules();
     MockEventSource.instances = [];
     (globalThis as Record<string, unknown>).EventSource = MockEventSource;
   });
@@ -113,6 +114,7 @@ describe('connectSSE', () => {
 
 describe('useSSE', () => {
   beforeEach(() => {
+    vi.resetModules();
     MockEventSource.instances = [];
     (globalThis as Record<string, unknown>).EventSource = MockEventSource;
   });
