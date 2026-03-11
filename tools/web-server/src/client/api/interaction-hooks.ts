@@ -9,7 +9,7 @@ import { useCallback } from 'react';
 export function useSendMessage(stageId: string) {
   return useMutation({
     mutationFn: async (message: string) => {
-      const res = await apiFetch<{ success: boolean }>(`/api/sessions/${stageId}/message`, {
+      const res = await apiFetch<{ success: boolean }>(`/sessions/${stageId}/message`, {
         method: 'POST',
         body: JSON.stringify({ message }),
       });
@@ -21,7 +21,7 @@ export function useSendMessage(stageId: string) {
 export function useApproveToolCall(stageId: string) {
   return useMutation({
     mutationFn: async (params: { requestId: string; decision: 'allow' | 'deny'; reason?: string }) => {
-      const res = await apiFetch<{ success: boolean }>(`/api/sessions/${stageId}/approve`, {
+      const res = await apiFetch<{ success: boolean }>(`/sessions/${stageId}/approve`, {
         method: 'POST',
         body: JSON.stringify(params),
       });
@@ -33,7 +33,7 @@ export function useApproveToolCall(stageId: string) {
 export function useAnswerQuestion(stageId: string) {
   return useMutation({
     mutationFn: async (params: { requestId: string; answers: Record<string, string> }) => {
-      const res = await apiFetch<{ success: boolean }>(`/api/sessions/${stageId}/answer`, {
+      const res = await apiFetch<{ success: boolean }>(`/sessions/${stageId}/answer`, {
         method: 'POST',
         body: JSON.stringify(params),
       });
@@ -45,7 +45,7 @@ export function useAnswerQuestion(stageId: string) {
 export function useInterruptSession(stageId: string) {
   return useMutation({
     mutationFn: async () => {
-      const res = await apiFetch<{ success: boolean }>(`/api/sessions/${stageId}/interrupt`, {
+      const res = await apiFetch<{ success: boolean }>(`/sessions/${stageId}/interrupt`, {
         method: 'POST',
       });
       return res;

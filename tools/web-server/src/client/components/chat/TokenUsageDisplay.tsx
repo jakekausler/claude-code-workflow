@@ -73,15 +73,17 @@ export function TokenUsageDisplay({
 
   return (
     <div className="relative inline-block">
-      <button
+      <span
+        role="button"
+        tabIndex={0}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
         onFocus={() => setShowPopover(true)}
         onBlur={() => setShowPopover(false)}
-        className="text-xs text-slate-500 font-mono hover:text-slate-700 transition-colors"
+        className="text-xs text-slate-500 font-mono hover:text-slate-700 transition-colors cursor-pointer"
       >
         {formatTokensCompact(tokens.total)}
-      </button>
+      </span>
       {showPopover && (
         <div
           className="absolute z-50 bottom-full right-0 mb-1 w-56 bg-white rounded-lg shadow-lg border border-slate-200 p-3"
