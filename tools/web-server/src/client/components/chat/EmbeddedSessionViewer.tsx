@@ -13,6 +13,8 @@ import { useSessionViewStore } from '../../store/session-store.js';
 interface EmbeddedSessionViewerProps {
   projectId: string;
   sessionId: string;
+  /** The orchestrator stage/ticket ID used for interaction endpoints (message, approve, etc.). */
+  interactionId?: string;
   isReadOnly?: boolean;
   /** When true, poll for session updates every 3 seconds (for active/ongoing sessions). */
   isActive?: boolean;
@@ -21,6 +23,7 @@ interface EmbeddedSessionViewerProps {
 export function EmbeddedSessionViewer({
   projectId,
   sessionId,
+  interactionId,
   isReadOnly = false,
   isActive = false,
 }: EmbeddedSessionViewerProps) {
@@ -117,9 +120,9 @@ export function EmbeddedSessionViewer({
       </div>
 
       {/* Message input for active (non-read-only) sessions */}
-      {!isReadOnly && (
+      {!isReadOnly && interactionId && (
         <MessageInput
-          stageId={sessionId}
+          stageId={interactionId}
           disabled={!isActive}
           light
         />

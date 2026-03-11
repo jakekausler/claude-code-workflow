@@ -18,13 +18,13 @@ export function SessionHistoryDropdown({
     // Single session — show label only, no dropdown
     const session = sessions[0];
     if (!session) return null;
-    const isCurrent = isStageSession(session) ? session.isCurrent : false;
+    const isLive = isStageSession(session) ? session.isCurrent : !session.endedAt;
     return (
       <div className="flex items-center gap-2 px-3 py-2 text-sm text-slate-600">
         <span className="font-medium">{sessionLabel(session)}</span>
         <span className="text-slate-400">&mdash;</span>
         <span className="text-xs text-slate-400">{formatDate(session.startedAt)}</span>
-        {isCurrent ? <LiveBadge /> : <ReadOnlyBadge />}
+        {isLive ? <LiveBadge /> : <ReadOnlyBadge />}
       </div>
     );
   }
@@ -45,11 +45,11 @@ export function SessionHistoryDropdown({
         className="w-full appearance-none rounded-md border border-slate-300 bg-white px-3 py-1.5 pr-8 text-sm text-slate-700 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
       >
         {sorted.map((session) => {
-          const isCurrent = isStageSession(session) ? session.isCurrent : false;
+          const isLive = isStageSession(session) ? session.isCurrent : !session.endedAt;
           return (
             <option key={session.sessionId} value={session.sessionId}>
               {sessionLabel(session)} — {formatDate(session.startedAt)}
-              {isCurrent ? ' (Live)' : ' (Read Only)'}
+              {isLive ? ' (Live)' : ' (Read Only)'}
             </option>
           );
         })}

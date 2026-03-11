@@ -319,6 +319,7 @@ export function StageDetailContent({ stageId }: StageDetailContentProps) {
             <EmbeddedSessionViewer
               projectId={activeStageSession.projectId}
               sessionId={activeStageSession.sessionId}
+              interactionId={stageId}
               isReadOnly={!sessions.find((s) => s.sessionId === activeStageSession.sessionId)?.isCurrent}
               isActive={!!sessions.find((s) => s.sessionId === activeStageSession.sessionId)?.isCurrent}
             />

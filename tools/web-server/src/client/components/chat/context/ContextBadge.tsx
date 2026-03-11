@@ -140,15 +140,17 @@ export function ContextBadge({ stats }: Props) {
 
   return (
     <div className="relative inline-block">
-      <button
+      <span
+        role="button"
+        tabIndex={0}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
         onFocus={() => setShowPopover(true)}
         onBlur={() => setShowPopover(false)}
-        className="text-xs text-slate-600 bg-slate-100 border border-slate-200 rounded-full px-2 py-0.5 font-medium hover:bg-slate-200 transition-colors"
+        className="text-xs text-slate-600 bg-slate-100 border border-slate-200 rounded-full px-2 py-0.5 font-medium hover:bg-slate-200 transition-colors cursor-pointer"
       >
         Context <span className="font-semibold">+{totalNewCount}</span>
-      </button>
+      </span>
       {showPopover && categories.length > 0 && (
         <div
           className="absolute z-50 bottom-full right-0 mb-1 w-72 bg-slate-900 rounded-lg shadow-lg border border-slate-700 p-3 max-h-80 overflow-y-auto"

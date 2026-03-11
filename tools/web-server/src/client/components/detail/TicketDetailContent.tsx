@@ -392,6 +392,7 @@ export function TicketDetailContent({ ticketId }: TicketDetailContentProps) {
                   <EmbeddedSessionViewer
                     projectId={activeTicketSession.projectId}
                     sessionId={activeTicketSession.sessionId}
+                    interactionId={ticketId}
                     isReadOnly={isEnded}
                     isActive={!isEnded}
                   />
