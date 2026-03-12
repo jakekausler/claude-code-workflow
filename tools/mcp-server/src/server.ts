@@ -7,6 +7,7 @@ import { registerEnrichTools } from './tools/enrich.js';
 import { registerConfluenceTools } from './tools/confluence.js';
 import { registerSlackTools } from './tools/slack.js';
 import { registerMockAdminTools } from './tools/mock-admin.js';
+import { registerOrchestratorSignalTools } from './tools/orchestrator-signals.js';
 import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -45,6 +46,9 @@ export function createKanbanMcpServer(): McpServer {
     mockState,
     webhookUrl: process.env.WORKFLOW_SLACK_WEBHOOK,
   });
+
+  // Orchestrator signal tools (always registered — they are lightweight acknowledgement stubs)
+  registerOrchestratorSignalTools(server);
 
   // Mock admin tools only in mock mode
   if (mockState) {

@@ -21,6 +21,7 @@ import { createMRChainManager } from './mr-chain-manager.js';
 import { execFile } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { mkdir, writeFile } from 'node:fs/promises';
+import { existsSync, writeFileSync } from 'node:fs';
 import { createInsightsThresholdChecker } from './insights-threshold.js';
 import type { LearningsResult } from './insights-threshold.js';
 import { SessionRegistry } from './session-registry.js';
@@ -245,6 +246,34 @@ function buildCronScheduler(
   return createCronScheduler(jobs, { logger });
 }
 
+/**
+ * Ensure a .mcp.json config exists at the given directory so Claude Code
+ * discovers the kanban MCP server when the session starts.
+ * Uses an absolute path to the compiled MCP server entry point.
+ * Silently skips if the directory does not exist (e.g., in unit tests).
+ */
+function ensureMcpConfig(targetDir: string, mock: boolean): void {
+  try {
+    const mcpConfigPath = path.join(targetDir, '.mcp.json');
+    if (existsSync(mcpConfigPath)) return;
+
+    const __dirname = path.dirname(fileURLToPath(import.meta.url));
+    const mcpServerPath = path.resolve(__dirname, '../../mcp-server/dist/index.js');
+    const mcpConfig = {
+      mcpServers: {
+        kanban: {
+          command: 'node',
+          args: [mcpServerPath],
+          env: { KANBAN_MOCK: mock ? 'true' : '' },
+        },
+      },
+    };
+    writeFileSync(mcpConfigPath, JSON.stringify(mcpConfig, null, 2));
+  } catch {
+    // Non-fatal: directory may not exist (e.g., in unit tests with mock paths)
+  }
+}
+
 export function createOrchestrator(config: OrchestratorConfig, deps: OrchestratorDeps): Orchestrator {
   const { discovery, locker, worktreeManager, sessionExecutor, logger } = deps;
   const activeWorkers = new Map<number, WorkerInfo>();
@@ -408,6 +437,9 @@ export function createOrchestrator(config: OrchestratorConfig, deps: Orchestrato
           spawnedAt: now,
         });
 
+        // Ensure MCP config is available in the session's working directory
+        ensureMcpConfig(config.repoPath, config.mock);
+
         const conversionPrompt = [
           `You are converting ticket ${ticketId} into implementable stages.`,
           '',
@@ -421,8 +453,8 @@ export function createOrchestrator(config: OrchestratorConfig, deps: Orchestrato
           '- Do NOT run kanban-cli sync or validate commands.',
           '- Do NOT modify the status field in the ticket frontmatter.',
           '- When you have finished creating all stage files and updating the ticket',
-          '  frontmatter (adding stages list), simply state that conversion is complete',
-          '  and stop. The system will detect completion automatically.',
+          '  frontmatter (adding stages list), call the `conversion_complete` MCP tool',
+          '  to signal completion. The system will handle syncing and status updates.',
           '- The system will handle syncing, status updates, and column computation.',
         ].join('\n');
 
@@ -444,6 +476,17 @@ export function createOrchestrator(config: OrchestratorConfig, deps: Orchestrato
             },
             onPid: (pid: number) => {
               registry.setPid(ticketId, pid);
+            },
+            onMcpSignalDetected: (signalName: string) => {
+              if (signalName === 'conversion_complete') {
+                // Trigger the same handler used for the approval-service signal path
+                approvalService.emit('session-signal', {
+                  stageId: ticketId,
+                  signalName: 'conversion_complete',
+                  input: {},
+                  requestId: `mcp-${Date.now()}`,
+                });
+              }
             },
           },
           sessionLogger,
@@ -794,6 +837,10 @@ export function createOrchestrator(config: OrchestratorConfig, deps: Orchestrato
           }
 
           const worktreeInfo = await worktreeManager.create(stage.worktreeBranch, config.repoPath);
+
+          // Ensure MCP config is available in the worktree so Claude discovers the kanban MCP server
+          ensureMcpConfig(worktreeInfo.path, config.mock);
+
           const sessionLogger = logger.createSessionLogger(stage.id, config.logDir);
 
           const now = (deps.now ?? Date.now)();
@@ -846,6 +893,17 @@ export function createOrchestrator(config: OrchestratorConfig, deps: Orchestrato
               },
               onPid: (pid: number) => {
                 registry.setPid(stage.id, pid);
+              },
+              onMcpSignalDetected: (signalName: string, input: Record<string, unknown>) => {
+                if (signalName === 'transition_stage') {
+                  // Re-emit as a session-signal so the existing handler picks it up
+                  approvalService.emit('session-signal', {
+                    stageId: stage.id,
+                    signalName: 'transition_stage',
+                    input,
+                    requestId: `mcp-${Date.now()}`,
+                  });
+                }
               },
             },
             sessionLogger,

@@ -27,6 +27,12 @@ export interface SpawnOptions {
    * When true, automatically close stdin when Claude responds with end_turn and no tool_use blocks.
    */
   autoCloseOnEndTurn?: boolean;
+  /**
+   * Called when an MCP tool call matching a signal tool name is detected in the
+   * assistant message stream. The orchestrator can use this to trigger post-processing
+   * (e.g., sync after conversion_complete) without waiting for session exit.
+   */
+  onMcpSignalDetected?: (signalName: string, input: Record<string, unknown>) => void;
 }
 
 /**
@@ -209,6 +215,32 @@ export function createSessionExecutor(deps: Partial<SessionDeps> = {}): SessionE
                   setTimeout(() => {
                     child.stdin.end();
                   }, 1000);
+                }
+              }
+            }
+          });
+        }
+
+        // Detect MCP tool calls for orchestrator signal tools in the stream.
+        // MCP tool names appear as "mcp__kanban__<tool_name>" in tool_use blocks.
+        if (options.onMcpSignalDetected) {
+          const signalNames = ['conversion_complete', 'transition_stage'];
+          parser.on('message', (msg: StreamMessage) => {
+            if (
+              msg.type === 'assistant' &&
+              typeof msg.message === 'object' &&
+              msg.message !== null
+            ) {
+              const message = msg.message as Record<string, unknown>;
+              const content = Array.isArray(message.content) ? message.content : [];
+              for (const block of content) {
+                const b = block as Record<string, unknown>;
+                if (b.type === 'tool_use' && typeof b.name === 'string') {
+                  for (const signalName of signalNames) {
+                    if (b.name === signalName || b.name === `mcp__kanban__${signalName}`) {
+                      options.onMcpSignalDetected!(signalName, (b.input as Record<string, unknown>) ?? {});
+                    }
+                  }
                 }
               }
             }
