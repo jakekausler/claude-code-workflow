@@ -342,7 +342,13 @@ export function createOrchestrator(config: OrchestratorConfig, deps: Orchestrato
 
   const onApproveTool = (stageId: string, requestId: string, decision: 'allow' | 'deny', reason?: string) => {
     try {
-      approvalService.resolveApproval(requestId, decision, reason);
+      const result = approvalService.resolveApproval(requestId, decision, reason);
+      const peer = sessionExecutor.getPeer(stageId);
+      if (peer) {
+        peer.sendApprovalResponse(requestId, result);
+      } else {
+        logger.warn('No peer found to send approval response', { stageId, requestId });
+      }
     } catch (err) {
       logger.warn('Failed to resolve approval', { stageId, requestId, error: (err as Error).message });
     }
@@ -350,7 +356,13 @@ export function createOrchestrator(config: OrchestratorConfig, deps: Orchestrato
 
   const onAnswerQuestion = (stageId: string, requestId: string, answers: Record<string, string>) => {
     try {
-      approvalService.resolveQuestion(requestId, answers);
+      const result = approvalService.resolveQuestion(requestId, answers);
+      const peer = sessionExecutor.getPeer(stageId);
+      if (peer) {
+        peer.sendApprovalResponse(requestId, result);
+      } else {
+        logger.warn('No peer found to send question response', { stageId, requestId });
+      }
     } catch (err) {
       logger.warn('Failed to resolve question', { stageId, requestId, error: (err as Error).message });
     }
