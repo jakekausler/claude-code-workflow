@@ -74,7 +74,7 @@ const interactionPlugin: FastifyPluginCallback<{ orchestratorClient: Orchestrato
 
     const session = orchestratorClient.getSession(stageId);
     if (!session) {
-      return reply.status(404).send({ error: `No session for stage ${stageId}` });
+      return reply.status(200).send({ status: 'already_resolved' });
     }
 
     orchestratorClient.approveTool(stageId, requestId, decision, reason);

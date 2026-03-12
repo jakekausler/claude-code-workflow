@@ -121,7 +121,7 @@ describe('Interaction routes', () => {
       expect(res.statusCode).toBe(400);
     });
 
-    it('returns 404 when no session exists', async () => {
+    it('returns 200 with already_resolved when no session exists', async () => {
       orchestratorClient.getSession.mockReturnValue(undefined);
 
       const res = await app.inject({
@@ -130,7 +130,8 @@ describe('Interaction routes', () => {
         payload: { requestId: 'req-001', decision: 'allow' },
       });
 
-      expect(res.statusCode).toBe(404);
+      expect(res.statusCode).toBe(200);
+      expect(res.json()).toEqual({ status: 'already_resolved' });
     });
   });
 
