@@ -57,7 +57,7 @@ function DependencyEdge(props: EdgeProps) {
     targetY,
     sourcePosition,
     targetPosition,
-    borderRadius: 8,
+    borderRadius: 14,
   });
 
   const style = edgeStyle(edgeData);
@@ -74,7 +74,6 @@ function DependencyEdge(props: EdgeProps) {
           strokeWidth: style.strokeWidth,
           strokeDasharray: style.strokeDasharray,
         }}
-        markerEnd="url(#arrowhead)"
       />
     </g>
   );

@@ -44,7 +44,7 @@ const STAGE_WIDTH = 160;
 const STAGE_HEIGHT = 40;
 
 /** Padding inside group containers. */
-const GROUP_PADDING = 40;
+const GROUP_PADDING = 50;
 /** Extra top padding for epic containers (room for label). */
 const EPIC_EXTRA_TOP = 30;
 
@@ -190,8 +190,8 @@ export function useElkLayout(
           'elk.algorithm': 'layered',
           'elk.direction': 'RIGHT',
           'elk.padding': `[top=${GROUP_PADDING},left=${GROUP_PADDING},bottom=${GROUP_PADDING},right=${GROUP_PADDING}]`,
-          'elk.spacing.nodeNode': '20',
-          'elk.layered.spacing.nodeNodeBetweenLayers': '40',
+          'elk.spacing.nodeNode': '60',
+          'elk.layered.spacing.nodeNodeBetweenLayers': '120',
         },
         children: stages.map(makeStageElk),
       };
@@ -209,8 +209,8 @@ export function useElkLayout(
           'elk.algorithm': 'layered',
           'elk.direction': 'RIGHT',
           'elk.padding': `[top=${GROUP_PADDING + EPIC_EXTRA_TOP},left=${GROUP_PADDING},bottom=${GROUP_PADDING},right=${GROUP_PADDING}]`,
-          'elk.spacing.nodeNode': '30',
-          'elk.layered.spacing.nodeNodeBetweenLayers': '50',
+          'elk.spacing.nodeNode': '60',
+          'elk.layered.spacing.nodeNodeBetweenLayers': '120',
         },
         children: tickets.map(makeTicketElk),
       };
@@ -235,8 +235,8 @@ export function useElkLayout(
       layoutOptions: {
         'elk.algorithm': 'layered',
         'elk.direction': 'RIGHT',
-        'elk.layered.spacing.nodeNodeBetweenLayers': '80',
-        'elk.spacing.nodeNode': '50',
+        'elk.layered.spacing.nodeNodeBetweenLayers': '120',
+        'elk.spacing.nodeNode': '60',
         'elk.edgeRouting': 'SPLINES',
         'elk.layered.crossingMinimization.strategy': 'LAYER_SWEEP',
         'elk.hierarchyHandling': 'INCLUDE_CHILDREN',

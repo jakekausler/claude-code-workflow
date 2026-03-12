@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback } from 'react';
 import {
   ReactFlow,
   ReactFlowProvider,
@@ -49,30 +49,8 @@ function GraphCanvasInner({
     [onNodeClick],
   );
 
-  // SVG defs for the arrowhead marker used by DependencyEdge
-  const svgDefs = useMemo(
-    () => (
-      <svg>
-        <defs>
-          <marker
-            id="arrowhead"
-            markerWidth="6"
-            markerHeight="4"
-            refX="6"
-            refY="2"
-            orient="auto"
-          >
-            <polygon points="0 0, 6 2, 0 4" fill="#94a3b8" />
-          </marker>
-        </defs>
-      </svg>
-    ),
-    [],
-  );
-
   return (
     <div className="relative h-full w-full">
-      {svgDefs}
       <ReactFlow
         nodes={nodes}
         edges={edges}
