@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import { BaseEdge, getSmoothStepPath, type EdgeProps } from '@xyflow/react';
+import { BaseEdge, type EdgeProps } from '@xyflow/react';
 import type { GraphEdgeData } from '../types.js';
 
 /** Derive stroke color and width from edge data. */
@@ -36,6 +36,15 @@ function tooltipLabel(d: GraphEdgeData): string {
   return parts.join(' | ');
 }
 
+/** Build an SVG path string from ELK-computed points. */
+function buildElkPath(points: Array<{ x: number; y: number }>): string {
+  let d = `M ${points[0].x} ${points[0].y}`;
+  for (let i = 1; i < points.length; i++) {
+    d += ` L ${points[i].x} ${points[i].y}`;
+  }
+  return d;
+}
+
 function DependencyEdge(props: EdgeProps) {
   const {
     id,
@@ -43,22 +52,15 @@ function DependencyEdge(props: EdgeProps) {
     sourceY,
     targetX,
     targetY,
-    sourcePosition,
-    targetPosition,
     data,
   } = props;
 
   const edgeData = data as unknown as GraphEdgeData;
 
-  const [edgePath] = getSmoothStepPath({
-    sourceX,
-    sourceY,
-    targetX,
-    targetY,
-    sourcePosition,
-    targetPosition,
-    borderRadius: 14,
-  });
+  // Use ELK-computed path if available, otherwise fall back to straight line
+  const edgePath = edgeData.elkPoints && edgeData.elkPoints.length >= 2
+    ? buildElkPath(edgeData.elkPoints)
+    : `M ${sourceX} ${sourceY} L ${targetX} ${targetY}`;
 
   const style = edgeStyle(edgeData);
   const dimmed = edgeData.hasSelection && edgeData.highlightState === 'none';

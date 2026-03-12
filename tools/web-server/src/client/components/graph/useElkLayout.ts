@@ -11,7 +11,7 @@
 
 import { useState, useEffect, useMemo, useRef } from 'react';
 import type { Node, Edge } from '@xyflow/react';
-import type { ELK as ELKApi, ElkNode } from 'elkjs';
+import type { ELK as ELKApi, ElkNode, ElkExtendedEdge } from 'elkjs';
 
 import type {
   GraphNode,
@@ -83,6 +83,47 @@ function collectPositions(
   out.set(elkNode.id, { x, y, width: w, height: h });
   for (const child of elkNode.children ?? []) {
     collectPositions(child, x, y, out);
+  }
+}
+
+/**
+ * Recursively collect all ELK edges from the laid-out tree.
+ * ELK places edges on the lowest common ancestor of the connected nodes.
+ * Returns a map of edgeId -> array of absolute path points.
+ */
+function collectEdgePoints(
+  elkNode: ElkNode,
+  absPositions: Map<string, { x: number; y: number; width: number; height: number }>,
+  out: Map<string, Array<{ x: number; y: number }>>,
+): void {
+  // The offset for edge coordinates is the absolute position of this container node.
+  // For root-level edges (on the root node), the offset is (0, 0).
+  const containerPos = absPositions.get(elkNode.id);
+  const offsetX = containerPos?.x ?? 0;
+  const offsetY = containerPos?.y ?? 0;
+
+  for (const edge of (elkNode.edges ?? []) as ElkExtendedEdge[]) {
+    const points: Array<{ x: number; y: number }> = [];
+    for (const section of edge.sections ?? []) {
+      points.push({
+        x: section.startPoint.x + offsetX,
+        y: section.startPoint.y + offsetY,
+      });
+      for (const bp of section.bendPoints ?? []) {
+        points.push({ x: bp.x + offsetX, y: bp.y + offsetY });
+      }
+      points.push({
+        x: section.endPoint.x + offsetX,
+        y: section.endPoint.y + offsetY,
+      });
+    }
+    if (points.length > 0) {
+      out.set(edge.id, points);
+    }
+  }
+
+  for (const child of elkNode.children ?? []) {
+    collectEdgePoints(child, absPositions, out);
   }
 }
 
@@ -237,7 +278,8 @@ export function useElkLayout(
         'elk.direction': 'RIGHT',
         'elk.layered.spacing.nodeNodeBetweenLayers': '120',
         'elk.spacing.nodeNode': '60',
-        'elk.edgeRouting': 'SPLINES',
+        'elk.edgeRouting': 'ORTHOGONAL',
+        'elk.layered.edgeRouting.orthogonal.edgeSpacing': '15',
         'elk.layered.crossingMinimization.strategy': 'LAYER_SWEEP',
         'elk.hierarchyHandling': 'INCLUDE_CHILDREN',
       },
@@ -257,6 +299,10 @@ export function useElkLayout(
         for (const child of layouted.children ?? []) {
           collectPositions(child, 0, 0, absPositions);
         }
+
+        // Collect edge path points from ELK layout
+        const edgePoints = new Map<string, Array<{ x: number; y: number }>>();
+        collectEdgePoints(layouted, absPositions, edgePoints);
 
         // Build React Flow nodes with proper parentId and relative positions
         const nodes: Node[] = [];
@@ -332,15 +378,22 @@ export function useElkLayout(
         // Build edges with REVERSED direction:
         // Arrow goes FROM dependent TO dependency
         const edges: Edge[] = graphEdges.map((e, i) => {
+          const edgeId = `e-${e.from}-${e.to}-${i}`;
+          const elkPts = edgePoints.get(edgeId);
+          // ELK computes points in source->target direction, but we reverse
+          // the edge (source=e.to, target=e.from) for React Flow display.
+          // Reverse the points so the path goes from RF source to RF target.
+          const reversedPts = elkPts ? [...elkPts].reverse() : undefined;
           const data: GraphEdgeData = {
             type: 'depends_on',
             resolved: e.resolved,
             cross_repo: false,
             critical: criticalSet.has(e.from) && criticalSet.has(e.to),
             highlightState: 'none',
+            elkPoints: reversedPts,
           };
           return {
-            id: `e-${e.from}-${e.to}-${i}`,
+            id: edgeId,
             source: e.to,
             target: e.from,
             type: 'dependencyEdge',

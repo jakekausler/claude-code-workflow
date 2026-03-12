@@ -45,4 +45,6 @@ export interface GraphEdgeData {
   highlightState: HighlightState;
   /** True when any node in the graph is selected (used to decide dimming). */
   hasSelection?: boolean;
+  /** Pre-computed edge path points from ELK layout (absolute coordinates). */
+  elkPoints?: Array<{ x: number; y: number }>;
 }
