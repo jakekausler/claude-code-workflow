@@ -252,7 +252,7 @@ function buildCronScheduler(
  * Uses an absolute path to the compiled MCP server entry point.
  * Silently skips if the directory does not exist (e.g., in unit tests).
  */
-function ensureMcpConfig(targetDir: string, mock: boolean): void {
+function ensureMcpConfig(targetDir: string): void {
   try {
     const mcpConfigPath = path.join(targetDir, '.mcp.json');
     if (existsSync(mcpConfigPath)) return;
@@ -264,7 +264,7 @@ function ensureMcpConfig(targetDir: string, mock: boolean): void {
         kanban: {
           command: 'node',
           args: [mcpServerPath],
-          env: { KANBAN_MOCK: mock ? 'true' : '' },
+          env: { KANBAN_MOCK: process.env.KANBAN_REAL_REMOTES ? '' : 'true' },
         },
       },
     };
@@ -438,7 +438,7 @@ export function createOrchestrator(config: OrchestratorConfig, deps: Orchestrato
         });
 
         // Ensure MCP config is available in the session's working directory
-        ensureMcpConfig(config.repoPath, config.mock);
+        ensureMcpConfig(config.repoPath);
 
         const conversionPrompt = [
           `You are converting ticket ${ticketId} into implementable stages.`,
@@ -839,7 +839,7 @@ export function createOrchestrator(config: OrchestratorConfig, deps: Orchestrato
           const worktreeInfo = await worktreeManager.create(stage.worktreeBranch, config.repoPath);
 
           // Ensure MCP config is available in the worktree so Claude discovers the kanban MCP server
-          ensureMcpConfig(worktreeInfo.path, config.mock);
+          ensureMcpConfig(worktreeInfo.path);
 
           const sessionLogger = logger.createSessionLogger(stage.id, config.logDir);
 
