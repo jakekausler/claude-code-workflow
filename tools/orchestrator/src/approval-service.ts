@@ -130,8 +130,9 @@ export class ApprovalService extends EventEmitter implements ProtocolHandler {
     if (entry.type !== 'approval') throw new Error('Request is not a tool approval');
     this.pending.delete(requestId);
 
+    const originalInput = entry.input != null && typeof entry.input === 'object' ? entry.input : {};
     return decision === 'allow'
-      ? { behavior: 'allow', updatedInput: {} }
+      ? { behavior: 'allow', updatedInput: { ...originalInput } }
       : { behavior: 'deny', message: reason ?? 'Denied by user' };
   }
 
