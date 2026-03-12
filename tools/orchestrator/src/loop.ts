@@ -421,8 +421,8 @@ export function createOrchestrator(config: OrchestratorConfig, deps: Orchestrato
           '- Do NOT run kanban-cli sync or validate commands.',
           '- Do NOT modify the status field in the ticket frontmatter.',
           '- When you have finished creating all stage files and updating the ticket',
-          '  frontmatter (adding stages list), call the `conversion_complete` tool',
-          '  to signal completion.',
+          '  frontmatter (adding stages list), simply state that conversion is complete',
+          '  and stop. The system will detect completion automatically.',
           '- The system will handle syncing, status updates, and column computation.',
         ].join('\n');
 
@@ -438,6 +438,7 @@ export function createOrchestrator(config: OrchestratorConfig, deps: Orchestrato
             model: config.model,
             workflowEnv: config.workflowEnv,
             customPrompt: conversionPrompt,
+            autoCloseOnEndTurn: true,
             onSessionId: (sessionId: string) => {
               registry.activate(ticketId, sessionId);
             },
@@ -489,14 +490,31 @@ export function createOrchestrator(config: OrchestratorConfig, deps: Orchestrato
         };
         approvalService.on('session-signal', conversionSignalHandler);
 
-        // Handle session completion: run sync and clean up registry
+        // Handle session completion: sync, update status, sync again, and clean up registry.
+        // With autoCloseOnEndTurn the session ends when Claude finishes its turn without
+        // calling any tools, so the post-conversion work happens here rather than relying
+        // on a conversion_complete signal.
         sessionPromise
           .then(async (result) => {
             // Remove signal handler to avoid leaks
             approvalService.removeListener('session-signal', conversionSignalHandler);
 
-            // Run sync after conversion session completes
-            await runSync();
+            try {
+              // 1. Sync to pick up new stage files
+              await runSync();
+
+              // 2. Update ticket status to "Converted"
+              const ticketFm = await readFrontmatter(ticketFilePath);
+              ticketFm.data.status = 'Converted';
+              await writeFrontmatter(ticketFilePath, ticketFm.data, ticketFm.content);
+
+              // 3. Sync again to recompute kanban columns
+              await runSync();
+
+              logger.info('Post-conversion sync complete', { ticketId });
+            } catch (err) {
+              logger.warn('Post-conversion processing failed', { ticketId, error: String(err) });
+            }
 
             logger.info('Conversion session completed', {
               ticketId,
