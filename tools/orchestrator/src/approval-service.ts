@@ -131,8 +131,8 @@ export class ApprovalService extends EventEmitter implements ProtocolHandler {
     this.pending.delete(requestId);
 
     return decision === 'allow'
-      ? { behavior: 'allow' }
-      : { behavior: 'deny', message: reason };
+      ? { behavior: 'allow', updatedInput: {} }
+      : { behavior: 'deny', message: reason ?? 'Denied by user' };
   }
 
   resolveQuestion(
