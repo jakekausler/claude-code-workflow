@@ -187,6 +187,8 @@ export interface GraphNode {
   type: 'epic' | 'ticket' | 'stage';
   status: string;
   title: string;
+  epicId?: string;
+  ticketId?: string;
 }
 
 export interface GraphEdge {

@@ -26,7 +26,7 @@ function StageNode({ data }: NodeProps) {
 
   return (
     <>
-      <Handle type="target" position={Position.Top} className="!bg-green-400" />
+      <Handle type="target" position={Position.Left} className="!bg-green-400" />
       <div
         className={`
           flex rounded-md
@@ -38,6 +38,8 @@ function StageNode({ data }: NodeProps) {
           minHeight: 40,
           opacity: dimmed ? 0.3 : ss.opacity,
           background: ss.background,
+          outline: nodeData.isBlocked ? '2px solid #ef4444' : undefined,
+          outlineOffset: nodeData.isBlocked ? -1 : undefined,
         }}
       >
         <div
@@ -50,7 +52,7 @@ function StageNode({ data }: NodeProps) {
           </span>
         </div>
       </div>
-      <Handle type="source" position={Position.Bottom} className="!bg-green-400" />
+      <Handle type="source" position={Position.Right} className="!bg-green-400" />
     </>
   );
 }

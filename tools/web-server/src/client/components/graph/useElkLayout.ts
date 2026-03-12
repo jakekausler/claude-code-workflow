@@ -1,6 +1,12 @@
 /**
- * Hook that uses ELK (Eclipse Layout Kernel) to compute graph positions
- * for React Flow nodes and edges.
+ * Hook that uses ELK (Eclipse Layout Kernel) to compute a compound/nested
+ * graph layout for React Flow.
+ *
+ * Hierarchy:
+ *   Epic (group) -> Ticket (group) -> Stage (leaf)
+ *
+ * React Flow receives nested nodes via the `parentId` field, with positions
+ * relative to their parent.
  */
 
 import { useState, useEffect, useMemo, useRef } from 'react';
@@ -22,7 +28,6 @@ let elkInstance: ELKApi | null = null;
 
 async function getElk(): Promise<ELKApi> {
   if (elkInstance) return elkInstance;
-  // Dynamic import for the browser-compatible bundled build.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const mod = await import('elkjs/lib/elk.bundled.js') as any;
   const Ctor = mod.default ?? mod;
@@ -34,11 +39,14 @@ async function getElk(): Promise<ELKApi> {
 // Constants
 // ---------------------------------------------------------------------------
 
-const NODE_SIZES: Record<GraphNode['type'], { width: number; height: number }> = {
-  epic: { width: 200, height: 56 },
-  ticket: { width: 180, height: 48 },
-  stage: { width: 160, height: 40 },
-};
+/** Leaf (stage) node dimensions. */
+const STAGE_WIDTH = 160;
+const STAGE_HEIGHT = 40;
+
+/** Padding inside group containers. */
+const GROUP_PADDING = 40;
+/** Extra top padding for epic containers (room for label). */
+const EPIC_EXTRA_TOP = 30;
 
 /** Map GraphNode type to the React Flow custom node type name. */
 const RF_NODE_TYPE: Record<GraphNode['type'], string> = {
@@ -47,49 +55,35 @@ const RF_NODE_TYPE: Record<GraphNode['type'], string> = {
   stage: 'stageNode',
 };
 
-/** Layer index per node type - lower number = higher in the layout. */
-const LAYER_CONSTRAINT: Record<GraphNode['type'], number> = {
-  epic: 0,
-  ticket: 1,
-  stage: 2,
-};
-
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Build a stable fingerprint of the node/edge arrays for dependency comparison. */
+/** Build a stable fingerprint for dependency comparison. */
 function fingerprint(nodes: GraphNode[], edges: GraphEdge[]): string {
   const nIds = nodes.map((n) => n.id).sort().join(',');
-  const eIds = edges.map((e) => `${e.from}->${e.to}`).sort().join(',');
+  const eIds = edges.map((e) => `${e.from}->${e.to}:${e.resolved}`).sort().join(',');
   return `${nIds}|${eIds}`;
 }
 
 /**
- * Build a mapping from ticket id to a partition index based on its parent epic.
- * An edge from an epic to a non-epic node establishes the relationship.
+ * Recursively walk the laid-out ELK tree and collect absolute positions for
+ * every node. Returns a map of elkNodeId -> { x, y, width, height }.
  */
-function buildEpicPartitionMap(
-  nodes: GraphNode[],
-  edges: GraphEdge[],
-): Map<string, number> {
-  const epicIds = new Set(nodes.filter((n) => n.type === 'epic').map((n) => n.id));
-  const epicToPartition = new Map<string, number>();
-  let partitionIdx = 0;
-  for (const id of epicIds) {
-    epicToPartition.set(id, partitionIdx++);
+function collectPositions(
+  elkNode: ElkNode,
+  offsetX: number,
+  offsetY: number,
+  out: Map<string, { x: number; y: number; width: number; height: number }>,
+): void {
+  const x = (elkNode.x ?? 0) + offsetX;
+  const y = (elkNode.y ?? 0) + offsetY;
+  const w = elkNode.width ?? 0;
+  const h = elkNode.height ?? 0;
+  out.set(elkNode.id, { x, y, width: w, height: h });
+  for (const child of elkNode.children ?? []) {
+    collectPositions(child, x, y, out);
   }
-
-  const ticketPartition = new Map<string, number>();
-  for (const edge of edges) {
-    if (epicIds.has(edge.from) && !epicIds.has(edge.to)) {
-      const partition = epicToPartition.get(edge.from);
-      if (partition !== undefined) {
-        ticketPartition.set(edge.to, partition);
-      }
-    }
-  }
-  return ticketPartition;
 }
 
 // ---------------------------------------------------------------------------
@@ -111,7 +105,6 @@ export function useElkLayout(
   const [rfEdges, setRfEdges] = useState<Edge[]>([]);
   const [isLayouting, setIsLayouting] = useState(false);
 
-  // Track the fingerprint so we only recompute when the data actually changes.
   const fp = useMemo(() => fingerprint(graphNodes, graphEdges), [graphNodes, graphEdges]);
   const prevFp = useRef<string>('');
 
@@ -129,39 +122,127 @@ export function useElkLayout(
     setIsLayouting(true);
 
     const criticalSet = new Set(criticalPath);
-    const ticketPartition = buildEpicPartitionMap(graphNodes, graphEdges);
+
+    // Build lookup maps
+    const nodeMap = new Map(graphNodes.map((n) => [n.id, n]));
+    const nodeIdSet = new Set(graphNodes.map((n) => n.id));
+
+    // Determine which nodes are blocked (have unresolved incoming edges)
+    const blockedSet = new Set<string>();
+    for (const e of graphEdges) {
+      if (!e.resolved && nodeIdSet.has(e.to)) {
+        blockedSet.add(e.to);
+      }
+    }
+
+    // ------------------------------------------------------------------
+    // Build hierarchical ELK graph
+    // ------------------------------------------------------------------
+
+    // Group nodes by type
+    const epicNodes = graphNodes.filter((n) => n.type === 'epic');
+    const ticketNodes = graphNodes.filter((n) => n.type === 'ticket');
+    const stageNodes = graphNodes.filter((n) => n.type === 'stage');
+
+    // Build children maps
+    const ticketsByEpic = new Map<string, GraphNode[]>();
+    const stagesByTicket = new Map<string, GraphNode[]>();
+    const orphanTickets: GraphNode[] = [];
+    const orphanStages: GraphNode[] = [];
+
+    for (const t of ticketNodes) {
+      if (t.epicId && nodeIdSet.has(t.epicId)) {
+        const list = ticketsByEpic.get(t.epicId) ?? [];
+        list.push(t);
+        ticketsByEpic.set(t.epicId, list);
+      } else {
+        orphanTickets.push(t);
+      }
+    }
+
+    for (const s of stageNodes) {
+      if (s.ticketId && nodeIdSet.has(s.ticketId)) {
+        const list = stagesByTicket.get(s.ticketId) ?? [];
+        list.push(s);
+        stagesByTicket.set(s.ticketId, list);
+      } else {
+        orphanStages.push(s);
+      }
+    }
+
+    // Helper: create ELK node for a stage (leaf)
+    const makeStageElk = (s: GraphNode): ElkNode => ({
+      id: s.id,
+      width: STAGE_WIDTH,
+      height: STAGE_HEIGHT,
+    });
+
+    // Helper: create ELK node for a ticket (group or leaf)
+    const makeTicketElk = (t: GraphNode): ElkNode => {
+      const stages = stagesByTicket.get(t.id) ?? [];
+      if (stages.length === 0) {
+        // Ticket with no stage children — treat as leaf
+        return { id: t.id, width: 180, height: 48 };
+      }
+      return {
+        id: t.id,
+        layoutOptions: {
+          'elk.algorithm': 'layered',
+          'elk.direction': 'RIGHT',
+          'elk.padding': `[top=${GROUP_PADDING},left=${GROUP_PADDING},bottom=${GROUP_PADDING},right=${GROUP_PADDING}]`,
+          'elk.spacing.nodeNode': '20',
+          'elk.layered.spacing.nodeNodeBetweenLayers': '40',
+        },
+        children: stages.map(makeStageElk),
+      };
+    };
+
+    // Helper: create ELK node for an epic (group or leaf)
+    const makeEpicElk = (e: GraphNode): ElkNode => {
+      const tickets = ticketsByEpic.get(e.id) ?? [];
+      if (tickets.length === 0) {
+        return { id: e.id, width: 200, height: 56 };
+      }
+      return {
+        id: e.id,
+        layoutOptions: {
+          'elk.algorithm': 'layered',
+          'elk.direction': 'RIGHT',
+          'elk.padding': `[top=${GROUP_PADDING + EPIC_EXTRA_TOP},left=${GROUP_PADDING},bottom=${GROUP_PADDING},right=${GROUP_PADDING}]`,
+          'elk.spacing.nodeNode': '30',
+          'elk.layered.spacing.nodeNodeBetweenLayers': '50',
+        },
+        children: tickets.map(makeTicketElk),
+      };
+    };
+
+    // Root children: epics, orphan tickets, orphan stages
+    const rootChildren: ElkNode[] = [
+      ...epicNodes.map(makeEpicElk),
+      ...orphanTickets.map(makeTicketElk),
+      ...orphanStages.map(makeStageElk),
+    ];
+
+    // Edges at root level (ELK handles cross-hierarchy edges)
+    const elkEdges = graphEdges.map((e, i) => ({
+      id: `e-${e.from}-${e.to}-${i}`,
+      sources: [e.from],
+      targets: [e.to],
+    }));
 
     const elkGraph: ElkNode = {
       id: 'root',
       layoutOptions: {
         'elk.algorithm': 'layered',
-        'elk.direction': 'DOWN',
+        'elk.direction': 'RIGHT',
         'elk.layered.spacing.nodeNodeBetweenLayers': '80',
-        'elk.spacing.nodeNode': '40',
+        'elk.spacing.nodeNode': '50',
         'elk.edgeRouting': 'SPLINES',
         'elk.layered.crossingMinimization.strategy': 'LAYER_SWEEP',
+        'elk.hierarchyHandling': 'INCLUDE_CHILDREN',
       },
-      children: graphNodes.map((n) => {
-        const size = NODE_SIZES[n.type];
-        const opts: Record<string, string> = {
-          'elk.layered.layerConstraint': String(LAYER_CONSTRAINT[n.type]),
-        };
-        const partition = ticketPartition.get(n.id);
-        if (partition !== undefined) {
-          opts['elk.partitioning.partition'] = String(partition);
-        }
-        return {
-          id: n.id,
-          width: size.width,
-          height: size.height,
-          layoutOptions: opts,
-        };
-      }),
-      edges: graphEdges.map((e, i) => ({
-        id: `e-${e.from}-${e.to}-${i}`,
-        sources: [e.from],
-        targets: [e.to],
-      })),
+      children: rootChildren,
+      edges: elkEdges,
     };
 
     let cancelled = false;
@@ -171,28 +252,85 @@ export function useElkLayout(
       .then((layouted: ElkNode) => {
         if (cancelled) return;
 
-        const nodeMap = new Map(graphNodes.map((n) => [n.id, n]));
+        // Collect absolute positions for all nodes in the tree
+        const absPositions = new Map<string, { x: number; y: number; width: number; height: number }>();
+        for (const child of layouted.children ?? []) {
+          collectPositions(child, 0, 0, absPositions);
+        }
 
-        const nodes: Node[] = (layouted.children ?? []).map((elkChild) => {
-          const src = nodeMap.get(elkChild.id)!;
-          const size = NODE_SIZES[src.type];
+        // Build React Flow nodes with proper parentId and relative positions
+        const nodes: Node[] = [];
+
+        // Determine parent mapping for React Flow
+        const rfParentMap = new Map<string, string>();
+        for (const t of ticketNodes) {
+          if (t.epicId && nodeIdSet.has(t.epicId) && ticketsByEpic.has(t.epicId)) {
+            rfParentMap.set(t.id, t.epicId);
+          }
+        }
+        for (const s of stageNodes) {
+          if (s.ticketId && nodeIdSet.has(s.ticketId) && stagesByTicket.has(s.ticketId)) {
+            rfParentMap.set(s.id, s.ticketId);
+          }
+        }
+
+        for (const gn of graphNodes) {
+          const pos = absPositions.get(gn.id);
+          if (!pos) continue;
+
+          const parentId = rfParentMap.get(gn.id);
+          const parentPos = parentId ? absPositions.get(parentId) : undefined;
+
+          // Position relative to parent (or absolute if no parent)
+          const x = parentPos ? pos.x - parentPos.x : pos.x;
+          const y = parentPos ? pos.y - parentPos.y : pos.y;
+
+          const isGroup = (gn.type === 'epic' && (ticketsByEpic.get(gn.id)?.length ?? 0) > 0)
+            || (gn.type === 'ticket' && (stagesByTicket.get(gn.id)?.length ?? 0) > 0);
+
           const data: GraphNodeData = {
-            id: src.id,
-            type: src.type,
-            title: src.title,
-            status: src.status,
+            id: gn.id,
+            type: gn.type,
+            title: gn.title,
+            status: gn.status,
             highlightState: 'none',
+            isBlocked: blockedSet.has(gn.id),
           };
-          return {
-            id: elkChild.id,
-            type: RF_NODE_TYPE[src.type],
-            position: { x: elkChild.x ?? 0, y: elkChild.y ?? 0 },
+
+          const node: Node = {
+            id: gn.id,
+            type: RF_NODE_TYPE[gn.type],
+            position: { x, y },
             data: data as unknown as Record<string, unknown>,
-            width: size.width,
-            height: size.height,
           };
+
+          if (parentId) {
+            node.parentId = parentId;
+          }
+
+          if (isGroup) {
+            node.style = { width: pos.width, height: pos.height };
+          } else {
+            node.width = pos.width || undefined;
+            node.height = pos.height || undefined;
+          }
+
+          nodes.push(node);
+        }
+
+        // Sort so parents come before children in the array (React Flow requirement)
+        const nodeOrder = new Map<string, number>();
+        nodeOrder.set('epic', 0);
+        nodeOrder.set('ticket', 1);
+        nodeOrder.set('stage', 2);
+        nodes.sort((a, b) => {
+          const aType = (a.data as Record<string, unknown>).type as string;
+          const bType = (b.data as Record<string, unknown>).type as string;
+          return (nodeOrder.get(aType) ?? 0) - (nodeOrder.get(bType) ?? 0);
         });
 
+        // Build edges with REVERSED direction:
+        // Arrow goes FROM dependent TO dependency
         const edges: Edge[] = graphEdges.map((e, i) => {
           const data: GraphEdgeData = {
             type: 'depends_on',
@@ -203,8 +341,8 @@ export function useElkLayout(
           };
           return {
             id: `e-${e.from}-${e.to}-${i}`,
-            source: e.from,
-            target: e.to,
+            source: e.to,
+            target: e.from,
             type: 'dependencyEdge',
             data: data as unknown as Record<string, unknown>,
           };

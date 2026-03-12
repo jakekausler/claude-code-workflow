@@ -42,6 +42,8 @@ export interface GraphNode {
   status: string;
   title: string;
   repo?: string;
+  epicId?: string;
+  ticketId?: string;
 }
 
 export interface GraphEdge {
@@ -211,7 +213,7 @@ export function buildGraph(input: BuildGraphInput): GraphOutput {
     nodeToRepo.set(epic.id, epic.repo);
   }
   for (const ticket of filteredTickets) {
-    const node: GraphNode = { id: ticket.id, type: 'ticket', status: ticket.status, title: ticket.title };
+    const node: GraphNode = { id: ticket.id, type: 'ticket', status: ticket.status, title: ticket.title, epicId: ticket.epic_id };
     if (isGlobal && ticket.repo) {
       node.repo = ticket.repo;
     }
@@ -220,7 +222,7 @@ export function buildGraph(input: BuildGraphInput): GraphOutput {
     nodeToRepo.set(ticket.id, ticket.repo);
   }
   for (const stage of filteredStages) {
-    const node: GraphNode = { id: stage.id, type: 'stage', status: stage.status, title: stage.title };
+    const node: GraphNode = { id: stage.id, type: 'stage', status: stage.status, title: stage.title, epicId: stage.epic_id, ticketId: stage.ticket_id };
     if (isGlobal && stage.repo) {
       node.repo = stage.repo;
     }

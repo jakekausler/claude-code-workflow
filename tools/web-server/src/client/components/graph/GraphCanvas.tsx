@@ -56,13 +56,13 @@ function GraphCanvasInner({
         <defs>
           <marker
             id="arrowhead"
-            markerWidth="10"
-            markerHeight="7"
-            refX="10"
-            refY="3.5"
+            markerWidth="6"
+            markerHeight="4"
+            refX="6"
+            refY="2"
             orient="auto"
           >
-            <polygon points="0 0, 10 3.5, 0 7" fill="#94a3b8" />
+            <polygon points="0 0, 6 2, 0 4" fill="#94a3b8" />
           </marker>
         </defs>
       </svg>

@@ -21,6 +21,8 @@ export interface GraphNodeData {
   highlightState: HighlightState;
   /** True when any node in the graph is selected (used to decide dimming). */
   hasSelection?: boolean;
+  /** True when this node has any unresolved incoming dependency. */
+  isBlocked?: boolean;
 }
 
 // ---------------------------------------------------------------------------

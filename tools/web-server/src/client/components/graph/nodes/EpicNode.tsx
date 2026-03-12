@@ -17,40 +17,51 @@ function highlightClasses(state: GraphNodeData['highlightState']): string {
 }
 
 const BORDER_COLOR = '#8b5cf6';
-const BASE_BG = '#faf5ff'; // purple-50
+const HEADER_BG = '#faf5ff'; // purple-50
 
 function EpicNode({ data }: NodeProps) {
   const nodeData = data as unknown as GraphNodeData;
   const dimmed = nodeData.hasSelection && nodeData.highlightState === 'none';
-  const ss = getStatusStyle(nodeData.status, BASE_BG);
+  const ss = getStatusStyle(nodeData.status, HEADER_BG);
 
   return (
     <>
-      <Handle type="target" position={Position.Top} className="!bg-purple-400" />
+      <Handle type="target" position={Position.Left} className="!bg-purple-400" />
       <div
         className={`
-          flex rounded-md
-          shadow-sm
+          rounded-md
           ${highlightClasses(nodeData.highlightState)}
         `}
         style={{
-          width: 200,
-          minHeight: 56,
-          opacity: dimmed ? 0.3 : ss.opacity,
-          background: ss.background,
+          width: '100%',
+          height: '100%',
+          opacity: dimmed ? 0.3 : 1,
+          border: nodeData.isBlocked ? '2px solid #ef4444' : '1px solid #e2e8f0',
+          borderLeft: `3px solid ${nodeData.isBlocked ? '#ef4444' : BORDER_COLOR}`,
+          borderRadius: 6,
+          background: 'transparent',
         }}
       >
+        {/* Header bar */}
         <div
-          className="w-1 shrink-0 rounded-l-md"
-          style={{ backgroundColor: BORDER_COLOR }}
-        />
-        <div title={`${nodeData.id} — ${nodeData.status}`} className="px-3 py-2">
-          <span className={`block text-sm font-medium ${ss.textClass || 'text-purple-900'}`}>
+          style={{
+            background: ss.background,
+            opacity: ss.opacity,
+            borderTopLeftRadius: 5,
+            borderTopRightRadius: 5,
+            padding: '4px 12px',
+            borderBottom: '1px solid #e2e8f0',
+          }}
+        >
+          <span
+            className={`block text-sm font-medium ${ss.textClass || 'text-purple-900'}`}
+            title={`${nodeData.id} — ${nodeData.status}`}
+          >
             {nodeData.title}
           </span>
         </div>
       </div>
-      <Handle type="source" position={Position.Bottom} className="!bg-purple-400" />
+      <Handle type="source" position={Position.Right} className="!bg-purple-400" />
     </>
   );
 }
