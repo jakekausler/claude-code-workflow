@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { isMockMode, successResult, errorResult } from '../types.js';
 import type { ToolResult } from '../types.js';
 import type { MockState } from '../state.js';
+import { log } from '../logger.js';
 
 export interface EnrichToolDeps {
   mockState: MockState | null;
@@ -14,7 +15,9 @@ export async function handleEnrichTicket(
   args: { ticketPath: string },
   deps: EnrichToolDeps,
 ): Promise<ToolResult> {
+  log('INFO', 'enrich_ticket called', { ticketPath: args.ticketPath, mockMode: isMockMode() });
   if (isMockMode() && deps.mockState) {
+    log('INFO', 'enrich_ticket returning mock data');
     return successResult({
       ticketId: args.ticketPath,
       enrichmentFilePath: null,
@@ -22,6 +25,7 @@ export async function handleEnrichTicket(
       linkResults: [],
     });
   }
+  log('ERROR', 'enrich_ticket failed', { error: 'Real enrichment not yet configured' });
   return errorResult('Real enrichment not yet configured');
 }
 

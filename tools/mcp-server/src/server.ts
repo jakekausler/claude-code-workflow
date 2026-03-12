@@ -8,6 +8,7 @@ import { registerConfluenceTools } from './tools/confluence.js';
 import { registerSlackTools } from './tools/slack.js';
 import { registerMockAdminTools } from './tools/mock-admin.js';
 import { registerOrchestratorSignalTools } from './tools/orchestrator-signals.js';
+import { log } from './logger.js';
 import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -38,20 +39,27 @@ export function createKanbanMcpServer(): McpServer {
   }
 
   // Register all tool groups
+  log('INFO', 'Registered tool', { name: 'jira' });
   registerJiraTools(server, { mockState });
+  log('INFO', 'Registered tool', { name: 'pr' });
   registerPrTools(server, { mockState });
+  log('INFO', 'Registered tool', { name: 'enrich' });
   registerEnrichTools(server, { mockState });
+  log('INFO', 'Registered tool', { name: 'confluence' });
   registerConfluenceTools(server, { mockState });
+  log('INFO', 'Registered tool', { name: 'slack' });
   registerSlackTools(server, {
     mockState,
     webhookUrl: process.env.WORKFLOW_SLACK_WEBHOOK,
   });
 
   // Orchestrator signal tools (always registered — they are lightweight acknowledgement stubs)
+  log('INFO', 'Registered tool', { name: 'orchestrator-signals' });
   registerOrchestratorSignalTools(server);
 
   // Mock admin tools only in mock mode
   if (mockState) {
+    log('INFO', 'Registered tool', { name: 'mock-admin' });
     registerMockAdminTools(server, { mockState });
   }
 
