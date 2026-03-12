@@ -25,20 +25,26 @@ function EpicNode({ data }: NodeProps) {
       <Handle type="target" position={Position.Top} className="!bg-purple-400" />
       <div
         className={`
-          rounded-md border-l-4
-          bg-purple-50 px-3 py-2 shadow-sm
+          flex rounded-md
+          bg-purple-50 shadow-sm
           ${highlightClasses(nodeData.highlightState)}
         `}
         style={{
-          borderLeftColor: statusBorderColor(nodeData.status),
           width: 200,
           minHeight: 56,
           opacity: dimmed ? 0.3 : 1,
         }}
       >
-        <span className="block text-sm font-medium text-purple-900">
-          {nodeData.title}
-        </span>
+        <div
+          title={nodeData.status}
+          className="w-1 shrink-0 rounded-l-md"
+          style={{ backgroundColor: statusBorderColor(nodeData.status) }}
+        />
+        <div title={nodeData.id} className="px-3 py-2">
+          <span className="block text-sm font-medium text-purple-900">
+            {nodeData.title}
+          </span>
+        </div>
       </div>
       <Handle type="source" position={Position.Bottom} className="!bg-purple-400" />
     </>

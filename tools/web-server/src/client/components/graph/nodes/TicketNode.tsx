@@ -25,20 +25,26 @@ function TicketNode({ data }: NodeProps) {
       <Handle type="target" position={Position.Top} className="!bg-blue-400" />
       <div
         className={`
-          rounded-md border-l-4
-          bg-blue-50 px-3 py-1.5 shadow-sm
+          flex rounded-md
+          bg-blue-50 shadow-sm
           ${highlightClasses(nodeData.highlightState)}
         `}
         style={{
-          borderLeftColor: statusBorderColor(nodeData.status),
           width: 180,
           minHeight: 48,
           opacity: dimmed ? 0.3 : 1,
         }}
       >
-        <span className="block text-sm font-medium text-blue-900">
-          {nodeData.title}
-        </span>
+        <div
+          title={nodeData.status}
+          className="w-1 shrink-0 rounded-l-md"
+          style={{ backgroundColor: statusBorderColor(nodeData.status) }}
+        />
+        <div title={nodeData.id} className="px-3 py-1.5">
+          <span className="block text-sm font-medium text-blue-900">
+            {nodeData.title}
+          </span>
+        </div>
       </div>
       <Handle type="source" position={Position.Bottom} className="!bg-blue-400" />
     </>
