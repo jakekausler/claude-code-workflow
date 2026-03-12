@@ -309,7 +309,7 @@ export function useElkLayout(
           }
 
           if (isGroup) {
-            node.style = { width: pos.width, height: pos.height };
+            node.style = { width: pos.width, height: pos.height, overflow: 'visible' };
           } else {
             node.width = pos.width || undefined;
             node.height = pos.height || undefined;
@@ -344,6 +344,7 @@ export function useElkLayout(
             source: e.to,
             target: e.from,
             type: 'dependencyEdge',
+            zIndex: 1000,
             data: data as unknown as Record<string, unknown>,
           };
         });

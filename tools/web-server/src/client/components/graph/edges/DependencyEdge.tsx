@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import { BaseEdge, getBezierPath, type EdgeProps } from '@xyflow/react';
+import { BaseEdge, getSmoothStepPath, type EdgeProps } from '@xyflow/react';
 import type { GraphEdgeData } from '../types.js';
 
 /** Derive stroke color and width from edge data. */
@@ -50,13 +50,14 @@ function DependencyEdge(props: EdgeProps) {
 
   const edgeData = data as unknown as GraphEdgeData;
 
-  const [edgePath] = getBezierPath({
+  const [edgePath] = getSmoothStepPath({
     sourceX,
     sourceY,
     targetX,
     targetY,
     sourcePosition,
     targetPosition,
+    borderRadius: 8,
   });
 
   const style = edgeStyle(edgeData);
