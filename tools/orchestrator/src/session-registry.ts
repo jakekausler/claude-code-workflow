@@ -88,6 +88,9 @@ export class SessionRegistry extends EventEmitter {
       if (!alive) {
         cleaned.push(entry.stageId);
         this.end(entry.stageId);
+        // TODO: Zombie cleanup should also release the stage's frontmatter lock
+        // (via locker.releaseLock). We don't have the stageFilePath here; wire it
+        // through SessionEntry when available.
       }
     }
     return cleaned;

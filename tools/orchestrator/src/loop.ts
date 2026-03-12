@@ -726,7 +726,16 @@ export function createOrchestrator(config: OrchestratorConfig, deps: Orchestrato
 
           const stageFilePath = resolveStageFilePath(config.repoPath, stage);
 
-          await locker.acquireLock(stageFilePath);
+          let lockAcquired = false;
+          try {
+            await locker.acquireLock(stageFilePath);
+            lockAcquired = true;
+          } catch (lockErr) {
+            logger.warn('Stage locked, skipping', { stageId: stage.id, error: String(lockErr) });
+            continue;
+          }
+
+          try {
           let statusBefore = await locker.readStatus(stageFilePath);
 
           // Onboard "Not Started" stages to entry phase
@@ -885,6 +894,13 @@ export function createOrchestrator(config: OrchestratorConfig, deps: Orchestrato
               const error = err instanceof Error ? err : new Error(String(err));
               return handleSessionError(stage.id, workerInfo, error, sessionLogger);
             });
+          } catch (err) {
+            logger.warn('Error processing stage, releasing lock', { stageId: stage.id, error: String(err) });
+            if (lockAcquired) {
+              await locker.releaseLock(stageFilePath).catch(() => {});
+            }
+            continue;
+          }
         }
 
         if (spawnedCount === 0 && activeWorkers.size === 0) {
