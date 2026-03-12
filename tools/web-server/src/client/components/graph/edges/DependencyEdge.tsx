@@ -60,7 +60,7 @@ function DependencyEdge(props: EdgeProps) {
   });
 
   const style = edgeStyle(edgeData);
-  const dimmed = edgeData.highlightState === 'none';
+  const dimmed = edgeData.hasSelection && edgeData.highlightState === 'none';
 
   return (
     <g opacity={dimmed ? 0.15 : 1}>

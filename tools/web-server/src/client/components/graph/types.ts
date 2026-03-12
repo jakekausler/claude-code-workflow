@@ -19,6 +19,8 @@ export interface GraphNodeData {
   status: string;
   repo?: string;
   highlightState: HighlightState;
+  /** True when any node in the graph is selected (used to decide dimming). */
+  hasSelection?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -39,4 +41,6 @@ export interface GraphEdgeData {
   cross_repo?: boolean;
   critical?: boolean;
   highlightState: HighlightState;
+  /** True when any node in the graph is selected (used to decide dimming). */
+  hasSelection?: boolean;
 }

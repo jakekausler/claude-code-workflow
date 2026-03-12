@@ -120,6 +120,7 @@ export function DependencyGraph() {
       data: {
         ...node.data,
         highlightState: getNodeHighlight(node.id),
+        hasSelection: true,
       },
     }));
   }, [layoutNodes, selectedNode, getNodeHighlight]);
@@ -131,6 +132,7 @@ export function DependencyGraph() {
       data: {
         ...edge.data,
         highlightState: getEdgeHighlight(edge.source, edge.target),
+        hasSelection: true,
       },
     }));
   }, [layoutEdges, selectedNode, getEdgeHighlight]);
