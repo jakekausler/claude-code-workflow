@@ -1,7 +1,7 @@
 import { memo } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import type { GraphNodeData } from '../types.js';
-import { statusBorderColor } from './statusColor.js';
+import { getStatusStyle } from './statusStyle.js';
 
 function highlightClasses(state: GraphNodeData['highlightState']): string {
   switch (state) {
@@ -16,9 +16,13 @@ function highlightClasses(state: GraphNodeData['highlightState']): string {
   }
 }
 
+const BORDER_COLOR = '#3b82f6';
+const BASE_BG = '#eff6ff'; // blue-50
+
 function TicketNode({ data }: NodeProps) {
   const nodeData = data as unknown as GraphNodeData;
   const dimmed = nodeData.hasSelection && nodeData.highlightState === 'none';
+  const ss = getStatusStyle(nodeData.status, BASE_BG);
 
   return (
     <>
@@ -26,22 +30,22 @@ function TicketNode({ data }: NodeProps) {
       <div
         className={`
           flex rounded-md
-          bg-blue-50 shadow-sm
+          shadow-sm
           ${highlightClasses(nodeData.highlightState)}
         `}
         style={{
           width: 180,
           minHeight: 48,
-          opacity: dimmed ? 0.3 : 1,
+          opacity: dimmed ? 0.3 : ss.opacity,
+          background: ss.background,
         }}
       >
         <div
-          title={nodeData.status}
           className="w-1 shrink-0 rounded-l-md"
-          style={{ backgroundColor: statusBorderColor(nodeData.status) }}
+          style={{ backgroundColor: BORDER_COLOR }}
         />
-        <div title={nodeData.id} className="px-3 py-1.5">
-          <span className="block text-sm font-medium text-blue-900">
+        <div title={`${nodeData.id} — ${nodeData.status}`} className="px-3 py-1.5">
+          <span className={`block text-sm font-medium ${ss.textClass || 'text-blue-900'}`}>
             {nodeData.title}
           </span>
         </div>
