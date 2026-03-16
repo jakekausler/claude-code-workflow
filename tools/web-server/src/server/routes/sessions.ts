@@ -210,11 +210,11 @@ const sessionsPlugin: FastifyPluginCallback = (app, _opts, done) => {
       let projectId: string | null = null;
       const currentSession = await app.dataService.stageSessions.getCurrentSession(stageId);
       if (currentSession?.worktree_path) {
-        projectId = currentSession.worktree_path.replace(/\//g, '-');
+        projectId = currentSession.worktree_path.replace(/[/.]/g, '-');
       } else {
         const repo = await app.dataService.repos.findById(stage.repo_id);
         projectId = repo
-          ? repo.path.replace(/\//g, '-')
+          ? repo.path.replace(/[/.]/g, '-')
           : null;
       }
 
@@ -246,12 +246,12 @@ const sessionsPlugin: FastifyPluginCallback = (app, _opts, done) => {
 
       // Derive projectId from repo path (same logic as existing /session endpoint)
       const repo = await app.dataService.repos.findById(stage.repo_id);
-      const defaultProjectId = repo ? repo.path.replace(/\//g, '-') : null;
+      const defaultProjectId = repo ? repo.path.replace(/[/.]/g, '-') : null;
 
       return {
         sessions: rows.map((r: StageSessionRow) => ({
           sessionId: r.session_id,
-          projectId: r.worktree_path ? r.worktree_path.replace(/\//g, '-') : defaultProjectId,
+          projectId: r.worktree_path ? r.worktree_path.replace(/[/.]/g, '-') : defaultProjectId,
           phase: r.phase,
           startedAt: r.started_at,
           endedAt: r.ended_at,
@@ -284,7 +284,7 @@ const sessionsPlugin: FastifyPluginCallback = (app, _opts, done) => {
 
       // Derive projectId from repo path
       const repo = await app.dataService.repos.findById(ticket.repo_id);
-      const projectId = repo ? repo.path.replace(/\//g, '-') : null;
+      const projectId = repo ? repo.path.replace(/[/.]/g, '-') : null;
 
       return {
         sessions: rows.map((r: TicketSessionRow) => ({
