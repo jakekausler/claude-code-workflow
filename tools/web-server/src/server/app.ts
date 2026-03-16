@@ -219,17 +219,24 @@ export async function createServer(
         dataService &&
         !persistedStageSessions.has(entry.stageId)
       ) {
-        persistedStageSessions.add(entry.stageId);
         // Fetch the stage to get its current status as the phase
         dataService.stages
           .findById(entry.stageId)
           .then((stage) => {
-            if (stage) {
-              const phase = stage.status ?? 'unknown';
-              dataService.stageSessions.addSession(entry.stageId, entry.sessionId, phase).catch(() => {});
-            }
+            // Use stage status if found, otherwise default to 'Design'
+            const phase = stage?.status ?? 'Design';
+            return dataService.stageSessions.addSession(entry.stageId, entry.sessionId, phase);
           })
-          .catch(() => {});
+          .then(() => {
+            // Only mark as persisted after successful addSession
+            persistedStageSessions.add(entry.stageId);
+          })
+          .catch((error) => {
+            app.log.warn(
+              { error, stageId: entry.stageId, sessionId: entry.sessionId },
+              'Failed to persist stage session',
+            );
+          });
       }
 
       broadcastEvent('board-update', {
