@@ -30,6 +30,9 @@ export class KanbanDatabase {
     // Enable WAL mode for better concurrency
     this.db.pragma('journal_mode = WAL');
 
+    // Retry for up to 5 seconds on lock contention (SQLITE_BUSY)
+    this.db.pragma('busy_timeout = 5000');
+
     // Enable foreign key enforcement
     this.db.pragma('foreign_keys = ON');
 
