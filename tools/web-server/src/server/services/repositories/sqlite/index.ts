@@ -274,8 +274,8 @@ export class SqliteStageSessionRepository implements IStageSessionRepository {
     return this.inner.getSessionsByStageId(stageId).map(normaliseStageSession);
   }
 
-  async addSession(stageId: string, sessionId: string, phase: string): Promise<void> {
-    this.inner.addSession(stageId, sessionId, phase);
+  async addSession(stageId: string, sessionId: string, phase: string, worktreePath?: string): Promise<void> {
+    this.inner.addSession(stageId, sessionId, phase, worktreePath);
   }
 
   async endSession(stageId: string, sessionId: string): Promise<void> {

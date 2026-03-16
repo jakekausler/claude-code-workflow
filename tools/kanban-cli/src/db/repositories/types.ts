@@ -88,6 +88,7 @@ export interface StageSessionRow {
   started_at: string;
   ended_at: string | null;
   is_current: number;
+  worktree_path: string | null;
 }
 
 export interface TicketSessionRow {

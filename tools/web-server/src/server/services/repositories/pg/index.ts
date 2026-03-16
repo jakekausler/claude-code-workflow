@@ -455,7 +455,7 @@ export class PgStageSessionRepository implements IStageSessionRepository {
     return rows;
   }
 
-  async addSession(stageId: string, sessionId: string, phase: string): Promise<void> {
+  async addSession(stageId: string, sessionId: string, phase: string, worktreePath?: string): Promise<void> {
     const now = new Date().toISOString();
     const client = await this.pool.connect();
     try {
@@ -466,9 +466,9 @@ export class PgStageSessionRepository implements IStageSessionRepository {
         [now, stageId],
       );
       await client.query(
-        `INSERT INTO stage_sessions (stage_id, session_id, phase, started_at, is_current)
-         VALUES ($1, $2, $3, $4, 1)`,
-        [stageId, sessionId, phase, now],
+        `INSERT INTO stage_sessions (stage_id, session_id, phase, started_at, is_current, worktree_path)
+         VALUES ($1, $2, $3, $4, 1, $5)`,
+        [stageId, sessionId, phase, now, worktreePath ?? null],
       );
       await client.query('COMMIT');
     } catch (err) {

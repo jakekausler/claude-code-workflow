@@ -111,13 +111,14 @@ CREATE TABLE IF NOT EXISTS mr_comment_tracking (
 
 export const CREATE_STAGE_SESSIONS_TABLE = `
 CREATE TABLE IF NOT EXISTS stage_sessions (
-  id          INTEGER PRIMARY KEY AUTOINCREMENT,
-  stage_id    TEXT NOT NULL REFERENCES stages(id),
-  session_id  TEXT NOT NULL,
-  phase       TEXT NOT NULL,
-  started_at  TEXT NOT NULL,
-  ended_at    TEXT,
-  is_current  INTEGER DEFAULT 0,
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  stage_id      TEXT NOT NULL REFERENCES stages(id),
+  session_id    TEXT NOT NULL,
+  phase         TEXT NOT NULL,
+  started_at    TEXT NOT NULL,
+  ended_at      TEXT,
+  is_current    INTEGER DEFAULT 0,
+  worktree_path TEXT,
   UNIQUE(stage_id, session_id)
 )`;
 
@@ -168,6 +169,7 @@ export const ALTER_TABLE_MIGRATIONS = [
    SELECT id, session_id, COALESCE(kanban_column, 'unknown'), last_synced, 1
    FROM stages
    WHERE session_id IS NOT NULL`,
+  'ALTER TABLE stage_sessions ADD COLUMN worktree_path TEXT',
 ] as const;
 
 export const ALL_CREATE_STATEMENTS = [

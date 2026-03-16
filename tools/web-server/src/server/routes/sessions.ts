@@ -205,12 +205,18 @@ const sessionsPlugin: FastifyPluginCallback = (app, _opts, done) => {
         return reply.status(404).send({ error: 'No session linked to this stage' });
       }
 
-      // Derive projectId from the repo path so the client can build a
-      // `/sessions/:projectId/:sessionId` URL without extra round-trips.
-      const repo = await app.dataService.repos.findById(stage.repo_id);
-      const projectId = repo
-        ? repo.path.replace(/\//g, '-')
-        : null;
+      // Derive projectId from the stage session's worktree_path if available (for worktree sessions),
+      // otherwise fall back to the repo path (for repo-based sessions).
+      let projectId: string | null = null;
+      const currentSession = await app.dataService.stageSessions.getCurrentSession(stageId);
+      if (currentSession?.worktree_path) {
+        projectId = currentSession.worktree_path.replace(/\//g, '-');
+      } else {
+        const repo = await app.dataService.repos.findById(stage.repo_id);
+        projectId = repo
+          ? repo.path.replace(/\//g, '-')
+          : null;
+      }
 
       return { sessionId: stage.session_id, stageId, projectId };
     },
@@ -240,12 +246,12 @@ const sessionsPlugin: FastifyPluginCallback = (app, _opts, done) => {
 
       // Derive projectId from repo path (same logic as existing /session endpoint)
       const repo = await app.dataService.repos.findById(stage.repo_id);
-      const projectId = repo ? repo.path.replace(/\//g, '-') : null;
+      const defaultProjectId = repo ? repo.path.replace(/\//g, '-') : null;
 
       return {
         sessions: rows.map((r: StageSessionRow) => ({
           sessionId: r.session_id,
-          projectId,
+          projectId: r.worktree_path ? r.worktree_path.replace(/\//g, '-') : defaultProjectId,
           phase: r.phase,
           startedAt: r.started_at,
           endedAt: r.ended_at,

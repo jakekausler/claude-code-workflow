@@ -21,7 +21,7 @@ export class StageSessionRepository {
   }
 
   /** Add a new current session for a stage, ending any previous current session. */
-  addSession(stageId: string, sessionId: string, phase: string): void {
+  addSession(stageId: string, sessionId: string, phase: string, worktreePath?: string): void {
     const now = new Date().toISOString();
     const txn = this.db.raw().transaction(() => {
       // Clear previous current session for this stage
@@ -37,10 +37,10 @@ export class StageSessionRepository {
       this.db
         .raw()
         .prepare(
-          `INSERT INTO stage_sessions (stage_id, session_id, phase, started_at, is_current)
-           VALUES (?, ?, ?, ?, 1)`
+          `INSERT INTO stage_sessions (stage_id, session_id, phase, started_at, is_current, worktree_path)
+           VALUES (?, ?, ?, ?, 1, ?)`
         )
-        .run(stageId, sessionId, phase, now);
+        .run(stageId, sessionId, phase, now, worktreePath ?? null);
     });
     txn();
   }

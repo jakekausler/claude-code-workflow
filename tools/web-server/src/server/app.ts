@@ -225,7 +225,7 @@ export async function createServer(
           .then((stage) => {
             // Use stage status if found, otherwise default to 'Design'
             const phase = stage?.status ?? 'Design';
-            return dataService.stageSessions.addSession(entry.stageId, entry.sessionId, phase);
+            return dataService.stageSessions.addSession(entry.stageId, entry.sessionId, phase, entry.worktreePath);
           })
           .then(() => {
             // Only mark as persisted after successful addSession

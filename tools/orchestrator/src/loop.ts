@@ -852,6 +852,20 @@ export function createOrchestrator(config: OrchestratorConfig, deps: Orchestrato
         logger.warn('Stale lock recovery failed', { error: String(err) });
       }
 
+      // Helper to run kanban-cli sync
+      const runSync = (): Promise<void> => {
+        const __dirname = path.dirname(fileURLToPath(import.meta.url));
+        const kanbanCliBin = path.resolve(__dirname, '../../kanban-cli/dist/cli/index.js');
+        return new Promise<void>((resolve) => {
+          execFile('node', [kanbanCliBin, 'sync', '--repo', config.repoPath], { timeout: 30_000 }, (err, _stdout, stderr) => {
+            if (err) {
+              logger.warn('Sync after onboarding failed', { repoPath: config.repoPath, error: stderr || err.message });
+            }
+            resolve();
+          });
+        });
+      };
+
       // Periodic zombie session detection (every 60 s)
       zombieCheckInterval = setInterval(() => {
         const cleaned = registry.checkZombies();
@@ -938,6 +952,8 @@ export function createOrchestrator(config: OrchestratorConfig, deps: Orchestrato
               await writeFrontmatter(stageFilePath, data, content);
               statusBefore = entryState.status;
               logger.info('Onboarded stage to entry phase', { stageId: stage.id, status: entryState.status });
+              // Sync DB after onboarding so the web server sees the new status
+              await runSync();
             }
           }
 

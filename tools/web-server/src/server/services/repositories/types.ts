@@ -80,6 +80,7 @@ export interface StageSessionRow {
   started_at: string;
   ended_at: string | null;
   is_current: boolean;
+  worktree_path: string | null;
 }
 
 export interface TicketSessionRow {
@@ -207,7 +208,7 @@ export interface IDependencyRepository {
 
 export interface IStageSessionRepository {
   getSessionsByStageId(stageId: string): Promise<StageSessionRow[]>;
-  addSession(stageId: string, sessionId: string, phase: string): Promise<void>;
+  addSession(stageId: string, sessionId: string, phase: string, worktreePath?: string): Promise<void>;
   endSession(stageId: string, sessionId: string): Promise<void>;
   getCurrentSession(stageId: string): Promise<StageSessionRow | null>;
   deleteByStageId(stageId: string): Promise<void>;
