@@ -7,7 +7,7 @@ import { DataService } from './services/data-service.js';
 import { OrchestratorClient } from './services/orchestrator-client.js';
 import { SessionPipeline } from './services/session-pipeline.js';
 import { FileWatcher } from './services/file-watcher.js';
-import { LocalDeploymentContext, HostedDeploymentContext } from './deployment/index.js';
+import { LocalDeploymentContext, HostedDeploymentContext, LocalPgDeploymentContext } from './deployment/index.js';
 import { IssueSyncService } from './services/issue-sync-service.js';
 import { IssueSyncScheduler } from './services/issue-sync-scheduler.js';
 
@@ -20,22 +20,27 @@ const orchestratorWsUrl =
 const orchestratorClient = new OrchestratorClient(orchestratorWsUrl);
 
 const isHosted = process.env.DEPLOYMENT_MODE === 'hosted';
+const isLocalPg = process.env.DEPLOYMENT_MODE === 'local-pg';
 
 // Create deployment context and data service based on mode
-let deploymentContext: LocalDeploymentContext | HostedDeploymentContext;
+let deploymentContext: LocalDeploymentContext | HostedDeploymentContext | LocalPgDeploymentContext;
 let dataService: DataService;
 
 if (isHosted) {
   const hostedCtx = await HostedDeploymentContext.create();
   deploymentContext = hostedCtx;
   dataService = DataService.fromPool(hostedCtx.getPool());
+} else if (isLocalPg) {
+  const localPgCtx = await LocalPgDeploymentContext.create();
+  deploymentContext = localPgCtx;
+  dataService = DataService.fromPool(localPgCtx.getPool());
 } else {
   deploymentContext = new LocalDeploymentContext();
   const db = new KanbanDatabase(dbPath);
   dataService = DataService.fromSqlite(db);
 }
 
-// SessionPipeline and FileWatcher are filesystem-dependent — only for local mode
+// SessionPipeline and FileWatcher are filesystem-dependent — only for local/local-pg modes
 let sessionPipeline: SessionPipeline | undefined;
 let fileWatcher: FileWatcher | undefined;
 
@@ -56,7 +61,7 @@ const claudeProjectsDir =
 
 // Issue sync service and scheduler
 const syncService = new IssueSyncService({
-  pool: isHosted ? (deploymentContext as HostedDeploymentContext).getPool() : undefined,
+  pool: isHosted ? (deploymentContext as HostedDeploymentContext).getPool() : isLocalPg ? (deploymentContext as LocalPgDeploymentContext).getPool() : undefined,
   dataService,
 });
 const syncScheduler = new IssueSyncScheduler(syncService, {

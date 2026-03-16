@@ -7,6 +7,9 @@ export { DirectFileSystemProvider } from './local/direct-fs-provider.js';
 export { NoopAuthProvider } from './local/noop-auth-provider.js';
 export { BroadcastAllSSE } from './local/broadcast-all-sse.js';
 
+// Local + PostgreSQL implementations
+export { LocalPgDeploymentContext } from './local-pg/local-pg-deployment-context.js';
+
 // Hosted implementations
 export { HostedDeploymentContext } from './hosted/hosted-deployment-context.js';
 export { HostedAuthProvider } from './hosted/hosted-auth-provider.js';
