@@ -59,9 +59,9 @@ glab mr view --output json | jq '.iid'
 ## Review Cycle Workflow
 
 ```
-1. Transition stage status to "Addressing Comments":
-   - Update stage YAML frontmatter: status → "Addressing Comments"
-   - Run `kanban-cli sync --stage STAGE-XXX-YYY-ZZZ`
+1. Call transition_stage MCP tool (as main agent, not delegated):
+   - Target: "Addressing Comments"
+   - This signals the orchestrator to update status and continue session
 
 2. Fetch review comments from MR/PR:
 
@@ -240,10 +240,9 @@ glab mr view --output json | jq '.iid'
      -f resolved=true
    ```
 
-10. Transition status back to "PR Created":
-    - Update stage YAML frontmatter: status → "PR Created"
-    - Run `kanban-cli sync --stage STAGE-XXX-YYY-ZZZ`
-    - This signals that comments have been addressed and MR/PR is awaiting re-review
+10. Call transition_stage MCP tool (as main agent, not delegated):
+    - Target: "PR Created"
+    - This signals the orchestrator that comments have been addressed and MR/PR is awaiting re-review
 
 11. [CONDITIONAL: Slack Notification]
     IF `WORKFLOW_SLACK_WEBHOOK` is set:
@@ -389,7 +388,8 @@ After completing a review round, the exit gate is lighter than full phase exit g
 2. Verify all fixes pass tests
 3. Verify branch is pushed
 4. Verify replies are posted
-5. Update stage status to "PR Created"
-6. Run `kanban-cli sync --stage STAGE-XXX-YYY-ZZZ`
+5. Status transitions happen IN the workflow via `transition_stage` calls (steps 1 and 10):
+   - Step 1 transitions to "Addressing Comments"
+   - Step 10 transitions back to "PR Created"
 
 **Note:** `lessons-learned` and `journal` are NOT invoked after each review round. They are invoked once when the stage reaches `Done` (after the MR/PR is merged), as part of the final stage completion handled by the orchestration loop or manual workflow.

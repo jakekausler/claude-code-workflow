@@ -259,7 +259,6 @@ This is the SINGLE authoritative checklist -- all file writes happen here, not i
    a. Write testing walkthrough and results to `STAGE-XXX-YYY-ZZZ-manual-testing.md` sibling file (test areas, pass/fail results, issues found, resolutions, user feedback, deferrals)
 2. Delegate to doc-updater (Haiku) to update tracking documents:
    a. Update stage file's Manual Testing section with filled-in approval checklist
-   b. Set stage status → Finalize in `STAGE-XXX-YYY-ZZZ.md`
    c. Update stage status in `TICKET-XXX-YYY.md` (MANDATORY)
    d. Update ticket status in `EPIC-XXX.md` if needed
 3. Use Skill tool to invoke `lessons-learned` -- **mandatory, no exceptions**
@@ -268,12 +267,18 @@ This is the SINGLE authoritative checklist -- all file writes happen here, not i
 **Why this order?**
 
 - Step 1: Persist testing results before anything else (if session crashes, results are saved)
-- Step 2: Establish facts (approval checklist recorded, status updated to Finalize in all tracking files)
+- Step 2: Establish facts (approval checklist recorded, updated in all tracking files)
 - Steps 3-4: Capture learnings and feelings based on the now-complete testing process
 
-**After exit gate completes:**
+### Final Step: Transition Stage
 
-Session ends. Finalize phase will be handled in a new session with the `phase-finalize` skill. Do NOT invoke `phase-finalize` from this session.
+After ALL other exit gate work is complete (testing artifacts written, lessons-learned invoked, journal invoked):
+
+**Call the `transition_stage` MCP tool directly (do NOT delegate to a subagent):**
+
+- Target: "Finalize"
+
+This signals the orchestrator to update the stage status and end the session. No further actions are possible after this call.
 
 **DO NOT skip any exit gate step. DO NOT proceed until all steps are done.**
 
@@ -282,6 +287,5 @@ Session ends. Finalize phase will be handled in a new session with the `phase-fi
 - Telling user "testing complete" or "moving to Finalize"
 - Starting any Finalize phase planning
 - Reading code files for code review
-- Invoking phase-finalize skill
 
-**Complete ALL exit gate steps FIRST. Then the session ends.**
+**Complete ALL exit gate steps FIRST. Then call transition_stage as the final action.**

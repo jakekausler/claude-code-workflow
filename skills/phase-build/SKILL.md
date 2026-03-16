@@ -413,7 +413,6 @@ This is the SINGLE authoritative checklist -- all file writes happen here, not i
    a. Write build session notes to `STAGE-XXX-YYY-ZZZ-build.md` sibling file (implementation decisions, problems encountered, deviations from design, key code changes and rationale)
 2. Delegate to doc-updater (Haiku) to update tracking documents:
    a. Mark Build phase complete in `STAGE-XXX-YYY-ZZZ.md`
-   b. Set stage status → Automatic Testing in `STAGE-XXX-YYY-ZZZ.md`
    c. Update stage status in `TICKET-XXX-YYY.md` (MANDATORY)
    d. Update ticket status in `EPIC-XXX.md` if needed
 3. Use Skill tool to invoke `lessons-learned` -- **mandatory, no exceptions**
@@ -422,20 +421,25 @@ This is the SINGLE authoritative checklist -- all file writes happen here, not i
 **Why this order?**
 
 - Step 1: Persist build context before anything else (if session crashes, implementation notes are saved)
-- Step 2: Establish facts (phase done, status updated to Automatic Testing in all tracking files)
+- Step 2: Establish facts (phase done, updated in all tracking files)
 - Steps 3-4: Capture learnings and feelings based on the now-complete phase
 
-**After exit gate completes:**
+### Final Step: Transition Stage
 
-Use Skill tool to invoke `automatic-testing` to begin the next phase.
+After ALL other exit gate work is complete (build artifacts written, lessons-learned invoked, journal invoked):
+
+**Call the `transition_stage` MCP tool directly (do NOT delegate to a subagent):**
+
+- Target: "Automatic Testing"
+
+This signals the orchestrator to update the stage status and end the session. No further actions are possible after this call.
 
 **DO NOT skip any exit gate step. DO NOT proceed until all steps are done.**
 
-**DO NOT proceed to Automatic Testing phase until exit gate is complete.** This includes:
+**DO NOT proceed to transition until exit gate is complete.** This includes:
 
 - Announcing "proceeding to Automatic Testing"
 - Starting user testing discussions
 - Thinking about what to test
-- Invoking automatic-testing skill
 
-**Complete ALL exit gate steps FIRST. Then invoke automatic-testing.**
+**Complete ALL exit gate steps FIRST. Then call transition_stage as the final action.**

@@ -446,7 +446,6 @@ This is the SINGLE authoritative checklist -- all file writes happen here, not i
    a. Write automatic testing session notes to `STAGE-XXX-YYY-ZZZ-automatic-testing.md` sibling file (test results, failures found and fixes applied, coverage observations, issues deferred to manual testing)
 2. Delegate to doc-updater (Haiku) to update tracking documents:
    a. Mark Automatic Testing phase complete in `STAGE-XXX-YYY-ZZZ.md`
-   b. Set stage status → Manual Testing in `STAGE-XXX-YYY-ZZZ.md`
    c. Update stage status in `TICKET-XXX-YYY.md` (MANDATORY)
    d. Update ticket status in `EPIC-XXX.md` if needed
    e. Verify regression items were added to ticket's `regression.md`
@@ -456,20 +455,25 @@ This is the SINGLE authoritative checklist -- all file writes happen here, not i
 **Why this order?**
 
 - Step 1: Persist testing context before anything else (if session crashes, testing notes are saved)
-- Step 2: Establish facts (phase done, status updated to Manual Testing in all tracking files)
+- Step 2: Establish facts (phase done, updated in all tracking files)
 - Steps 3-4: Capture learnings and feelings based on the now-complete phase
 
-**After exit gate completes:**
+### Final Step: Transition Stage
 
-Use Skill tool to invoke `phase-manual-testing` to begin the next phase.
+After ALL other exit gate work is complete (automatic testing artifacts written, lessons-learned invoked, journal invoked):
+
+**Call the `transition_stage` MCP tool directly (do NOT delegate to a subagent):**
+
+- Target: "Manual Testing"
+
+This signals the orchestrator to update the stage status and end the session. No further actions are possible after this call.
 
 **DO NOT skip any exit gate step. DO NOT proceed until all steps are done.**
 
-**DO NOT proceed to Manual Testing phase until exit gate is complete.** This includes:
+**DO NOT proceed to transition until exit gate is complete.** This includes:
 
 - Announcing "proceeding to Manual Testing"
 - Reading code files for Manual Testing planning
 - Starting testing mentally
-- Invoking phase-manual-testing skill
 
-**Complete ALL exit gate steps FIRST. Then invoke phase-manual-testing.**
+**Complete ALL exit gate steps FIRST. Then call transition_stage as the final action.**

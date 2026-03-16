@@ -320,26 +320,21 @@ Set dependencies between stages as identified during brainstorming:
    Confirm? (Y/N)
    ```
 
-### Step 7: Validate and Sync
+### Step 7: Signal Completion
 
-1. **Run validation** to confirm integrity:
+Once all stage files are created and the ticket frontmatter's `stages` array is updated with the new stage IDs:
 
-   ```bash
-   npx tsx tools/kanban-cli/src/cli/index.ts validate
-   ```
+1. **Call the `conversion_complete` MCP tool directly** (do NOT delegate to a subagent).
 
-   If validation fails:
-   - Report specific errors to user
-   - Fix the issues (missing references, invalid IDs, etc.)
-   - Re-validate until clean
+   This tool takes no parameters. Calling it signals the orchestrator that conversion is complete. The system will automatically:
+   - Validate stage structure
+   - Sync to SQLite
+   - Update ticket status and kanban column
+   - Compute column assignments
 
-2. **Sync to SQLite**:
+   Do NOT run `kanban-cli validate` or `kanban-cli sync` yourself — the orchestrator handles all syncing and status updates after receiving the completion signal.
 
-   ```bash
-   npx tsx tools/kanban-cli/src/cli/index.ts sync
-   ```
-
-3. **Present conversion summary**:
+2. **Present conversion summary** to confirm the work is done:
 
    ```
    ============================================================
@@ -353,7 +348,8 @@ Set dependencies between stages as identified during brainstorming:
      STAGE-XXX-YYY-002: [Title] (type) - Not Started, depends on 001
      STAGE-XXX-YYY-003: [Title] (type) - Not Started, depends on 002
 
-   Validation: PASSED
+   Completion signal sent. The orchestrator will sync the repository,
+   update the ticket status, and move it into its target kanban column.
 
    The ticket has been moved from "To Convert" to having
    workable stages. Run /next_task to begin working on

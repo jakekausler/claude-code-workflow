@@ -17,6 +17,7 @@ export interface CliOptions {
   mock?: boolean;
   mockExternal?: boolean;
   wsPort?: string;
+  skillsDir?: string;
 }
 
 /**
@@ -87,6 +88,9 @@ export async function loadOrchestratorConfig(
   // Create log directory if it doesn't exist
   await mkdir(logDir, { recursive: true });
 
+  // Resolve skillsDir: CLI option > env var > default (../../skills from orchestrator)
+  const skillsDir = resolveSkillsDir(cliOptions.skillsDir, env['ORCHESTRATOR_SKILLS_DIR']);
+
   // Return fully populated config
   return {
     repoPath,
@@ -102,6 +106,7 @@ export async function loadOrchestratorConfig(
     mockExternal: cliOptions.mockExternal === true || cliOptions.mock === true,
     wsPort: resolveWsPort(cliOptions.wsPort, env['ORCHESTRATOR_WS_PORT']),
     slackWebhookUrl: env['WORKFLOW_SLACK_WEBHOOK'] || undefined,
+    skillsDir,
   };
 }
 
@@ -118,4 +123,20 @@ function resolveWsPort(
     throw new Error(`Invalid ws-port value: "${raw}"`);
   }
   return parsed;
+}
+
+/**
+ * Resolve skillsDir from CLI flag, env var, or default.
+ * Default: ../../skills relative to the orchestrator dist directory.
+ */
+function resolveSkillsDir(cliValue: string | undefined, envValue: string | undefined): string {
+  if (cliValue) {
+    return path.resolve(cliValue);
+  }
+  if (envValue) {
+    return path.resolve(envValue);
+  }
+  // Default: assume orchestrator is at tools/orchestrator/dist, so skills are at ../../skills
+  const currentDir = path.dirname(new URL(import.meta.url).pathname);
+  return path.resolve(currentDir, '../../skills');
 }

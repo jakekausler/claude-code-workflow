@@ -653,7 +653,7 @@ Documentation-only or tracking-only stages:
 - "No code to learn lessons about" → Process lessons exist for all work types
 - "Journal would just say 'updated docs'" → Write about the documentation process itself
 
-**Note:** Implementation commits, changelog commits, tracking updates, and tracking commits all happen in the workflow steps BEFORE the exit gate (local steps 9-14, remote steps 9-19). The exit gate only handles finalize notes, lessons-learned, and journal.
+**Note:** Implementation commits, changelog commits, tracking updates, and tracking commits all happen in the workflow steps BEFORE the exit gate (local steps 9-14, remote steps 9-19). The exit gate only handles finalize notes, lessons-learned, journal, and the final status transition.
 
 1. Delegate to doc-updater (Haiku) to write finalize session notes to `STAGE-XXX-YYY-ZZZ-finalize.md` sibling file (code review findings and resolutions, documentation updates, PR/MR details if remote mode, final verification results)
 2. Use Skill tool to invoke `lessons-learned` — **mandatory, no exceptions**
@@ -664,9 +664,16 @@ Documentation-only or tracking-only stages:
 - Step 1: Persist finalize context before anything else (if session crashes, notes are saved)
 - Steps 2-3: Capture learnings and feelings based on the now-complete stage
 
-**After exit gate completes:**
+### Final Step: Transition Stage
 
-Stage is now complete (local mode) or awaiting review (remote mode). No further phase to invoke — the stage workflow is finished. End the session.
+After ALL other exit gate work is complete (finalize artifacts written, lessons-learned invoked, journal invoked):
+
+**Call the `transition_stage` MCP tool directly (do NOT delegate to a subagent):**
+
+- **If local mode:** Target: "Complete"
+- **If remote mode:** Target: "Done"
+
+This signals the orchestrator to update the stage status and end the session. No further actions are possible after this call.
 
 **DO NOT skip any exit gate step. DO NOT proceed until all steps are done.**
 
@@ -675,6 +682,5 @@ Stage is now complete (local mode) or awaiting review (remote mode). No further 
 - Telling user "stage is complete" or "PR created"
 - Running `/next_task` for the next stage
 - Starting work on another stage
-- Closing the session as "successful"
 
-**Complete ALL exit gate steps FIRST. Then the stage is truly complete (or in PR Created state).**
+**Complete ALL exit gate steps FIRST. Then call transition_stage as the final action.**

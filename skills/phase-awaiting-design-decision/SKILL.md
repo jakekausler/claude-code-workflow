@@ -163,7 +163,6 @@ This is the SINGLE authoritative checklist -- all file writes happen here, not i
    a. Write discussion log and decision rationale to `STAGE-XXX-YYY-ZZZ-user-design-feedback.md` sibling file (options discussed, questions asked, trade-offs weighed, selected approach + rationale, rejected alternatives + reasons)
 2. Delegate to doc-updater (Haiku) to update tracking documents:
    a. Update stage file's Design Phase section (specifically the `User Choice` field) with selected approach + brief rationale
-   b. Set stage status → Build in `STAGE-XXX-YYY-ZZZ.md`
    c. Update stage status in `TICKET-XXX-YYY.md` (MANDATORY)
    d. Update ticket status in `EPIC-XXX.md` if needed
 3. Use Skill tool to invoke `lessons-learned` -- **mandatory, no exceptions**
@@ -172,12 +171,18 @@ This is the SINGLE authoritative checklist -- all file writes happen here, not i
 **Why this order?**
 
 - Step 1: Persist decision rationale before anything else (if session crashes, the decision is saved)
-- Step 2: Establish facts (selected approach recorded, status updated to Build in all tracking files)
+- Step 2: Establish facts (selected approach recorded, updated in all tracking files)
 - Steps 3-4: Capture learnings and feelings based on the now-complete decision process
 
-**After exit gate completes:**
+### Final Step: Transition Stage
 
-Session ends. Build phase will be handled in a new session with the `phase-build` skill. Do NOT invoke `phase-build` from this session.
+After ALL other exit gate work is complete (discussion artifacts written, lessons-learned invoked, journal invoked):
+
+**Call the `transition_stage` MCP tool directly (do NOT delegate to a subagent):**
+
+- Target: "Build"
+
+This signals the orchestrator to update the stage status and end the session. No further actions are possible after this call.
 
 **DO NOT skip any exit gate step. DO NOT proceed until all steps are done.**
 
@@ -186,6 +191,5 @@ Session ends. Build phase will be handled in a new session with the `phase-build
 - Telling user "decision recorded" or "moving to Build"
 - Starting any Build phase planning
 - Reading code files for implementation
-- Invoking phase-build skill
 
-**Complete ALL exit gate steps FIRST. Then the session ends.**
+**Complete ALL exit gate steps FIRST. Then call transition_stage as the final action.**

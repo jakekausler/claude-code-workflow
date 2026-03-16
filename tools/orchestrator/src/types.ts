@@ -23,4 +23,5 @@ export interface OrchestratorConfig {
   mockExternal: boolean;
   wsPort?: number; // WebSocket port for session broadcasting; default undefined (disabled)
   slackWebhookUrl?: string; // Slack incoming webhook URL for notifications; default undefined (disabled)
+  skillsDir: string; // Directory containing Claude skills to copy to worktrees
 }

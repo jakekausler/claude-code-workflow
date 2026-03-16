@@ -23,6 +23,7 @@ const program = new Command()
   .option('--mock', 'Full mock mode: auto-advance stages without Claude CLI')
   .option('--mock-external', 'Mock external services (Jira, Slack, Confluence) but real sessions and worktrees')
   .option('--ws-port <port>', 'WebSocket server port for session broadcasting', '3102')
+  .option('--skills-dir <path>', 'Directory containing Claude skills', '')
   .action(async (options) => {
     try {
       // 1. Load config
@@ -36,6 +37,7 @@ const program = new Command()
         mock: options.mock,
         mockExternal: options.mockExternal,
         wsPort: options.wsPort,
+        skillsDir: options.skillsDir,
       });
 
       // 2. Propagate mock flag to child processes (e.g., MCP server)

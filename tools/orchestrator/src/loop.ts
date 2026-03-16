@@ -21,7 +21,7 @@ import { createMRChainManager } from './mr-chain-manager.js';
 import { execFile } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { mkdir, writeFile } from 'node:fs/promises';
-import { existsSync, writeFileSync } from 'node:fs';
+import { existsSync, writeFileSync, cpSync } from 'node:fs';
 import { createInsightsThresholdChecker } from './insights-threshold.js';
 import type { LearningsResult } from './insights-threshold.js';
 import { SessionRegistry } from './session-registry.js';
@@ -274,6 +274,37 @@ function ensureMcpConfig(targetDir: string): void {
   }
 }
 
+/**
+ * Copy skills directory to the target directory's .claude/skills/ subdirectory.
+ * This allows Claude to discover repo-specific skills instead of stale global versions.
+ */
+function ensureSkills(targetDir: string, skillsSourceDir: string): void {
+  try {
+    if (!existsSync(skillsSourceDir)) {
+      // Non-fatal: skills directory may not exist in all setups
+      return;
+    }
+
+    const claudeDir = path.join(targetDir, '.claude');
+    const skillsTargetDir = path.join(claudeDir, 'skills');
+
+    // Only copy if skills don't already exist in the target
+    if (existsSync(skillsTargetDir)) {
+      return;
+    }
+
+    // Create .claude directory if needed
+    if (!existsSync(claudeDir)) {
+      writeFileSync(path.join(claudeDir, '.gitkeep'), '');
+    }
+
+    // Copy skills directory recursively
+    cpSync(skillsSourceDir, skillsTargetDir, { recursive: true });
+  } catch {
+    // Non-fatal: skills copy failure should not block session spawn
+  }
+}
+
 export function createOrchestrator(config: OrchestratorConfig, deps: OrchestratorDeps): Orchestrator {
   const { discovery, locker, worktreeManager, sessionExecutor, logger } = deps;
   const activeWorkers = new Map<number, WorkerInfo>();
@@ -452,6 +483,9 @@ export function createOrchestrator(config: OrchestratorConfig, deps: Orchestrato
         // Ensure MCP config is available in the session's working directory
         ensureMcpConfig(config.repoPath);
 
+        // Ensure skills are available in the main repo for the conversion session
+        ensureSkills(config.repoPath, config.skillsDir);
+
         const conversionPrompt = [
           `You are converting ticket ${ticketId} into implementable stages.`,
           '',
@@ -618,6 +652,9 @@ export function createOrchestrator(config: OrchestratorConfig, deps: Orchestrato
   // Cache for isolation strategy validation per start() call
   let isolationValidated: boolean | undefined;
 
+  // Signal handlers for graceful shutdown
+  let signalHandlersAttached = false;
+
   function notifyWorkerExit(): void {
     if (workerWaiter) {
       const waiter = workerWaiter;
@@ -737,6 +774,84 @@ export function createOrchestrator(config: OrchestratorConfig, deps: Orchestrato
       running = true;
       isolationValidated = undefined;
 
+      // Register signal handlers for graceful shutdown (only once per process)
+      if (!signalHandlersAttached) {
+        signalHandlersAttached = true;
+        const cleanup = async () => {
+          logger.info('Received shutdown signal, cleaning up...');
+          await this.stop();
+          process.exit(0);
+        };
+        process.on('SIGINT', cleanup);
+        process.on('SIGTERM', cleanup);
+      }
+
+      // Startup recovery: clean up stale locks from previous crashes
+      try {
+        logger.info('Starting stale lock recovery...');
+        const result = await discovery.discover(config.repoPath, 1000); // high limit to get all stages
+
+        for (const stage of result.readyStages) {
+          const stageFilePath = resolveStageFilePath(config.repoPath, stage);
+          try {
+            const isLocked = await locker.isLocked(stageFilePath);
+            if (isLocked) {
+              logger.warn('Found stale lock during startup', { stageId: stage.id });
+              await locker.releaseLock(stageFilePath);
+              logger.info('Released stale lock', { stageId: stage.id });
+            }
+          } catch (err) {
+            logger.warn('Failed to check/release stale lock', {
+              stageId: stage.id,
+              error: String(err),
+            });
+          }
+        }
+
+        // Clean up orphaned worktrees
+        try {
+          const worktreesDir = path.join(config.repoPath, '.worktrees');
+          const listOutput = await new Promise<string>((resolve, reject) => {
+            execFile('git', ['worktree', 'list'], { encoding: 'utf-8', cwd: config.repoPath }, (err, stdout) => {
+              if (err) reject(err);
+              else resolve(stdout);
+            });
+          });
+
+          // Parse git worktree list output
+          const lines = listOutput.trim().split('\n').filter(line => line.length > 0);
+          for (const line of lines) {
+            // Lines are formatted like: /path/to/worktree branch-name
+            const parts = line.trim().split(/\s+/);
+            const worktreePath = parts[0];
+            if (worktreePath.includes('.worktrees') && !worktreePath.includes('prune')) {
+              try {
+                logger.warn('Found orphaned worktree, removing', { path: worktreePath });
+                await new Promise<void>((resolve, reject) => {
+                  execFile('git', ['worktree', 'remove', worktreePath, '--force'],
+                    { encoding: 'utf-8', cwd: config.repoPath }, (err) => {
+                      if (err) reject(err);
+                      else resolve();
+                    });
+                });
+                logger.info('Removed orphaned worktree', { path: worktreePath });
+              } catch (err) {
+                logger.warn('Failed to remove orphaned worktree', {
+                  path: worktreePath,
+                  error: String(err),
+                });
+              }
+            }
+          }
+        } catch (err) {
+          logger.warn('Failed to clean up orphaned worktrees', { error: String(err) });
+        }
+
+        logger.info('Stale lock recovery completed');
+      } catch (err) {
+        logger.warn('Stale lock recovery failed', { error: String(err) });
+      }
+
       // Periodic zombie session detection (every 60 s)
       zombieCheckInterval = setInterval(() => {
         const cleaned = registry.checkZombies();
@@ -853,6 +968,9 @@ export function createOrchestrator(config: OrchestratorConfig, deps: Orchestrato
 
           // Ensure MCP config is available in the worktree so Claude discovers the kanban MCP server
           ensureMcpConfig(worktreeInfo.path);
+
+          // Ensure skills are available in the worktree so Claude discovers repo-specific skills
+          ensureSkills(worktreeInfo.path, config.skillsDir);
 
           const sessionLogger = logger.createSessionLogger(stage.id, config.logDir);
 
@@ -1041,6 +1159,31 @@ export function createOrchestrator(config: OrchestratorConfig, deps: Orchestrato
         pendingSleep.cancel();
         pendingSleep = undefined;
       }
+
+      // Clean up active workers: release locks and remove worktrees
+      for (const workerInfo of activeWorkers.values()) {
+        try {
+          await locker.releaseLock(workerInfo.stageFilePath);
+          logger.info('Released lock during shutdown', { stageId: workerInfo.stageId });
+        } catch (err) {
+          logger.warn('Failed to release lock during shutdown', {
+            stageId: workerInfo.stageId,
+            error: String(err),
+          });
+        }
+
+        try {
+          await worktreeManager.remove(workerInfo.worktreePath);
+          logger.info('Removed worktree during shutdown', { stageId: workerInfo.stageId });
+        } catch (err) {
+          logger.warn('Failed to remove worktree during shutdown', {
+            stageId: workerInfo.stageId,
+            error: String(err),
+          });
+        }
+      }
+
+      activeWorkers.clear();
       notifyWorkerExit();
     },
 

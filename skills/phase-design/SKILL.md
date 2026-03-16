@@ -207,7 +207,6 @@ This is the SINGLE authoritative checklist -- all file writes happen here, not i
    b. Write brief options summary to stage file's Design Phase section
 2. Delegate to doc-updater (Haiku) to update tracking documents:
    a. Mark Design phase complete in `STAGE-XXX-YYY-ZZZ.md`
-   b. Set stage status (Build if auto-design, User Design Feedback otherwise)
    c. Update stage status in `TICKET-XXX-YYY.md` (MANDATORY)
    d. Update ticket status in `EPIC-XXX.md` if needed
 3. Use Skill tool to invoke `lessons-learned`
@@ -216,21 +215,28 @@ This is the SINGLE authoritative checklist -- all file writes happen here, not i
 **Why this order?**
 
 - Step 1: Persist detailed research before anything else (if session crashes, research is saved)
-- Step 2: Establish facts (phase done, status updated in all tracking files)
+- Step 2: Establish facts (phase done, updated in all tracking files)
 - Steps 3-4: Capture learnings and feelings based on the now-complete phase
 
 **After exit gate completes:**
 
-- **IF `WORKFLOW_AUTO_DESIGN=true`:** Use Skill tool to invoke `phase-build` to begin the next phase.
-- **IF `WORKFLOW_AUTO_DESIGN=false`:** Session ends. Do NOT invoke `phase-build`. The user will provide design feedback in a separate session using the `phase-awaiting-design-decision` skill.
+### Final Step: Transition Stage
+
+After ALL other exit gate work is complete (sibling files written, lessons-learned invoked, journal invoked):
+
+**Call the `transition_stage` MCP tool directly (do NOT delegate to a subagent):**
+
+- **If `WORKFLOW_AUTO_DESIGN=true`:** Target: "Build"
+- **If `WORKFLOW_AUTO_DESIGN=false`:** Target: "User Design Feedback"
+
+This signals the orchestrator to update the stage status and end the session. No further actions are possible after this call.
 
 **DO NOT skip any exit gate step. DO NOT proceed until all steps are done.**
 
-**DO NOT proceed to Build phase (when auto-design) until exit gate is complete.** This includes:
+**DO NOT proceed to transition until exit gate is complete.** This includes:
 
-- Announcing "proceeding to Build"
+- Announcing "proceeding to next phase"
 - Reading code files for Build planning
 - Thinking about implementation approach
-- Invoking phase-build skill
 
-**Complete ALL exit gate steps FIRST. Then either invoke phase-build (auto-design) or end session (default).**
+**Complete ALL exit gate steps FIRST. Then call transition_stage as the final action.**
