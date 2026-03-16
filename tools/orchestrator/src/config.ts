@@ -15,6 +15,7 @@ export interface CliOptions {
   model: string;
   verbose: boolean;
   mock?: boolean;
+  mockExternal?: boolean;
   wsPort?: string;
 }
 
@@ -98,6 +99,7 @@ export async function loadOrchestratorConfig(
     pipelineConfig,
     workflowEnv,
     mock: cliOptions.mock === true,
+    mockExternal: cliOptions.mockExternal === true || cliOptions.mock === true,
     wsPort: resolveWsPort(cliOptions.wsPort, env['ORCHESTRATOR_WS_PORT']),
     slackWebhookUrl: env['WORKFLOW_SLACK_WEBHOOK'] || undefined,
   };

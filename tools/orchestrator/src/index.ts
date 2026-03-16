@@ -21,6 +21,7 @@ const program = new Command()
   .option('--model <model>', 'Claude model for sessions', 'sonnet')
   .option('--verbose', 'Verbose output', false)
   .option('--mock', 'Full mock mode: auto-advance stages without Claude CLI')
+  .option('--mock-external', 'Mock external services (Jira, Slack, Confluence) but real sessions and worktrees')
   .option('--ws-port <port>', 'WebSocket server port for session broadcasting', '3102')
   .action(async (options) => {
     try {
@@ -33,11 +34,12 @@ const program = new Command()
         model: options.model,
         verbose: options.verbose,
         mock: options.mock,
+        mockExternal: options.mockExternal,
         wsPort: options.wsPort,
       });
 
       // 2. Propagate mock flag to child processes (e.g., MCP server)
-      if (config.mock) {
+      if (config.mockExternal) {
         process.env.KANBAN_MOCK = 'true';
       }
 
@@ -50,14 +52,19 @@ const program = new Command()
       let sessionExecutor;
 
       if (config.mock) {
-        logger.info('Mock mode enabled (KANBAN_MOCK=true)');
+        logger.info('Mock mode enabled (sessions and worktrees mocked, KANBAN_MOCK=true)');
         worktreeManager = createMockWorktreeManager();
         sessionExecutor = createMockSessionExecutor({
           readFrontmatter: defaultReadFrontmatter,
           writeFrontmatter: defaultWriteFrontmatter,
           pipelineConfig: config.pipelineConfig,
         });
+      } else if (config.mockExternal) {
+        logger.info('Mock external mode enabled (real sessions and worktrees, KANBAN_MOCK=true)');
+        worktreeManager = createWorktreeManager(config.maxParallel);
+        sessionExecutor = createSessionExecutor();
       } else {
+        logger.info('Real mode enabled (no mocks)');
         worktreeManager = createWorktreeManager(config.maxParallel);
         sessionExecutor = createSessionExecutor();
       }

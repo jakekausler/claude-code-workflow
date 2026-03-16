@@ -848,7 +848,8 @@ export function createOrchestrator(config: OrchestratorConfig, deps: Orchestrato
             continue;
           }
 
-          const worktreeInfo = await worktreeManager.create(stage.worktreeBranch, config.repoPath);
+          const branchName = stage.worktreeBranch || `stage/${stage.id}`;
+          const worktreeInfo = await worktreeManager.create(branchName, config.repoPath);
 
           // Ensure MCP config is available in the worktree so Claude discovers the kanban MCP server
           ensureMcpConfig(worktreeInfo.path);

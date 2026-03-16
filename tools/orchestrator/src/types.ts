@@ -20,6 +20,7 @@ export interface OrchestratorConfig {
   pipelineConfig: PipelineConfig;
   workflowEnv: Record<string, string>;
   mock: boolean;
+  mockExternal: boolean;
   wsPort?: number; // WebSocket port for session broadcasting; default undefined (disabled)
   slackWebhookUrl?: string; // Slack incoming webhook URL for notifications; default undefined (disabled)
 }
