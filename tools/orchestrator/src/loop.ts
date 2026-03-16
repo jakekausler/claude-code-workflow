@@ -860,7 +860,7 @@ export function createOrchestrator(config: OrchestratorConfig, deps: Orchestrato
         });
       };
 
-      // Periodic dead process watchdog (every 30 s)
+      // Periodic dead process watchdog (every 5 minutes)
       // Detects child processes that have died without triggering the exit handler
       watchdogInterval = setInterval(() => {
         const activeSessions = sessionExecutor.getActiveSessions();
@@ -885,7 +885,7 @@ export function createOrchestrator(config: OrchestratorConfig, deps: Orchestrato
             registry.end(entry.stageId);
           }
         }
-      }, 30_000);
+      }, 300_000);
 
       // Periodic zombie session detection (every 60 s)
       zombieCheckInterval = setInterval(() => {
