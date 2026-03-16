@@ -641,6 +641,7 @@ export function createOrchestrator(config: OrchestratorConfig, deps: Orchestrato
   let pendingSleep: { cancel: () => void } | undefined;
   let workerWaiter: { promise: Promise<void>; resolve: () => void } | undefined;
   let zombieCheckInterval: ReturnType<typeof setInterval> | undefined;
+  let watchdogInterval: ReturnType<typeof setInterval> | undefined;
 
   // Cache for isolation strategy validation per start() call
   let isolationValidated: boolean | undefined;
@@ -858,6 +859,33 @@ export function createOrchestrator(config: OrchestratorConfig, deps: Orchestrato
           });
         });
       };
+
+      // Periodic dead process watchdog (every 30 s)
+      // Detects child processes that have died without triggering the exit handler
+      watchdogInterval = setInterval(() => {
+        const activeSessions = sessionExecutor.getActiveSessions();
+        const activeSessionPids = new Set(activeSessions.map(s => s.pid));
+
+        // Find PIDs that are in the registry but no longer have active sessions
+        const registryEntries = registry.getAll();
+        for (const entry of registryEntries) {
+          if (entry.pid === undefined || activeSessionPids.has(entry.pid)) {
+            continue; // Not spawned yet, or still active
+          }
+
+          // Check if the process is still alive using kill(pid, 0)
+          try {
+            process.kill(entry.pid, 0); // signal 0 checks without killing
+          } catch (err) {
+            // Process is dead; clean up
+            logger.warn('Dead process detected and cleaned up', {
+              stageId: entry.stageId,
+              processId: entry.pid,
+            });
+            registry.end(entry.stageId);
+          }
+        }
+      }, 30_000);
 
       // Periodic zombie session detection (every 60 s)
       zombieCheckInterval = setInterval(() => {
@@ -1147,6 +1175,12 @@ export function createOrchestrator(config: OrchestratorConfig, deps: Orchestrato
 
     async stop(): Promise<void> {
       running = false;
+
+      // Stop watchdog interval
+      if (watchdogInterval !== undefined) {
+        clearInterval(watchdogInterval);
+        watchdogInterval = undefined;
+      }
 
       // Stop zombie check interval
       if (zombieCheckInterval !== undefined) {
