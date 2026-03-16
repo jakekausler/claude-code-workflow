@@ -135,6 +135,18 @@ export function syncRepo(options: SyncOptions): SyncResult {
     epicTicketsMap.set(ticket.epic, existing);
   }
 
+  // Build ticket by ID map for parent ticket lookup
+  const ticketById = new Map<string, Ticket>();
+  for (const ticket of parsedTickets) {
+    ticketById.set(ticket.id, ticket);
+  }
+
+  // Build epic by ID map for parent epic lookup
+  const epicById = new Map<string, Epic>();
+  for (const epic of parsedEpics) {
+    epicById.set(epic.id, epic);
+  }
+
   /**
    * Detect entity type from ID prefix.
    */
@@ -363,14 +375,29 @@ export function syncRepo(options: SyncOptions): SyncResult {
       // Parse all dep refs once for this stage
       const parsedDeps = stage.depends_on.map((depId) => parseDependencyRef(depId));
 
+      // Also collect dependencies from parent ticket and parent epic
+      const allDeps = [...parsedDeps];
+      const parentTicket = ticketById.get(stage.ticket);
+      if (parentTicket) {
+        for (const depId of parentTicket.depends_on) {
+          allDeps.push(parseDependencyRef(depId));
+        }
+      }
+      const parentEpic = epicById.get(stage.epic);
+      if (parentEpic) {
+        for (const depId of parentEpic.depends_on) {
+          allDeps.push(parseDependencyRef(depId));
+        }
+      }
+
       // Create dependency records (supports stage→stage, stage→ticket, stage→epic)
       for (const parsed of parsedDeps) {
         upsertDependency(stage.id, 'stage', parsed);
       }
 
-      // Determine if all deps are soft-or-hard-resolved for kanban column
-      const allSoftOrHardResolved = parsedDeps.length === 0 ||
-        parsedDeps.every((parsed) => isDependencySoftOrHardResolved(parsed));
+      // Determine if all deps (stage's own + parent ticket's + parent epic's) are soft-or-hard-resolved for kanban column
+      const allSoftOrHardResolved = allDeps.length === 0 ||
+        allDeps.every((parsed) => isDependencySoftOrHardResolved(parsed));
       const hasUnresolvedDeps = !allSoftOrHardResolved;
 
       const kanbanColumn = computeKanbanColumn({
