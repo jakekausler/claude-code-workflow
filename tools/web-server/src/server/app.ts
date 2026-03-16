@@ -176,6 +176,60 @@ export async function createServer(
     const persistedTicketSessions = new Set<string>();
     const persistedStageSessions = new Set<string>();
 
+    oc.on('init', (sessions: SessionInfo[]) => {
+      // Persist all active sessions from the orchestrator's session registry
+      for (const entry of sessions) {
+        // Persist conversion sessions (TICKET-*)
+        if (
+          entry.stageId.startsWith('TICKET-') &&
+          entry.sessionId &&
+          dataService &&
+          !persistedTicketSessions.has(entry.stageId)
+        ) {
+          persistedTicketSessions.add(entry.stageId);
+          dataService.ticketSessions.addSession(entry.stageId, entry.sessionId, 'convert').catch(() => {});
+        }
+
+        // Persist stage sessions (STAGE-*)
+        if (
+          entry.stageId.startsWith('STAGE-') &&
+          entry.sessionId &&
+          dataService &&
+          !persistedStageSessions.has(entry.stageId)
+        ) {
+          // Fetch the stage to get its current status as the phase
+          dataService.stages
+            .findById(entry.stageId)
+            .then((stage) => {
+              // Use stage status if found, otherwise default to 'Design'
+              const phase = stage?.status ?? 'Design';
+              return dataService.stageSessions.addSession(entry.stageId, entry.sessionId, phase, entry.worktreePath);
+            })
+            .then(() => {
+              // Only mark as persisted after successful addSession
+              persistedStageSessions.add(entry.stageId);
+            })
+            .catch((error) => {
+              app.log.warn(
+                { error, stageId: entry.stageId, sessionId: entry.sessionId },
+                'Failed to persist stage session from init',
+              );
+            });
+        }
+
+        // Broadcast session-status SSE events for all active sessions
+        const pending = oc.getPendingForStage(entry.stageId);
+        const waitingType = computeWaitingType(pending);
+        const sseEvent: SessionStatusSSE = {
+          stageId: entry.stageId,
+          sessionId: entry.sessionId,
+          status: entry.status,
+          waitingType,
+        };
+        broadcastEvent('session-status', sseEvent);
+      }
+    });
+
     oc.on('session-registered', (entry: SessionInfo) => {
       recordSessionLifecycle('start', entry.sessionId, { stageId: entry.stageId });
       broadcastEvent('stage-transition', {
