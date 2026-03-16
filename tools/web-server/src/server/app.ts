@@ -174,6 +174,7 @@ export async function createServer(
 
     // Track ticket stageIds whose session row has been persisted with a real sessionId
     const persistedTicketSessions = new Set<string>();
+    const persistedStageSessions = new Set<string>();
 
     oc.on('session-registered', (entry: SessionInfo) => {
       recordSessionLifecycle('start', entry.sessionId, { stageId: entry.stageId });
@@ -209,6 +210,26 @@ export async function createServer(
       ) {
         persistedTicketSessions.add(entry.stageId);
         dataService.ticketSessions.addSession(entry.stageId, entry.sessionId, 'convert').catch(() => {});
+      }
+
+      // Persist stage sessions once the real sessionId is available
+      if (
+        entry.stageId.startsWith('STAGE-') &&
+        entry.sessionId &&
+        dataService &&
+        !persistedStageSessions.has(entry.stageId)
+      ) {
+        persistedStageSessions.add(entry.stageId);
+        // Fetch the stage to get its current status as the phase
+        dataService.stages
+          .findById(entry.stageId)
+          .then((stage) => {
+            if (stage) {
+              const phase = stage.status ?? 'unknown';
+              dataService.stageSessions.addSession(entry.stageId, entry.sessionId, phase).catch(() => {});
+            }
+          })
+          .catch(() => {});
       }
 
       broadcastEvent('board-update', {
@@ -250,6 +271,12 @@ export async function createServer(
       if (entry.stageId.startsWith('TICKET-') && dataService) {
         dataService.ticketSessions.endSession(entry.stageId, entry.sessionId).catch(() => {});
         persistedTicketSessions.delete(entry.stageId);
+      }
+
+      // Update ended_at for stage sessions in stage_sessions table
+      if (entry.stageId.startsWith('STAGE-') && dataService) {
+        dataService.stageSessions.endSession(entry.stageId, entry.sessionId).catch(() => {});
+        persistedStageSessions.delete(entry.stageId);
       }
 
       // Clean up requestStageMap entries for this stage
