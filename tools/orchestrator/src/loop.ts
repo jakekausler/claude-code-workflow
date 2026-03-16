@@ -21,7 +21,7 @@ import { createMRChainManager } from './mr-chain-manager.js';
 import { execFile } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { mkdir, writeFile } from 'node:fs/promises';
-import { existsSync, writeFileSync, cpSync } from 'node:fs';
+import { existsSync, writeFileSync, cpSync, mkdirSync } from 'node:fs';
 import { createInsightsThresholdChecker } from './insights-threshold.js';
 import type { LearningsResult } from './insights-threshold.js';
 import { SessionRegistry } from './session-registry.js';
@@ -288,18 +288,11 @@ function ensureSkills(targetDir: string, skillsSourceDir: string): void {
     const claudeDir = path.join(targetDir, '.claude');
     const skillsTargetDir = path.join(claudeDir, 'skills');
 
-    // Only copy if skills don't already exist in the target
-    if (existsSync(skillsTargetDir)) {
-      return;
-    }
-
     // Create .claude directory if needed
-    if (!existsSync(claudeDir)) {
-      writeFileSync(path.join(claudeDir, '.gitkeep'), '');
-    }
+    mkdirSync(claudeDir, { recursive: true });
 
-    // Copy skills directory recursively
-    cpSync(skillsSourceDir, skillsTargetDir, { recursive: true });
+    // Always copy skills (overwrite if target exists)
+    cpSync(skillsSourceDir, skillsTargetDir, { recursive: true, force: true });
   } catch {
     // Non-fatal: skills copy failure should not block session spawn
   }

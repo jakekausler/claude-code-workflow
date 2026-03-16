@@ -136,7 +136,7 @@ function resolveSkillsDir(cliValue: string | undefined, envValue: string | undef
   if (envValue) {
     return path.resolve(envValue);
   }
-  // Default: assume orchestrator is at tools/orchestrator/dist, so skills are at ../../skills
+  // Default: assume orchestrator is at tools/orchestrator/dist, so skills are at ../../../skills
   const currentDir = path.dirname(new URL(import.meta.url).pathname);
-  return path.resolve(currentDir, '../../skills');
+  return path.resolve(currentDir, '../../../skills');
 }
