@@ -14,6 +14,103 @@ The Refinement phase validates the implementation through user testing. It ensur
 - Build phase is complete (code written, verification passed)
 - `epic-stage-workflow` skill has been invoked (shared rules loaded)
 
+## Validation Strategy by Stage Type
+
+Refinement verifies "does this work in reality?" not "does this compile?" (that's Build's job).
+
+### Frontend Stages
+**What to validate**: Visual correctness and responsive behavior
+**How**:
+- Test at standard viewports (desktop + mobile)
+- Use Playwright browser automation or manual testing
+- Verify UI matches design intent
+- Check responsive breakpoints work correctly
+
+**Example**: Stats cards component
+- Desktop (1280×720): 3×2 grid layout
+- Mobile (375×667): 2×3 grid layout
+- Both: correct data display, no console errors
+
+---
+
+### Backend Stages
+**What to validate**: Integration with real data and dependencies
+**How**:
+- E2E tests with actual database/API (not mocks)
+- Test with real data volumes
+- Verify error handling with invalid inputs
+- Check integration points work end-to-end
+
+**Example**: New API endpoint
+- Make real HTTP requests to running server
+- Use real database with seed data
+- Test with actual data structures (not just type-valid mocks)
+
+**Anti-pattern**: Re-running unit tests and type-check (Build already did this)
+
+---
+
+### CLI Tools
+**What to validate**: Actual feature behavior through manual command execution
+**How**:
+- Execute CLI commands with realistic inputs
+- Verify output matches expectations
+- Test parameter application (not just passing)
+- Check error handling and edge cases
+- Test help text and usage information
+
+**Example**: New CLI flag for filtering output
+- Run command with new flag: `tool list --filter active`
+- Verify output is actually filtered (not just parameter accepted)
+- Test with various filter values
+- Confirm help text documents the flag correctly
+
+**Anti-pattern**: "Unit tests pass, so CLI works" - Tests verify parameters are PASSED, not APPLIED
+**Critical insight**: Parameter acceptance ≠ Parameter application (see game-master pattern)
+
+---
+
+### Documentation Stages
+**What to validate**: Completeness and accuracy
+**How**:
+- Verify against success criteria checklist
+- Check all promised sections exist
+- Spot-check accuracy (file paths, code examples)
+- Ensure formatting/structure is correct
+
+**Example**: Component documentation
+- All components from spec are documented
+- File paths are real and correct
+- Code examples are valid
+- No placeholders or TODOs
+
+**Anti-pattern**: Looking for functionality to test (docs don't have functionality)
+
+---
+
+### Infrastructure/Tooling Stages
+**What to validate**: End-to-end workflow with real usage
+**How**:
+- Run the tool/script with realistic inputs
+- Test integration with existing systems
+- Verify it solves the problem it was built for
+- Check error messages are helpful
+
+**Example**: New build script
+- Run script in real project
+- Verify output is as expected
+- Test with various inputs
+- Confirm it integrates with existing workflow
+
+---
+
+## Key Principle
+
+**Build = "Does the code work?"** (types, tests, lint)
+**Refinement = "Does it work in the real world?"** (integration, data, viewports)
+
+If you find yourself just re-running Build's verification commands, you're missing Refinement's purpose.
+
 ## RED FLAGS - Read BEFORE Making ANY Viewport Decisions
 
 **IF YOU ARE THINKING ANY OF THESE THOUGHTS, YOU ARE VIOLATING THE RULE:**
@@ -216,6 +313,32 @@ Example: approve → retract → approve → retract → "approve both"
 
 **Why:** The code state Desktop was approved against no longer exists. Both viewports must be validated against the new code state.
 
+## Debugger Agent Escalation
+
+When encountering errors during Refinement phase, select the appropriate debugger:
+
+| Error Type | Start With | Escalate To |
+|------------|------------|-------------|
+| Runtime errors (null ref, type errors at runtime) | debugger-lite (Sonnet) | - |
+| Test failures with clear stack traces | debugger-lite (Sonnet) | debugger if 2+ attempts fail |
+| Build/compilation errors | debugger (Opus) | - |
+| Toolchain issues (bundler, transpiler, loader) | debugger (Opus) | - |
+| Module resolution / import errors | debugger (Opus) | - |
+| CI/environment configuration | debugger (Opus) | - |
+
+**Escalation trigger**: If debugger-lite fails to identify root cause after 2 attempts, escalate to debugger (Opus).
+
+**Common Rationalizations (All Invalid):**
+
+| Rationalization | Reality |
+|----------------|---------|
+| "Config errors are straightforward" | Toolchain subtleties (path resolution, loader config) need Opus-level reasoning |
+| "Module resolution is just config" | Bundler/transpiler interactions are complex - use Opus |
+| "I'll try debugger-lite one more time" | After 2 failures, escalate - more of the same won't work |
+| "Opus is overkill" | Wasted cycles with wrong agent costs more than using Opus upfront |
+
+**Pattern from journal**: debugger-lite missed compiler/tooling issues that required Opus-level analysis.
+
 ## Frontend Workflow
 
 ```
@@ -247,10 +370,427 @@ Example: approve → retract → approve → retract → "approve both"
    - Add regression items to epic's epics/EPIC-XXX/regression.md
 ```
 
-## Determining Frontend vs Backend
+## CLI Tools Workflow
+
+Use this workflow when the stage adds or modifies CLI commands, flags, or behavior.
+
+```
+1. Manual CLI Testing (REQUIRED - cannot be automated):
+   a. Identify all CLI commands/flags added or modified in this stage
+   b. For each command/flag:
+      - Execute command with realistic inputs
+      - Verify output matches expectations
+      - Test edge cases (empty input, invalid values, missing required args)
+      - Verify help text is accurate and helpful
+
+   c. Parameter Application Verification:
+      - Run command WITHOUT new parameter → capture baseline behavior
+      - Run command WITH new parameter → verify behavior CHANGED
+      - Compare outputs to confirm parameter was APPLIED, not just accepted
+
+   **Edge Case Testing (REQUIRED for each parameter):**
+   - Empty/null inputs: How does parameter behave with no data?
+   - Invalid values: Does parameter reject bad input gracefully?
+   - Boundary conditions: Min/max values, length limits, etc.
+   - Combination conflicts: Does parameter work with other flags?
+   - Error messages: Are errors helpful and accurate?
+
+   **Common "Simple Parameter" Rationalization:**
+   | Thought | Why You're Wrong |
+   |---------|------------------|
+   | "It's just a formatting flag" | Format bugs can break pipelines/scripts |
+   | "Edge cases are unlikely" | Production always hits unlikely cases |
+   | "I tested the happy path" | Happy path ≠ comprehensive validation |
+   | "No business logic changed" | Output layer bugs are still bugs |
+
+   **Anti-pattern Alert:**
+   - "Unit tests pass" → Tests verify code execution, NOT actual CLI behavior
+   - "Parameter is accepted" → Acceptance ≠ Application (game-master pattern)
+   - "Help text is correct" → Documentation ≠ Functionality
+
+   **Real example from baseline testing:**
+   - Stage 4.3 added --verbose flag
+   - Unit tests passed (flag parsing worked)
+   - Manual testing revealed: verbosity parameter was PASSED but NOT APPLIED
+   - Output was identical with/without flag
+
+2. [IF issues found] → Report to user with examples:
+   - Expected behavior: [command output]
+   - Actual behavior: [command output]
+   - Delegate to debugger-lite/debugger for investigation
+   - Delegate to fixer for implementation
+   - Delegate to verifier for build verification
+   - RETURN TO STEP 1 (manual CLI testing is REQUIRED after fixes)
+
+3. [LOOP until user approves CLI behavior]
+
+   **What "User Approval" Means for CLI:**
+
+   User approval requires ONE of these outcomes for each tested scenario:
+
+   **Option A: Test passes** → Behavior matches expectation
+
+   **Option B: User waives test** → Explicit documented waiver
+   - User states: "I waive [specific scenario] because [reason]"
+   - Agent documents in stage file: "Waived: `tool generate --format pdf` (PDF library not installed, user confirmed non-critical)"
+   - Waiver is NOT approval of functionality - it's documented risk acceptance
+
+   **Option C: User approves degraded behavior** → Feature intentionally limited
+   - Example: "PDF format not supported in this release"
+   - Update help text to reflect limitation: `--format (json|xml)` (remove pdf)
+   - User approves accurate help text
+
+   **INVALID "Approval":**
+
+   | Statement | Why This Doesn't Count as Approval |
+   |-----------|-------------------------------------|
+   | "PDF isn't critical" | Doesn't address whether test should pass or be waived |
+   | "Just document it" | Ambiguous - document as bug? limitation? known issue? |
+   | "Environment issue, not our problem" | Dependencies are part of the product experience |
+   | "We'll fix it later" | Not a Refinement resolution - either fix now or formally waive |
+
+   **Environment Issues Require Decision:**
+   - Missing dependency is a **bug** if tool requires it but doesn't check for it
+   - Missing dependency is a **limitation** if tool gracefully handles absence
+   - Agent must present both options to user - never assume "environment issue" = skip test
+
+4. Delegate to doc-updater (Haiku) to update tracking documents:
+   - Mark Refinement phase complete in STAGE-XXX-YYY.md
+   - Update stage status in epic's EPIC-XXX.md table (MANDATORY)
+   - Add CLI regression items to epic's epics/EPIC-XXX/regression.md
+     (e.g., "Run `tool command --flag value` and verify output contains X")
+```
+
+**Why Manual CLI Testing Cannot Be Skipped:**
+
+1. **Unit tests verify code paths, not user experience**
+   - Test: `parseArgs(['--verbose'])` → Returns `{verbose: true}` ✅
+   - Reality: `tool --verbose` → No verbose output 🚫
+
+2. **Integration tests verify components work together, not that parameters are applied**
+   - Test: `handler.execute({verbose: true})` → Calls logger.verbose() ✅
+   - Reality: `tool --verbose` → Logger not configured to show verbose messages 🚫
+
+3. **The CLI is the user interface for your tool**
+   - Frontend gets Refinement testing for visual correctness
+   - CLI gets Refinement testing for behavioral correctness
+   - Both are user-facing, both require manual validation
+
+**CLI Testing Is Equivalent to Frontend Viewport Testing:**
+- Frontend: Test desktop AND mobile (both viewports)
+- CLI: Test commands WITHOUT and WITH parameters (both behaviors)
+- Both verify the user-facing layer works correctly
+
+**Common Rationalization Patterns (All Invalid):**
+
+| Rationalization | Why You're Wrong |
+|----------------|------------------|
+| "Tests are passing, CLI must work" | Tests verify code execution, not parameter application |
+| "I just need to run it once to confirm" | That IS manual testing - do it systematically |
+| "The parameter is definitely being used" | Prove it: show output WITH and WITHOUT parameter |
+| "This is simple, nothing to test manually" | Simple code often has simple bugs in wiring |
+| "Manual testing is for complex features" | Manual testing is for USER-FACING features (CLI is user-facing) |
+| "I'll just spot-check one command" | Spot-checking misses wiring bugs in other commands |
+
+### Backend API Validation Template
+
+For backend-only stages (no frontend changes), use this 4-scenario validation approach to ensure comprehensive coverage:
+
+**1. Existing Tests**
+- Run the full test suite at the START of Refinement phase
+- Yes, even if Build phase just ran them - verifies no regressions during phase transition
+- All tests must pass before proceeding to manual validation
+- Check coverage for new code paths
+
+**2. Direct Service-Layer Interaction**
+- curl/direct API calls to endpoints
+- Bypasses any middleware or frontend layers
+- Verifies the service responds correctly in isolation
+- Example: `curl -X POST http://localhost:3001/api/activity-logs`
+
+**3. Frontend Layer Interaction**
+- GraphQL playground, API explorer, or equivalent
+- Tests the full request path through frontend-facing layer
+- Verifies serialization, authentication, authorization work correctly
+- Example: Query in GraphQL playground with auth headers
+
+**4. Full Flow Verification**
+- **If UI exists:** End-to-end feature validation through user journey
+- **If no UI yet:** Simulate the intended data lifecycle:
+  - Script the complete workflow the UI will eventually perform
+  - Verify all CRUD operations work end-to-end
+  - Test with realistic data volumes and edge cases
+  - Example: Create 50 records, query with pagination, verify ordering
+
+**Why all 4 scenarios matter:**
+- Tests alone may miss integration issues
+- Service-layer testing may miss middleware problems
+- Frontend-layer testing may miss edge cases the UI doesn't trigger
+- Full flow testing catches issues only visible in realistic usage
+
+**Edge Case: Internal Refactors (no API changes)**
+When the change is purely internal (same API contract, different implementation):
+- Scenario 1: **REQUIRED** - Full test suite with coverage analysis
+- Scenarios 2-4: **ABBREVIATED** - Run 1-2 smoke tests per scenario
+  - Verifies no performance regressions, serialization bugs, or integration issues
+  - Example: One curl call, one GraphQL query, one quick flow (5 min total)
+
+**Under time pressure:** All 4 scenarios are still required. Each takes 2-5 minutes. Skipping a layer creates risk of production issues that take hours to debug.
+
+## Documentation-Only Workflow
+
+Use this workflow when the stage ONLY produces documentation (markdown files, guides, READMEs) with NO code changes.
+
+```
+1. Detect documentation type and verification requirements:
+
+   **When Does Automated Verification Apply?**
+
+   Documentation stage requires automated verification if it contains ANY of:
+   - Environment variable names (even in examples)
+   - Command-line commands (even partial/simplified)
+   - Class, function, or method names (even in conceptual examples)
+   - File paths or directory structures
+   - Configuration values or formats
+   - Technical claims about behavior ("this is safe", "this will restart")
+
+   **Exclusions (explicit opt-out only):**
+   - Design documents explicitly marked "Future API - Not Yet Implemented"
+   - Pedagogical examples using obviously fictional names (`ExampleService`, `DemoClass`)
+   - Both require clear labeling and disclaimer boxes
+
+   **Decision:**
+   - If ANY of above present → Automated verification REQUIRED (step 1a)
+   - If pure conceptual/process docs with NO technical references → Skip to step 2
+
+1a. [IF code references exist] Spawn general-purpose subagent for automated accuracy verification:
+
+   Prompt: "Run automated documentation accuracy verification:
+
+   **MANDATORY CROSS-REFERENCE CHECKS:**
+
+   **Verification Completeness (ALL means 100%):**
+   When instructions say "ALL" or "EACH":
+   - ALL = 100% of items, not "main ones" or "important ones"
+   - EACH = every single instance, no shortcuts, no sampling
+   - Complete verification or no verification
+
+   **Rationalization check:**
+   - Thinking "I'll verify the main classes"? → STOP. ALL means ALL.
+   - Thinking "Most examples checked"? → STOP. 100% or nothing.
+   - Thinking "I'll spot-check a few"? → STOP. EACH means EACH.
+
+   For each documented class/function/type in [list docs files]:
+
+   1. Extract ALL class names, function names, type names from documentation
+      - "ALL" means 100% of items mentioned, regardless of perceived importance
+      - No skipping "minor" utilities or "obvious" examples
+   2. Grep codebase to verify EACH exists in actual source files
+      - Use Grep tool or ripgrep (not manual review)
+      - Search for exact names, including case sensitivity
+   3. For EACH code example (not spot-checking, not sampling):
+      - Extract imports and verify modules/files exist (Read tool)
+      - Extract function calls and verify methods exist on documented classes (Grep + Read)
+      - Extract type signatures and compare against actual source code (Read source files)
+   4. List all discrepancies:
+      - Classes referenced but not found in codebase
+      - Methods documented with wrong signatures (including parameter names, order, types)
+      - Type definitions that don't match actual types
+      - Code examples importing non-existent modules
+      - Properties documented but not present on actual classes
+
+   **VERIFICATION COMPLETENESS:**
+   - Class references: Class exists AND is exported/public
+   - Method references: Method exists AND signature matches (params, order, types)
+   - Function calls: Function exists AND example usage would compile/run
+   - Commands: Command exists in package.json AND subcommands/flags are valid
+   - Env vars: Variable referenced in .env.example or code
+
+   **Partial verification = incomplete:**
+   - Verifying class exists but not method signatures = INCOMPLETE
+   - Spot-checking 4 of 15 examples = INCOMPLETE
+   - Manual review without Grep/Read tool calls = NOT verification
+
+   **HOW TO VERIFY (AUTOMATED TOOLS REQUIRED):**
+   - REQUIRED: Use Grep tool to search for class/function definitions
+   - REQUIRED: Use Read tool to check actual signatures in source files
+   - REQUIRED: Compare documented signatures against actual source line-by-line
+   - Manual review (reading and thinking) is NOT verification
+
+   **Time estimate:** 10 items = ~5 minutes (30 sec each). Faster than debugging 1 wrong env var (30+ min).
+
+   Return detailed report:
+   - Total items checked (classes, functions, types, commands, env vars)
+   - Issues found (with line numbers in docs + source file references)
+   - Severity: MAJOR (doesn't exist) vs MINOR (signature mismatch)
+   - Tool usage: List Grep/Read commands used (proves automated verification)
+
+   **DO NOT rationalize:**
+   - 'Looks plausible' is NOT verification
+   - Markdown compiling is NOT accuracy verification
+   - Manual review is NOT sufficient for code references
+   - 'I verified the main classes' is NOT complete (verify ALL)
+   - 'These are conceptual examples' does NOT bypass verification (if they use real names, verify them)
+   - 'Code doesn't exist yet' requires 'TO BE VERIFIED' markers, not skipping verification"
+
+2. [IF no automated verification OR after verification complete] Spawn general-purpose subagent for usability review:
+
+   Prompt: "Review this documentation for:
+   1. Readability: Clear language, appropriate technical level
+   2. Completeness: All promised sections present, no TODOs
+   3. Structure: Logical flow, good use of headings/lists
+   4. Links: All URLs/cross-references work
+
+   Files to review: [list documentation files from this stage]
+
+   Return a review report with specific issues found and severity (minor/major)."
+
+3. User shares feedback:
+   - Present verification + usability findings to user
+   - If automated verification ran: "Accuracy verification: [N] classes checked, [X] issues found"
+   - Usability review: "[N] issues ([X] major, [Y] minor)"
+   - Ask: "Ready to review findings together?"
+   - User provides feedback on:
+     * Which issues to fix
+     * Additional concerns from their reading
+     * Content accuracy from domain knowledge
+
+4. [IF issues found] → Spawn doc-updater with specific fix instructions
+   - Fix class/method/type references (from automated verification)
+   - Correct code example imports
+   - Update type signatures to match source
+   - Address missing sections
+   - Fix formatting issues
+   - Verify fixes with user
+   - **MANDATORY RE-VERIFICATION:** After making ANY changes to technical content:
+
+   **Re-Verification After Changes:**
+
+   | Change Type | Re-Verification Required? |
+   |------------|---------------------------|
+   | Typo fixes (spelling/grammar only) | NO - original verification still valid |
+   | Rewording for clarity (same technical content) | NO - original verification still valid |
+   | Restructuring sections (moving content around) | NO - original verification still valid |
+   | Changed env vars, commands, or code samples | YES - full re-verification required |
+   | Added new examples/sections with code references | YES - verify NEW content only |
+
+   **Verification of Fixes:**
+   When you fix an error found in verification, re-verify the fix:
+   - Example: Changed `DATABASE_CONNECTION` to `DATABASE_URL`
+   - Required: Re-grep codebase to confirm `DATABASE_URL` is correct (typo-check your fix)
+   - Why: You might misread codebase or typo the fix - 30 seconds to re-verify prevents shipping different wrong value
+
+   - Repeat until verification passes (0 issues)
+
+5. Final confirmation:
+   - Ask user: "Documentation review complete. All issues addressed. Ready to move to Finalize phase?"
+   - Wait for explicit approval before exiting Refinement
+
+6. Delegate to doc-updater (Haiku) to update tracking documents:
+   - Mark Refinement phase complete in STAGE-XXX-YYY.md
+   - Update stage status in epic's EPIC-XXX.md table (MANDATORY)
+   - Add documentation verification items to epic's epics/EPIC-XXX/regression.md
+     (e.g., "Verify [feature] documentation still exists and is accurate")
+```
+
+**Common Documentation Stage Patterns:**
+- **No dev server**: Documentation doesn't run, only reads
+- **Automated verification available**: Cross-reference code examples against actual source
+- **Quick iterations**: Doc fixes are fast, not like code changes
+- **Examples matter**: Broken code examples are major issues
+
+**Edge Cases:**
+
+**Documenting future/unimplemented code:**
+- Mark sections as "TO BE VERIFIED (after implementation in Stage XXX)"
+- Example:
+  ```markdown
+  ## Database Setup
+
+  <!-- TO BE VERIFIED: Once auth service is implemented (Stage 3.2) -->
+  Set the following environment variables:
+  - `AUTH_SERVICE_URL` (verify actual env var name)
+  - `AUTH_SECRET_KEY` (verify actual env var name)
+  ```
+- Include verification task in the implementation stage tracking
+- Do NOT skip verification by claiming "code doesn't exist yet" for existing code
+
+**Tutorial/teaching documentation with pedagogical examples:**
+- Use obviously fictional names (`ExampleService`, `DemoController`, not `UserService`)
+- Add disclaimer box:
+  ```markdown
+  > **Note:** This example uses simplified fictional code for teaching.
+  > For production API documentation, see `/docs/api-reference/`.
+  ```
+- First pass: Verify tutorial teaches correct concepts
+- Second pass: Skip code verification (intentionally fictional)
+- IF mixing real and fictional code: Mark fictional sections clearly, verify ALL real code references
+
+**Common Rationalizations (All Invalid):**
+
+| Rationalization | Reality |
+|----------------|---------|
+| "Markdown compiled without errors - it's accurate" | Markdown syntax ≠ API accuracy |
+| "It's just documentation, not code" | Wrong docs are worse than no docs |
+| "Examples look plausible" | Visual inspection misses 80% of accuracy bugs |
+| "'Accuracy' review done manually" | Manual review can't catch non-existent class references |
+| "We're behind schedule, ship it" | Inaccurate docs create support burden (30+ min per wrong env var) - verification takes 5 min total |
+| "Users will adapt examples" | Users copy-paste and expect examples to work |
+| "I'll verify the main classes, skip utilities" | Author likely copy-pasted utilities too - verify ALL (takes same 30 sec per item) |
+| "I'll spot-check 4 examples, rest are probably fine" | Documentation errors cluster - one wrong means others may be wrong |
+| "Class names are just conceptual, not real API" | If using real-sounding names, verify they exist (users will search for them) |
+| "Automated verification takes too long" | 10 items = 5 minutes. Debugging 1 wrong env var = 30+ minutes. |
+| "I'll do manual scan instead, faster" | Manual scan misses 60% of errors. Grep never misses. |
+| "User approved the content already" | User approved structure/clarity. Verification checks technical accuracy (different concern). |
+
+**Pattern from meta-insights (game-master, 2 occurrences):**
+- Documentation built without errors
+- Manual review found 10 real issues:
+  - Examples referencing classes that don't exist
+  - Wrong type signatures in documentation
+  - Code examples not matching actual implementation
+- Learning: Automated cross-reference verification catches 80-90% of accuracy issues
+
+## Determining Frontend vs Backend vs Documentation vs CLI
 
 - **Frontend**: Any UI components, styles, user-facing changes
 - **Backend**: API changes, database, services, no UI impact
+- **CLI Tools**: Command-line interfaces, CLI flags, terminal output
+- **Documentation**: Markdown files, guides, READMEs with no code changes
+
+**CLI Detection Logic (parallel to Frontend detection):**
+
+Check for CLI indicators:
+1. `bin/` directory exists
+2. `package.json` has `bin` field
+3. Files with CLI frameworks (Commander, yargs, click, argparse, cobra)
+4. Files with CLI-specific code (argument parsing, terminal output)
+5. Files in typical CLI locations (`src/cli.ts`, `cmd/`, `cli/`)
+
+**If CLI exists → CLI testing is REQUIRED before claiming Refinement complete**
+
+**Mixed Projects (Frontend + CLI in same project):**
+- BOTH Frontend (Desktop + Mobile) AND CLI testing must be complete before exit gate
+- User cannot approve "just the Frontend" or "just the CLI" - Refinement is atomic
+- Prioritization is a workflow decision, not a testing exemption
+- If user needs Frontend shipped urgently, complete BOTH validations, then ship
+
+**Rationalization Alert:**
+| Thought | Why You're Wrong |
+|---------|------------------|
+| "Frontend is more important, CLI can wait" | Both are user-facing, both require validation before Refinement complete |
+| "User only cares about Frontend right now" | Urgency doesn't override testing requirements |
+| "I'll do CLI testing in next session" | Refinement is atomic - complete all validations before exit gate |
+| "CLI changes are small, low risk" | Risk assessment doesn't determine testing requirements |
+
+**What counts as "code changes":**
+- ANY modification to source files (.js, .ts, .py, .go, .gql, .sql, etc.)
+- Adding comments/docstrings to code files (still changes the file)
+- Configuration files (.json, .yaml, .toml)
+- **NOT code changes**: Pure markdown files (.md), plain text docs, images
+
+**Common rationalization to avoid:**
+"I only changed comments, not real code" → Comments in source files ARE code changes. Use Backend/Frontend/CLI workflow, not Documentation-Only.
 
 ## Phase Gates Checklist
 
@@ -272,6 +812,36 @@ Example: approve → retract → approve → retract → "approve both"
   - Refinement phase marked complete in stage file
   - Epic stage status updated (MANDATORY)
   - Regression items added to epic's regression.md
+
+### CLI Tools
+
+- [ ] CLI detection performed (check bin/, package.json bin field, CLI frameworks)
+- [ ] **If CLI exists:**
+  - [ ] All modified/added commands manually executed with realistic inputs
+  - [ ] Parameter application verified (behavior WITH vs WITHOUT parameters)
+  - [ ] Help text accuracy confirmed
+  - [ ] Edge cases tested (invalid inputs, missing args, etc.)
+  - [ ] User approved CLI behavior
+- [ ] **Remember**: "Unit tests passing" ≠ CLI works (tests verify PASSING, not APPLICATION)
+- [ ] Tracking documents updated via doc-updater:
+  - Refinement phase marked complete in stage file
+  - Epic stage status updated (MANDATORY)
+  - CLI regression items added to epic's regression.md (specific commands to re-test)
+
+### Documentation-Only
+
+- [ ] **If docs include code references:** general-purpose subagent ran automated accuracy verification
+  - Verified all class/function/type names exist in codebase
+  - Cross-referenced type signatures against actual source
+  - Validated code example imports and methods
+- [ ] general-purpose subagent performed usability review
+- [ ] User reviewed findings and approved final documentation
+- [ ] All issues addressed (or user explicitly waived)
+- [ ] **If fixes were made:** Re-ran automated verification to confirm accuracy
+- [ ] Tracking documents updated via doc-updater:
+  - Refinement phase marked complete in stage file
+  - Epic stage status updated (MANDATORY)
+  - Documentation verification items added to epic's regression.md
 
 ---
 

@@ -66,6 +66,43 @@ The Finalize phase ensures code quality through review, adds tests if needed, cr
    ELSE (simple internal change):
      → Delegate to doc-writer-lite (Sonnet) OR skip if minimal
 
+   **Documentation-Only Stages Require Two-Pass Verification:**
+
+   IF stage deliverable is ONLY documentation (no implementation code):
+     → First pass: Usability, structure, completeness
+        - Clear sections and organization?
+        - Proper formatting and readability?
+        - Complete workflow coverage?
+
+     → Second pass: Technical accuracy and cross-reference validation
+        - **Verify every env var name** against actual .env files or code
+        - **Verify every command** exists (check package.json scripts, available CLI commands)
+        - **Verify every code sample** matches actual codebase patterns
+        - **Verify every technical claim** (e.g., "safe in development" - safe HOW? missing warnings?)
+        - Cross-reference with actual implementation files
+
+   **"Looks good" is NOT sufficient for documentation-only stages.**
+
+   You must READ the referenced code/config AND verify the documentation matches.
+   Do not assume env var names, commands, or technical details are correct just because they "look plausible."
+
+   **Verification means actual checking, not skimming:**
+   - Search for exact env var names in .env.example or code (don't just read and assume)
+   - Run `grep` or `cat` to verify commands in package.json exist exactly as documented
+   - When exhausted, verification discipline matters MOST - errors cost more than 3 minutes of careful checking
+
+   **Common Rationalizations for Skipping Second Pass:**
+
+   | Excuse | Reality |
+   |--------|---------|
+   | "First pass looked good, no need for second" | First pass catches structure issues, second catches semantic errors |
+   | "Documentation author probably got it right" | Evidence shows technical inaccuracies in structurally-sound docs |
+   | "Env var names look plausible" | Plausible ≠ correct. Verify against actual code. |
+   | "Commands follow common patterns" | Common pattern ≠ exists. Check package.json scripts. |
+   | "User will catch any errors" | User shouldn't need to. That's what verification is for. |
+   | "Time pressure, ship it" | Shipping wrong env vars costs more time in support than verification takes |
+   | "It's just documentation" | Wrong documentation is worse than no documentation - creates false confidence |
+
 7. Delegate to doc-updater (Haiku) to write to changelog/<date>.changelog.md
 
 8. Main agent creates implementation commit:
@@ -136,6 +173,9 @@ git commit -a
 - [ ] tester ran all tests - passing
 - [ ] IF impl code changed after first review: code-reviewer ran post-test review
 - [ ] Documentation created (doc-writer OR doc-writer-lite based on complexity)
+- [ ] IF documentation-only stage: Two-pass verification completed:
+  - [ ] First pass: usability, structure, completeness
+  - [ ] Second pass: technical accuracy verified against actual code/config
 - [ ] Changelog entry added via doc-updater
 - [ ] Implementation commit created with SPECIFIC file paths (NO git add -A)
 - [ ] Commit hash added to changelog via doc-updater

@@ -39,6 +39,36 @@ Analyze errors that are more complex than simple typos but have relatively clear
 2. Identify the cause
 3. Produce clear fix instructions for fixer
 
+## Fixer Instruction Format (CRITICAL)
+
+When passing fix instructions to the fixer agent, ALWAYS use explicit "from/to" format to prevent direction ambiguity.
+
+**Required format**:
+```
+Edit <file>:<line>: Change from [exact current content] to [exact new content]
+```
+
+**Examples**:
+
+✅ CORRECT - Explicit direction:
+```
+Edit src/test/mocks.ts:15: Change from `ReturnType<typeof vi.fn>` to `ReturnType<typeof vi.spyOn>`
+```
+
+❌ WRONG - Ambiguous direction:
+```
+Change to ReturnType<typeof vi.spyOn>
+```
+
+**Why this matters**: Fixer interprets instructions literally. "Change to X" is ambiguous about whether current state is X or something else. Fixer may go opposite direction if it misunderstands current vs desired state.
+
+**Checklist before delegating to fixer**:
+- [ ] Identified exact file path
+- [ ] Identified exact line number(s)
+- [ ] Included exact CURRENT content (what exists now)
+- [ ] Included exact NEW content (what it should be)
+- [ ] Used "Change from [current] to [new]" format
+
 ## Output Format
 
 ```

@@ -22,6 +22,40 @@ Write tests for existing code. Used when code exists but tests are missing or in
 - TDD approach: planner includes test specs, scribe writes tests with implementation
 - In this case, you're not needed
 
+## Step 0: Discover Project Test Patterns (MANDATORY)
+
+Before writing any tests, you MUST identify project-specific testing conventions:
+
+1. **Find 3-5 similar test files** in the same package/component area:
+   ```bash
+   # Example patterns to search for
+   find packages/*/src/**/__tests__/*.test.ts
+   find packages/*/tests/**/*.spec.ts
+   ```
+
+2. **Extract conventions** by reading those files:
+   - **Test framework**: Jest, Vitest, Mocha, etc.
+   - **Mocking style**: vi.mock(), jest.mock(), manual mocks
+   - **Factory patterns**: Are there mock factories in __fixtures__ or test-utils?
+   - **Assertion library**: expect(), assert(), chai
+   - **Async handling**: async/await, done callback, return promise
+   - **Test structure**: describe/it, test(), single assertions per test
+
+3. **Document findings** in a brief comment before proceeding:
+   ```
+   // Project test conventions discovered:
+   // - Framework: Vitest with vi.mock()
+   // - Factories: Using createMockX() from test-utils
+   // - Async: Prefers async/await over done()
+   ```
+
+**Why this matters:**
+- Prevents 3-6 verification cycles fixing convention mismatches
+- Mock objects must match project patterns or runtime crashes
+- Type differences between Jest and Vitest cause build errors
+
+**If no similar tests exist**: Use framework defaults, but document the choice.
+
 ## Your Job
 
 1. Read and understand the code to be tested
@@ -79,6 +113,32 @@ expect(screen.getByRole('button', { name: 'Submit' })).toBeEnabled()
 ```
 
 **Key Difference**: Good tests verify WHAT the user sees and WHAT the function returns, not just that something exists.
+
+## Async Migration Test Patterns
+
+When a synchronous function becomes async:
+
+1. **Expect widespread test breakage** - All tests calling that function will fail
+2. **Create a wait helper** rather than making each test async individually:
+   ```typescript
+   // Helper pattern
+   async function waitForTreeToLoad(tree: TreeInstance): Promise<void> {
+     await tree.initialize(); // or whatever async operation
+   }
+
+   // In tests
+   beforeEach(async () => {
+     tree = createTree();
+     await waitForTreeToLoad(tree);
+   });
+   ```
+
+3. **Check test utilities** - The project may already have async test helpers
+4. **Batch the migration** - Update all affected tests in one commit, not incrementally
+
+**When writing tests for functions that might become async**:
+- Consider using async/await from the start if the function touches I/O, network, or metadata
+- This prevents future migration pain
 
 ## Test Scope
 

@@ -35,6 +35,55 @@ Create comprehensive, step-by-step implementation specifications that a Haiku-ti
 4. Define test requirements
 5. Identify potential edge cases or risks
 
+#### Pattern Discovery (MANDATORY)
+
+Before writing the specification, ALWAYS search for similar existing implementations in the codebase:
+
+1. **Find Similar Features/Components**
+   - Use Grep/Glob to find 3-5 similar implementations
+   - Example: If implementing Apollo mutations, search for existing `useMutation` usage
+   - Example: If implementing NestJS services, search for existing `@Injectable` classes
+
+2. **Extract Patterns from Existing Code**
+   - How are types handled? (explicit vs inferred, generic patterns)
+   - What testing patterns are used? (mocks, factories, fixtures)
+   - What libraries/utilities are used?
+   - Are there framework-specific patterns? (Apollo generics, NestJS decorators)
+
+3. **Reference Actual Code in Spec**
+   - Include file paths and line numbers: `See src/services/foo.ts:42-58`
+   - Copy actual type signatures, don't invent them
+   - Reference actual test examples: `Follow test pattern from src/__tests__/bar.test.ts`
+
+4. **Check Framework-Specific Patterns**
+   - Apollo Client: Check mutation callback type handling
+   - NestJS: Check decorator usage (`@Inject`, `@Injectable`)
+   - Testing: Check if pre-commit hooks differ from `pnpm run lint`
+   - TypeScript: Check module system (ESM vs CJS)
+
+5. **Validate Assumptions**
+   - If you think "we should add type annotations here", check if existing code does that
+   - If you think "tests should mock this way", verify against existing test files
+   - If unsure about a pattern, include alternatives in spec with evidence
+
+**Common Failure Modes to Avoid:**
+- ❌ Recommending type annotations without checking if framework uses generics
+- ❌ Inventing type names instead of using actual codebase types
+- ❌ Assuming linter behavior without checking pre-commit hooks
+- ❌ Proposing patterns that contradict existing codebase conventions
+
+**Output in Spec:**
+Include a "Pattern Analysis" section showing:
+- Files examined: `[list 3-5 similar implementations]`
+- Patterns found: `[key patterns with file:line references]`
+- Framework constraints: `[Apollo/NestJS/testing specific patterns]`
+
+**Why This Matters:**
+- Prevents 3+ verification cycles fixing pattern mismatches
+- Specs lead to first-try implementations
+- Reduces Build phase friction by 50-70%
+- Avoids contradicting framework design (like Apollo's generic flow)
+
 ## Output Format
 
 ````

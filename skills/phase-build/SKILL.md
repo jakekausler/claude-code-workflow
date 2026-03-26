@@ -228,6 +228,67 @@ Trivial ONLY includes:
 
 **Test**: Would verifier/tester need to run? → Not trivial → Write spec
 
+## Scaffolding and Stub Stages
+
+When implementing scaffolding or stub stages (stages that create structure for future work):
+
+### Forward-Looking Code Requires Explanation
+
+If you're adding code that will be used in a **future stage**, add an explicit comment:
+
+```typescript
+// SCAFFOLDING: Used in STAGE-003-002 for entity selection
+onSelect?: (entity: Entity) => void;
+
+// STUB: Real implementation in STAGE-006-001
+export function processRequest(): void {
+  // Placeholder - validates integration shape only
+  return;
+}
+```
+
+**Why this matters:**
+- Code reviewers see "unused" code and flag for removal
+- Future implementers don't understand intent
+- Premature deletion breaks future stages
+
+### Comment Patterns
+
+**For props/parameters needed later:**
+```typescript
+// Used in [STAGE-ID]: [brief purpose]
+onSelect?: (id: string) => void;
+```
+
+**For stub implementations:**
+```typescript
+// STUB: Real implementation in [STAGE-ID]
+// Current behavior: [what it does now]
+// Future behavior: [what it will do]
+```
+
+**For scaffolding structure:**
+```typescript
+// SCAFFOLDING: Framework for [feature] implemented in [STAGE-ID]
+```
+
+### When Implementing Stubs
+
+1. **Validate shape, not behavior**: Tests should verify function signature, not logic
+2. **Comment test intent**:
+   ```typescript
+   // SCAFFOLD TEST: Validates integration shape only
+   // Real behavior tests added in STAGE-006-001
+   ```
+3. **Reference future stage** in implementation and tests
+
+### Code Review Awareness
+
+Code reviewers should:
+- Check stage docs for forward references before flagging "unused" code
+- Verify scaffolding comments reference valid future stages
+- Ensure stub tests clearly indicate they're testing shape, not behavior
+
 ## Phase Gates Checklist
 
 Before completing Build phase, verify:
@@ -237,7 +298,7 @@ Before completing Build phase, verify:
 - [ ] Seed data added (if agreed in Design)
 - [ ] Placeholder stubs added for related future features
 - [ ] Dev server verified working
-- [ ] Verification passed (verifier + tester in parallel)
+- [ ] **Verification fully green** (zero errors, zero warnings, all tests passing)
 - [ ] Tracking documents updated via doc-updater:
   - Build phase marked complete in stage file
   - Epic stage status updated (MANDATORY)
@@ -257,9 +318,192 @@ Before completing Build phase, verify:
 
 ---
 
+## Pre-Flight Verification
+
+Before exiting Build phase, run full test suite to detect pre-existing failures:
+
+**Why this matters:**
+- Incremental testing during Build catches new bugs, not pre-existing ones
+- Pre-existing failures discovered in Finalize cause cascading fix-verify cycles
+- Pattern from game-master: "What should have been 'fix 3 issues → verify → done' became 30+ minute debugging session"
+
+**Workflow:**
+1. Run full test suite: `npm test` (or project equivalent)
+2. Categorize failures:
+   - New failures (from your implementation) - already fixed during Build
+   - Pre-existing failures (existed before your work)
+3. **MANDATORY: Fix ALL pre-existing failures before exiting Build**
+   - Per CLAUDE.md: "Pre-existing failures that block verification are your responsibility"
+   - Do NOT defer to Finalize - fix now while context is fresh
+
+**Common rationalizations (and counters):**
+
+| Rationalization | Reality |
+|----------------|---------|
+| "Tests passed incrementally, no need for full run" | Incremental tests only cover changed code. Pre-existing failures in other areas remain hidden. |
+| "Pre-existing failures can be fixed in Finalize" | Finalize is for verification, not debugging. Discovering 8+ failures during Finalize causes cascading fix-verify cycles. |
+| "Not my code, not my problem" | Per CLAUDE.md: "Pre-existing failures that block verification are your responsibility to fix." |
+| "This will delay Build completion" | Fixing now (5-10 minutes) prevents Finalize thrash (30+ minutes). Net time savings. |
+
+**Exit criteria:**
+- [ ] Full test suite executed
+- [ ] All failures investigated and categorized
+- [ ] All pre-existing failures fixed (no deferrals)
+- [ ] Test suite passing (or only expected failures documented in KNOWN_ISSUES.md)
+
+**Expected outcome:**
+
+Finalize phase becomes pure verification (run tests, commit, done) instead of debugging session. Pattern: "Finalize takes 5 minutes, not 30+."
+
+---
+
 ## Phase Exit Gate (MANDATORY)
 
-Before proceeding to Refinement phase, you MUST complete these steps IN ORDER:
+### Verification Gate (REQUIRED FIRST)
+
+**CRITICAL: Before ANY exit gate steps, verification MUST be fully green.**
+
+Run verifier (Haiku) and confirm:
+
+- [ ] **Zero errors** (type errors, lint errors, build errors)
+- [ ] **Zero warnings** treated as acceptable
+- [ ] **All tests passing** (unit, integration, e2e as applicable)
+
+### Schema Change Verification (REQUIRED)
+
+**If this stage or any recent stage modified:**
+
+- Prisma schema (new fields, changed types, new models)
+- TypeScript type definitions (interfaces, types)
+- Shared interfaces/types used across packages
+- GraphQL schema definitions
+
+**BEFORE declaring Build complete, you MUST:**
+
+1. **Run `pnpm type-check` across ALL packages** (not just packages you touched)
+   - Schema changes cascade to packages you didn't modify
+   - Tests in other packages may reference changed types via mocks
+
+2. **Search for stale test mocks/fixtures:**
+   ```bash
+   # Find mock objects that may reference the changed type
+   grep -r "mockEntity\|entityMock\|createEntity" packages/*/src/**/*.test.* --include="*.ts" --include="*.tsx"
+   ```
+
+3. **Verify mocks include new required fields:**
+   - Optional fields (e.g., `field?: Type`) may still type-check with old mocks
+   - But mocks missing the field don't reflect production behavior
+   - Update mocks to include new fields for realistic test data
+
+**Why this matters:**
+
+- Schema changes in Stage N break mocks in Stage N+2
+- "All tests passing" with stale mocks = false confidence
+- Catching this at Build exit prevents blocked downstream stages
+
+**Common Rationalizations (All Invalid):**
+
+| Rationalization | Reality |
+|----------------|---------|
+| "Verifier returned green" | Verifier checks touched packages. Other packages may have stale mocks. |
+| "It's an optional field" | Optional fields type-check, but mocks should reflect realistic data. |
+| "Tests are passing" | Tests pass with incomplete mock data. Doesn't mean mocks are correct. |
+| "I only touched backend" | Frontend tests may mock backend types. Check ALL packages. |
+| "This is a documentation-only stage" | Schema changes from recent stages affect all packages. Run full verification. |
+
+**If verifier returns ANY errors or warnings:**
+
+1. **Stop immediately** - Do NOT proceed to exit gate steps
+2. **Categorize errors**: New (your work) vs pre-existing (inherited)
+3. **Apply Pre-existing Error Protocol** (see below)
+4. **Fix ALL errors** - new AND pre-existing
+5. **Re-run verifier** until fully green
+6. **Only then proceed** to exit gate steps below
+
+**Type errors accumulate exponentially. 1 skipped verification = 9x cleanup in next stage.**
+
+There is NO "override" status. Either fully green or phase is blocked.
+
+### Debugger Agent Escalation
+
+When encountering errors during Build phase, select the appropriate debugger:
+
+| Error Type | Start With | Escalate To |
+|------------|------------|-------------|
+| Runtime errors (null ref, type errors at runtime) | debugger-lite (Sonnet) | - |
+| Test failures with clear stack traces | debugger-lite (Sonnet) | debugger if 2+ attempts fail |
+| Build/compilation errors | debugger (Opus) | - |
+| Toolchain issues (bundler, transpiler, loader) | debugger (Opus) | - |
+| Module resolution / import errors | debugger (Opus) | - |
+| CI/environment configuration | debugger (Opus) | - |
+
+**Escalation trigger**: If debugger-lite fails to identify root cause after 2 attempts, escalate to debugger (Opus).
+
+**Common Rationalizations (All Invalid):**
+
+| Rationalization | Reality |
+|----------------|---------|
+| "Config errors are straightforward" | Toolchain subtleties (path resolution, loader config) need Opus-level reasoning |
+| "Module resolution is just config" | Bundler/transpiler interactions are complex - use Opus |
+| "I'll try debugger-lite one more time" | After 2 failures, escalate - more of the same won't work |
+| "Opus is overkill" | Wasted cycles with wrong agent costs more than using Opus upfront |
+
+**Pattern from journal**: debugger-lite missed compiler/tooling issues that required Opus-level analysis.
+
+### Pre-existing Error Protocol
+
+**Discovery:** You run verifier and find errors that existed before your work started.
+
+**Identification:** Use `git blame` on error locations to confirm they pre-date your branch.
+
+**Options (choose ONE):**
+
+1. **Fix now** (recommended):
+   - Fix the pre-existing error as part of this stage
+   - Document fix in commit message: "Fixed inherited error: [description]"
+   - Proceed when verifier is green
+
+2. **Document + Block** (if fix requires architectural changes):
+   - Add TODO comment at error location:
+     ```
+     // TODO: [ERROR] Inherited from STAGE-XXX-XXX [brief description]
+     // Requires [architectural change] - blocked on [dependency]
+     ```
+   - Create follow-up stage/task for the fix
+   - Notify previous stage owner via tracking docs
+   - **Block current stage completion** until decision made with user
+
+**NOT an option:**
+
+- ❌ Mark stage complete with "documented override"
+- ❌ Treat warnings as acceptable because "they're not errors"
+- ❌ Ignore pre-existing errors as "not my responsibility"
+- ❌ Defer all errors to future stages without explicit approval
+- ❌ Add @ts-ignore/@ts-expect-error to suppress errors
+- ❌ Add files to .eslintignore to hide lint errors
+- ❌ Add .skip to failing tests
+
+**Reality:** You inherit the debt when you touch the code. Fix it or block completion.
+
+### Common Rationalizations (All Invalid)
+
+Watch for these thought patterns - they ALL lead to technical debt:
+
+| Rationalization | Reality |
+|----------------|---------|
+| "These are just test errors" | Test errors become production errors. Fix tests. |
+| "Pre-existing, not my problem" | You inherited the debt. Fix it or block completion. |
+| "Feature works, verification is bureaucracy" | 1 skip = 9x cleanup in next stage. Verification saves time. |
+| "Warnings aren't errors" | Warnings accumulate. Treat as errors or they multiply. |
+| "Authority says it's fine" | Authority can defer technical debt, not override it. Still needs TODO + tracking. |
+| "I'm 90% done, verification would restart me" | Incomplete work + broken verification = 0% done. Run verifier. |
+| "My code passes, these are someone else's errors" | Your stage, your responsibility. Fix or block. |
+| "I can add @ts-ignore to make it green" | Suppression hides bugs. Fix the error, don't silence it. |
+| "I'll .skip the failing tests" | Skipped tests don't pass. They hide failures. Fix or block. |
+
+### Exit Gate Steps (After Green Verification)
+
+Once verification is **fully green** with zero errors and warnings, complete these steps IN ORDER:
 
 1. Update stage tracking file (mark Build phase complete)
 2. Update epic tracking file (update stage status in table)

@@ -21,7 +21,7 @@ This skill analyzes Claude's learnings and journal entries to identify cross-cut
 
 **ALL improvements must be:**
 1. Captured as paste-ready prompts
-2. Saved to `~/docs/claude-meta-insights/actions/<timestamp>/NN-description.md`
+2. Saved to `~/docs/claude-meta-insights/actions/<timestamp>/NN.md`
 3. Implemented in separate fresh sessions
 
 **The meta-insights workflow ALWAYS generates prompts, never implements.**
@@ -62,17 +62,45 @@ This is not negotiable. Analysis session = prompts only.
 
 ### 1. Discovery Phase
 
-**Goal**: Find unanalyzed entries and load existing trends
+**Goal**: Find unanalyzed entries and load existing trends summary
 
 ```bash
 # Get unanalyzed entries (token-efficient)
+# Default: returns ALL unanalyzed entries
+# With limit: returns N oldest entries (e.g., find-unanalyzed.sh 25)
 ~/.claude/skills/meta-insights/scripts/find-unanalyzed.sh
 
-# Load existing trends
-cat ~/docs/claude-meta-insights/trends.json
+# Load existing trends summary (token-efficient)
+~/.claude/skills/meta-insights/scripts/list-trends.sh
+
+# Get session frequency
+~/.claude/skills/meta-insights/scripts/sync-session-frequency.sh
 ```
 
-**Batching**: If >25 unanalyzed entries, process 25 oldest entries only.
+**Why use list-trends.sh instead of cat:**
+- `cat trends.json` loads 1000+ lines (full trend objects with all occurrences and actions)
+- `list-trends.sh` provides compact summary (ID | status | repo | name) - typically 50-100 lines
+- Full trend details retrieved only when needed via `get-trend.sh <uuid>`
+- Saves 900+ lines of token usage per analysis
+
+**Date checking (MANDATORY):**
+Before analyzing entries, check if any entries are older than actions in trends:
+
+1. Identify entry date range (from filenames)
+2. For each trend with actions, get most recent action date
+3. If entry dates < action dates, note that theme occurrences should be ignored (pre-fix)
+4. Document which trends to check for false recurrences
+
+**Example**:
+- Entries from 2026-01-14
+- Trend "Spec vs Reality" has action on 2026-01-21
+- Any "Spec vs Reality" occurrences in 2026-01-14 entries should be ignored (happened before fix)
+
+**DO NOT skip date checking:**
+- Even if time-pressured or entries appear recent
+- Even if you "know" the trends are new
+- Takes 30 seconds, prevents hours of false-positive analysis
+- No exceptions - this is MANDATORY before analysis
 
 **Delegate to subagent**: Spawn specialized subagent to read entries and extract initial patterns:
 ```
@@ -92,7 +120,7 @@ Return structured list of themes found.
 
 ### 2. Analysis Phase (Main Agent)
 
-**Goal**: Detect cross-cutting themes and score them
+**Goal**: Detect themes, categorize them, and CREATE trend objects for ALL themes (actionable AND skipped)
 
 **Theme detection:**
 - Analyze patterns across ALL entries (from subagent)
@@ -104,8 +132,75 @@ Return structured list of themes found.
 
 **Match to existing trends:**
 - Fuzzy match new themes to trends in `trends.json`
-- Update occurrence timelines
-- Create new trend objects for novel themes
+- Update occurrence timelines if theme matches existing trend
+- For novel themes, will create new trend objects below
+
+**Skip determination (MANDATORY):**
+
+For each theme detected, determine if it should be skipped:
+
+1. **Pre-fix occurrences**: Check against date analysis from Discovery
+   - If theme matches a trend and all occurrences are before that trend's last action → SKIP (already fixed)
+
+2. **Success patterns**: If theme represents something working well → SKIP (document in report, don't action)
+   - Multiple review rounds finding issues
+   - Commit discipline preventing accidents
+   - High test coverage catching bugs
+
+3. **Unactionable observations**: One-off discoveries, context-dependent decisions → SKIP
+
+4. **Already tracked**: If theme matches existing trend with pending actions → SKIP (note the existing trend ID)
+
+5. **Duplicates**: If theme is subset of another higher-scored theme → SKIP
+
+**DO NOT defer skip determination:**
+- Do not wait for user to categorize themes during discussion
+- Do not present all themes and "let user decide" on skips
+- Categorization happens NOW, before presentation
+- User confirms your categorization, doesn't create it
+- No exceptions - this is MANDATORY before presentation
+
+**CREATE TREND OBJECTS (MANDATORY - DO NOT DEFER):**
+
+IMMEDIATELY after categorizing themes, create trend objects for ALL new themes:
+
+```bash
+# Generate UUIDs for all new themes (actionable + skipped)
+uuidgen | tr '[:upper:]' '[:lower:]'  # repeat for each theme
+
+# Build JSON array with ALL new trends
+# For each theme, create trend object with:
+# - Unique UUID
+# - Theme name
+# - Repository (one trend per repo per theme - never mix!)
+# - Occurrence data from this analysis
+# - Status: "NEW"
+# - Actions array:
+#   * ACTIONABLE: Empty array [] (actions added later during Prompt Generation)
+#   * SKIPPED: One dismiss action with reason
+
+# Append ALL trends to trends.json NOW
+jq --argjson new_trends "$(cat /tmp/all-new-trends.json)" \
+  '.trends += $new_trends | .last_updated = "'$(date -Iseconds)'"' \
+  ~/docs/claude-meta-insights/trends.json > /tmp/updated.json
+mv /tmp/updated.json ~/docs/claude-meta-insights/trends.json
+```
+
+**Repository separation for ALL themes:**
+If a theme (e.g., "Code Review Effectiveness") appeared in 3 repos, create 3 separate trend objects - one per repo.
+
+**Example dismiss reasons for skipped themes:**
+- "Success pattern - multiple review rounds finding real issues is working as designed"
+- "Success pattern - three-commit pattern preventing git add -A accidents"
+- "Observational notes, context-dependent decision-making, not actionable"
+- "Duplicate of [theme name] (trend [uuid]), which has action prompt"
+- "Project-specific pattern, low occurrence, not cross-cutting"
+
+**Output**:
+- trends.json updated with ALL new themes
+- Categorized lists:
+  * Actionable (has trend ID, needs prompt)
+  * Skipped (has trend ID with dismiss action)
 
 **Status lifecycle:**
 - NEW → First detection
@@ -116,7 +211,7 @@ Return structured list of themes found.
 
 ### 3. Presentation Phase (Main Agent)
 
-**Goal**: Present findings and discuss with user
+**Goal**: Present skip recommendations first, then discuss actionable themes with user
 
 **Part 1 - Summary Report:**
 ```markdown
@@ -127,7 +222,23 @@ Return structured list of themes found.
 - Session frequency: N entries/day (last 14 days)
 - Repositories analyzed: [repo1, repo2, ...]
 
-## High-Priority Themes (Top 5 by score)
+## Skip Recommendations
+
+### Pre-Fix Occurrences (X themes)
+[Themes that occurred before related actions were taken]
+
+### Success Patterns (Y themes)
+[Themes representing things already working well]
+
+### Already Tracked (Z themes)
+[Themes with existing trends and pending actions]
+
+### Unactionable (N themes)
+[One-off observations or context-dependent decisions]
+
+## High-Priority Actionable Themes (Top 5 by score)
+
+[Only themes that passed skip determination]
 
 ### 🆕 Theme Name (Score: 87, Repository: campaign-manager)
 - **First seen**: 2026-01-10 | **Last seen**: 2026-01-18
@@ -135,79 +246,91 @@ Return structured list of themes found.
 - **Status**: NEW
 - **Quick summary**: 1-2 sentence description
 
-[... continues for top 5]
-
-## All Themes by Repository
-[Grouped lists with status badges]
-
-## Trend Effectiveness Report
-- Themes resolved since last analysis: X
-- Themes in monitoring: Y (showing improvement)
-- Recurring themes needing attention: Z
+[... continues for top 5 actionable themes]
 ```
 
-**Part 2 - Interactive Discussion:**
+**Part 2 - Confirm Skips:**
 
-After summary, say:
-> "Ready to dive into individual themes? I'll present each with 2-3 action options and trade-offs. We can work through them one at a time, or you can tell me which specific themes to focus on."
+Present skip recommendations and ask:
+> "I recommend skipping X themes (Y success patterns, Z pre-fix occurrences, N already tracked).
+>
+> Review the skip recommendations above. Should I proceed with the X actionable themes, or do you want to review any of the skipped items?"
+
+Wait for user confirmation before proceeding to theme discussion.
+
+**Part 3 - Interactive Discussion (only if user confirms skips):**
+
+> "Ready to dive into the X actionable themes? I'll present each with 2-3 action options and trade-offs."
 
 **For each theme discussed:**
 - Show full context (relevant entry excerpts)
 - Present 2-3 action options with trade-offs
 - User chooses action or skip
 - **Generate paste-ready prompt** for chosen action
-- Save to `~/docs/claude-meta-insights/actions/<timestamp>/NN-description.md`
-
-**Tip**: For bulk skipping similar themes (e.g., multiple success patterns), collect UUIDs and reasons during discussion, then use `bulk-add-dismiss.sh` for efficient recording.
+- Save to `~/docs/claude-meta-insights/actions/<timestamp>/NN.md`
 
 ### 4. Prompt Generation Phase (Main Agent)
 
-**Goal**: Create paste-ready implementation prompts
+**Goal**: Create paste-ready implementation prompts and ADD action records to existing trend objects
 
-**For each approved action:**
+**IMPORTANT**: Trend objects were already created during Analysis Phase. This phase adds action records to actionable trends.
 
-1. **Create numbered prompt file**: `01-update-skill-tdd.md`, `02-create-skill-xyz.md`, etc.
-2. **Content is pure prompt** - no frontmatter, no wrappers, ready to copy entire file
+**For each approved actionable theme:**
+
+1. **Create numbered prompt file**: `01.md`, `02.md`, etc. (numbers only, no descriptions in filename)
+2. **Content is pure prompt** - no frontmatter, ready to copy entire file
 3. **Include in prompt** (in this exact order):
    - **First line - Workflow instruction**: `**IMPORTANT**: Before starting this task, invoke the \`meta-insights\` skill to understand the full workflow requirements for implementing action items, including the mandatory tracking steps.`
    - **Horizontal rule**: `---`
-   - **Trend ID** (if trend exists): `Trend ID: <uuid>`
+   - **Trend ID**: `Trend ID: <uuid>` (from trend created in Analysis Phase)
    - Which files to modify
    - What to add/change
    - Why (with evidence from entries)
    - Expected outcome
-   - Action type for tracking (update_skill, create_skill, etc.)
+   - Action type for tracking
 
-**Action types:**
-- `update_skill` - Add rationalizations, gotchas, examples to existing skill **REQUIRES: superpowers:writing-skills workflow with pressure testing**
-- `create_skill` - New skill for significant reusable pattern **REQUIRES: superpowers:writing-skills workflow (full RED-GREEN-REFACTOR cycle)**
-- `update_documentation` - Repo-specific CLAUDE.md or other project docs
-- `update_agent` - Agent configuration changes
-- `manual_review` - Mark for later investigation (no prompt file)
-- `dismiss` - False positive or won't fix (no prompt file)
-
-### 5. Finalization Phase (Main Agent)
-
-**Goal**: Update tracking and present results
+4. **ADD action record to existing trend**:
 
 ```bash
-# Create index file
-# Write ~/docs/claude-meta-insights/actions/<timestamp>/00-INDEX.md
+# Use add-trend-action.sh to append action to the trend
+~/.claude/skills/meta-insights/scripts/add-trend-action.sh \
+  <trend-id> \
+  <action-type> \
+  "Description" \
+  file1.md file2.ts ...
+```
 
-# Update trends.json with action records
-~/.claude/skills/meta-insights/scripts/add-trend-action.sh <id> <type> <description> [files...]
+**Action types:**
+- `update_skill` - REQUIRES superpowers:writing-skills workflow
+- `create_skill` - REQUIRES superpowers:writing-skills workflow (full RED-GREEN-REFACTOR)
+- `update_documentation` - Repo-specific CLAUDE.md updates
+- `update_agent` - Agent configuration changes
+- `manual_review` - Mark for later investigation
+
+**Create supporting files:**
+
+```bash
+# Create actions directory
+mkdir -p ~/docs/claude-meta-insights/actions/<timestamp>/
+
+# Write 00-INDEX.md summarizing all actions
+# Write individual numbered prompt files
 
 # Mark entries as analyzed
 ~/.claude/skills/meta-insights/scripts/bulk-mark-analyzed.sh < processed_entries.txt
 
-# Generate analysis report
+# OPTIONAL: Generate analysis report (nice-to-have, not required)
 # Write ~/docs/claude-meta-insights/reports/<timestamp>.md
 ```
 
-**Final message:**
+**Final message (END OF WORKFLOW):**
 > "Analysis complete! Generated N action prompts in `~/docs/claude-meta-insights/actions/<timestamp>/`
 >
+> Created M trend objects (N actionable + M dismissed) in trends.json.
+>
 > Check `00-INDEX.md` for summary, then copy each numbered prompt into a new session."
+
+**This is where the workflow ENDS.**
 
 ---
 
@@ -297,7 +420,7 @@ Common pressures and counters:
 
 ### Example: Updating Code Review Skill
 
-Given prompt: `02-update-code-review-skill-ts-ignore.md`
+Given prompt: `02.md`
 With trend ID: `a7b3c9d2-4e5f-6789-abcd-ef0123456789`
 
 After updating the skill:
@@ -377,8 +500,11 @@ Quick reference to scripts in `~/.claude/skills/meta-insights/scripts/`:
 
 ### Entry Management
 ```bash
-# Find unanalyzed entries
+# Find unanalyzed entries (all)
 find-unanalyzed.sh
+
+# Find limited unanalyzed entries
+find-unanalyzed.sh 25  # Returns 25 oldest entries
 
 # Mark single entry analyzed
 mark-analyzed.sh ~/docs/claude-learnings/2026-01-18T10-15-00.md
@@ -474,10 +600,15 @@ When generating prompts for `create_skill` or `update_skill` actions:
 | "I implemented the prompt, no need to track it" | Implementation pressure, feels bureaucratic | Record completion with add-trend-action.sh. This enables trend lifecycle tracking and measures effectiveness. |
 | "2× session frequency means 2 actions on the trend" | Misreading threshold calculation | It means TIME for that many NEW entries to be created, not occurrences of the theme. |
 | "I should read all entries to be thorough" | Completeness bias | Batch recent 50 max. Subagent handles reading, main agent analyzes patterns. |
+| "Let me read all trends to be thorough" | Completeness bias | Use list-trends.sh for summary. Full details only when needed via get-trend.sh. |
 | "Mixing theme from repo A and repo B makes sense" | Optimization pressure | Never merge. Repository context is critical for actions. |
 | "Prompt file needs frontmatter and structure" | Documentation instinct | Pure prompt text only. User copies entire file and pastes. |
+| "Filename should include description like 01-update-skill.md" | Making filename self-documenting | Use numbers only: 01.md, 02.md. Description goes in 00-INDEX.md. |
 | "Let me verify the fix works" | Quality pressure | That's what the IMPLEMENTATION session will do. Analysis session stops at prompt generation. |
 | "Theme keeps recurring, mark RECURRING" | Not checking occurrence dates when analyzing backlog | Check if occurrence_date < last_action_date before marking RECURRING. Old occurrences discovered late aren't genuine recurrences. |
+| "I'll create trend objects during Finalization" | Old workflow had 5 phases | Create ALL trend objects (actionable + skipped) during Analysis Phase. Workflow ends after Prompt Generation (Phase 4). |
+| "Skip determination can wait until user chooses" | Not recognizing mandatory step | Skip determination is MANDATORY in Analysis Phase. Proactively categorize themes before presenting to user. |
+| "Date checking is only for RECURRING trends" | Misreading when to apply date checking | Date checking is MANDATORY in Discovery Phase for ALL trends with actions. Prevents wasted analysis of pre-fix occurrences. |
 
 **When you feel ANY implementation pressure:**
 1. Acknowledge the urge
@@ -495,7 +626,7 @@ When generating prompts for `create_skill` or `update_skill` actions:
 
 **Action chosen**: Update `test-driven-development` skill
 
-**Prompt file** (`01-update-skill-tdd.md`):
+**Prompt file** (`01.md`):
 ```
 **IMPORTANT**: Before starting this task, invoke the `meta-insights` skill to understand the full workflow requirements for implementing action items, including the mandatory tracking steps.
 
@@ -533,7 +664,7 @@ Expected outcome: Skill explicitly addresses time pressure rationalization with 
 
 **Action chosen**: Create new skill
 
-**Prompt file** (`02-create-skill-db-migrations.md`):
+**Prompt file** (`02.md`):
 ```
 **IMPORTANT**: Before starting this task, invoke the `meta-insights` skill to understand the full workflow requirements for implementing action items, including the mandatory tracking steps.
 
@@ -582,7 +713,7 @@ Target: Eliminate these 8 recurring issues in future work.
 
 **Action chosen**: Update CLAUDE.md
 
-**Prompt file** (`03-update-docs-claude.md`):
+**Prompt file** (`03.md`):
 ```
 **IMPORTANT**: Before starting this task, invoke the `meta-insights` skill to understand the full workflow requirements for implementing action items, including the mandatory tracking steps.
 

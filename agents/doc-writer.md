@@ -34,44 +34,49 @@ Create thorough, well-structured documentation for complex features, APIs, and p
 5. Write clear, concise prose
 6. Perform accuracy validation before finalizing
 
-## Accuracy Validation
+## Accuracy Validation Checkpoint (MANDATORY)
 
-After drafting documentation, perform accuracy validation:
+After drafting documentation, BEFORE claiming completion, you MUST validate technical accuracy:
 
-### 1. Technical Terms & Definitions
+### Step 1: Re-read Source Code
 
-- Verify HTTP status codes (404, 500, 504, etc.) are correctly described
-- Check technical terms match their standard definitions
-- Confirm command syntax and flags are accurate
+For EVERY technical claim in your documentation:
+- Type signatures → Read actual type definitions
+- API contracts → Read actual function/method signatures
+- Code examples → Test examples compile/run correctly
+- Configuration options → Verify against schema/config files
+- Error codes → Check actual error handling code
 
-### 2. Code References
+**DO NOT rely on memory or assumptions.** Re-read the source.
 
-- Verify function/class names match actual code
-- Check parameter names and types are current
-- Confirm file paths exist and are correct
+### Step 2: Verify Examples
 
-### 3. Examples & Snippets
+If documentation includes code examples:
+1. Copy example to test file
+2. Verify it type-checks: `npx tsc --noEmit example.ts`
+3. If runnable, execute it: `npx tsx example.ts`
+4. Fix any errors before including in docs
 
-- Test that code examples would actually work
-- Verify import statements are correct
-- Check that example data matches expected schemas
+### Step 3: Cross-Check References
 
-### Self-Review Checklist
+For documentation referencing other systems:
+- API docs → Verify against actual endpoint implementations
+- Library usage → Check library docs for correct patterns
+- Type imports → Ensure import paths are correct
 
-Before finalizing documentation, ask yourself:
+### Step 4: Self-Critique
 
-- [ ] Did I verify technical terms against authoritative sources?
-- [ ] Did I check code references against actual implementation?
-- [ ] Would a developer be able to follow these instructions successfully?
-- [ ] Are there any claims I'm uncertain about that need verification?
+Ask yourself:
+- **Am I certain** these type signatures are correct, or just confident?
+- **Have I verified** every technical detail against source code?
+- **Would a developer** following this documentation succeed or get errors?
 
-### Verification Suggestions
+**Confident wrongness is worse than acknowledged uncertainty.**
 
-If uncertain about technical accuracy:
-
-- Use Read tool to verify against actual code
-- Use WebSearch for standard definitions (HTTP codes, technical terms)
-- Note uncertainties in documentation for human review
+If uncertain about any detail:
+1. Re-read the source code
+2. Add a note: "Verify: [specific detail]"
+3. Flag for code-reviewer to double-check
 
 ## Output Format
 

@@ -17,6 +17,30 @@ Execute verification commands (build, type-check, lint) and report results. You 
 - Before marking Build phase complete
 - Parallel with tester during verification
 
+## TypeScript Type-Check Requirement
+
+**Tests passing is NOT sufficient for TypeScript projects.** Test runners (Vitest, Jest, ts-node) are more lenient than the TypeScript compiler.
+
+**Always run type-check in addition to tests:**
+
+1. First run tests: `pnpm test` or `pnpm run test`
+2. Then run type-check: `pnpm run type-check` or `tsc --noEmit`
+3. If project has build step: `pnpm run build`
+
+**Common gaps between test runtime and compile-time:**
+- Branded types (e.g., `EntityId`) accept plain strings at runtime but fail compilation
+- Strict null checks pass at runtime but fail compilation
+- Generic type constraints violated at runtime but caught by compiler
+
+**Report format should include:**
+```
+Tests: PASS/FAIL
+Type-check: PASS/FAIL (X errors)
+Build: PASS/FAIL (if applicable)
+```
+
+**If tests pass but type-check fails:** Report as FAIL with type errors listed.
+
 ## Input You Receive
 
 - Verification command(s) to run (build, type-check, lint)

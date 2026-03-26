@@ -92,6 +92,75 @@ All templates are embedded below in this skill file.
 - All four phase sections required in every stage file
 - Epic directory name format: `epics/EPIC-XXX-kebab-case-name/`
 
+### Sequential Dependency Ordering (CRITICAL)
+
+**Core Rule**: Dependencies flow upward numerically. If work X depends on work Y, then Y must have a lower number than X.
+
+```
+STAGE-001 → STAGE-002 → STAGE-003
+   ↑            ↑
+   │            └── Can depend on 001
+   └── No dependencies (first)
+
+EPIC-001 → EPIC-002 → EPIC-003
+   ↑           ↑
+   │           └── Can depend on EPIC-001 work
+   └── No cross-epic dependencies
+```
+
+**Before creating ANY stage, verify:**
+
+1. **Dependency check**: Does this stage depend on work that doesn't exist yet?
+   - If YES: Create the dependency FIRST (lower number) or assign to earlier epic
+   - If NO: Proceed with current numbering
+
+2. **Cross-epic check**: Does this stage depend on work in a LATER epic?
+   - If YES: **STOP** - This violates sequential ordering
+   - Either move the stage to that later epic, or move the dependency to an earlier epic
+
+3. **Insertion check**: Are you inserting a stage mid-sequence (e.g., STAGE-005-003A)?
+   - **Never** insert a stage that depends on later-numbered work
+   - Insertions must only depend on EARLIER stages in the sequence
+
+**Red Flags - STOP Before Creating Stage:**
+
+| Symptom | Problem | Solution |
+|---------|---------|----------|
+| "This stage needs EPIC-018's backend work" but you're in EPIC-016 | Cross-epic forward dependency | Move stage to EPIC-018 or later |
+| "This stage needs STAGE-005" but you're creating STAGE-003 | Backward dependency | Renumber or reorder stages |
+| "Let's add STAGE-004A to keep the feature together" but 004A needs EPIC-020 work | Feature grouping overriding dependencies | Dependency ordering > feature grouping |
+| User wants feature "done first" but it needs later API work | User priority ≠ technical feasibility | Explain dependency reality, adjust epic order |
+
+**Common Rationalizations (REJECT ALL):**
+
+| Excuse | Reality |
+|--------|---------|
+| "Keep frontend features together in one epic" | Architectural layers > feature grouping when dependencies conflict |
+| "We'll just mark it blocked until the dependency is ready" | Blocked stages within an epic halt sequential progress |
+| "The dependency is small, we can inline it" | If it's a real dependency, it needs proper sequencing |
+| "User wants this epic number, so keep it" | Epic numbers reflect execution order, not user preference |
+| "User insists on this ordering" | Explain dependency reality, document objection, still fix ordering |
+| "We can do them in parallel" | Parallel execution doesn't fix dependency ordering - dependency must be numbered lower |
+| "Just this once for the deadline" | Deadline pressure doesn't change technical dependencies |
+
+**Edge Cases:**
+
+**Circular Dependencies**: If EPIC-A needs EPIC-B work AND EPIC-B needs EPIC-A work:
+1. This indicates architectural coupling that should be resolved
+2. Extract the shared work into an earlier EPIC-C that both depend on
+3. Never create circular epic dependencies - one must come first
+
+**STAGE-XXX-XXXA Notation**: Inserting stages mid-sequence (e.g., 002A between 002 and 003) is ONLY valid when:
+- The inserted stage depends on EARLIER stages only (001, 002)
+- The inserted stage does NOT depend on later stages (003, 004) or later epics
+- Using 002A is preferable to renumbering all subsequent stages
+
+**When User Insists After Explanation:**
+1. Document in stage file: "Dependency ordering override requested by user - [stage] depends on [future work]"
+2. Proceed as directed (user has project authority)
+3. Flag in lessons-learned: "Sequential dependency violation - user override"
+4. The work may block or fail; user accepts that risk
+
 ---
 
 ## Epic File Template (EPIC-XXX.md)

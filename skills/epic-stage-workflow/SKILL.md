@@ -140,6 +140,31 @@ After loading this skill, determine the current phase and invoke the appropriate
 
 **Each phase skill ends with a mandatory exit gate that invokes `lessons-learned` and `journal` skills.**
 
+## MANDATORY Phase Exit Gate
+
+**BEFORE proceeding to next phase, you MUST:**
+1. Invoke the `journal` skill to record candid feelings about the work
+2. If anything noteworthy happened, invoke the `lessons-learned` skill
+
+**Common Rationalizations (REJECT ALL):**
+
+| Excuse | Reality |
+|--------|---------|
+| "I already committed the tracking files" | Commits are separate from reflection. Tracking file commits ≠ phase complete. |
+| "User said proceed without prompting" | Phase Gates are not optional prompts. User forward momentum doesn't skip gates. |
+| "Nothing noteworthy happened" | Even smooth phases deserve brief journal entry. Journal is ALWAYS invoked. |
+| "I'll do it at the end" | Each phase exit requires its own reflection. No batching allowed. |
+| "The phase skill will handle it" | YOU must invoke journal BEFORE using any phase transition language. |
+
+**Enforcement:** Do NOT use any phase transition language ("moving to Build", "starting Refinement", "proceeding to next phase") until journal skill has been invoked for the JUST-COMPLETED phase.
+
+**Red Flag - STOP Immediately If:**
+- You're about to say "moving to [phase]" without having invoked journal
+- User requests transition and you haven't completed exit gate
+- You think "I already committed" justifies skipping reflection
+
+**This is a Level 2 (Non-Negotiable) requirement. No exceptions.**
+
 ---
 
 ## Communication Policy (CRITICAL)
@@ -618,6 +643,83 @@ Vague statements do NOT count as consent:
 | "User is technical expert, reviewed it themselves" | User expertise complements agents, doesn't replace them | Run code-reviewer, share findings with expert user   |
 | "User has more experience than me"                 | Workflow exists for consistency, not hierarchy          | Run code-reviewer regardless of user expertise       |
 | "User is paying for this time"                     | User pays for quality process, not shortcuts            | Explain code-reviewer value, run it anyway           |
+
+---
+
+## Discovering New Work Mid-Phase (Sequential Dependency Ordering)
+
+During any phase, you may discover that new stages or epics are needed. When this happens, apply the **Sequential Dependency Ordering** rule:
+
+**Core Rule**: Dependencies flow upward numerically. If work X depends on work Y, then Y must have a lower number than X.
+
+### Decision Flow for New Work Discovery
+
+```dot
+digraph new_work {
+    "Discover new work needed" [shape=box];
+    "Is it a DEPENDENCY or DEPENDENT?" [shape=diamond];
+    "DEPENDENCY: Current stage NEEDS this work" [shape=box];
+    "DEPENDENT: This work NEEDS current stage" [shape=box];
+    "Create with LOWER number or earlier epic" [shape=box, style=filled, fillcolor=lightgreen];
+    "Create with HIGHER number or later epic" [shape=box, style=filled, fillcolor=lightgreen];
+    "Consider deferring current stage" [shape=box, style=filled, fillcolor=lightyellow];
+
+    "Discover new work needed" -> "Is it a DEPENDENCY or DEPENDENT?";
+    "Is it a DEPENDENCY or DEPENDENT?" -> "DEPENDENCY: Current stage NEEDS this work" [label="dependency"];
+    "Is it a DEPENDENCY or DEPENDENT?" -> "DEPENDENT: This work NEEDS current stage" [label="dependent"];
+    "DEPENDENCY: Current stage NEEDS this work" -> "Create with LOWER number or earlier epic";
+    "Create with LOWER number or earlier epic" -> "Consider deferring current stage";
+    "DEPENDENT: This work NEEDS current stage" -> "Create with HIGHER number or later epic";
+}
+```
+
+### Mid-Phase Discovery Rules
+
+1. **If the new work is a DEPENDENCY** (current stage needs it to function):
+   - Create it with a LOWER stage number in the same epic, OR
+   - Assign it to an EARLIER epic if it's cross-cutting
+   - **Consider deferring** the current stage until the dependency is complete
+   - **Never** create a dependency with a higher number than current work
+
+2. **If the new work is a DEPENDENT** (it needs current stage to exist):
+   - Create it with a HIGHER stage number in the same epic, OR
+   - Assign it to a LATER epic
+   - Continue with current stage - no blocking issue
+
+3. **Cross-epic discoveries**:
+   - If current epic needs work from a LATER epic: **STOP** - this violates sequential ordering
+   - Move the dependent work to that later epic, OR move the dependency to the current/earlier epic
+   - **Never** create a stage that blocks the current epic's sequential flow
+
+### Red Flags - STOP Immediately If:
+
+- You're about to create a stage that depends on later-numbered work
+- You're inserting STAGE-XXX-XXXA that requires work from a later epic
+- User pressure to "keep features together" would create forward dependencies
+- You discover the current stage can't complete without future work
+
+### What To Do When Blocked
+
+If the current stage cannot proceed without dependency work:
+
+1. **Document the dependency** in the stage file under Session Notes
+2. **Create the dependency stage** with appropriate (lower) numbering
+3. **Update epic table** to show the new stage
+4. **Recommend deferral** to user: "STAGE-005-003 requires STAGE-005-002A. Recommend completing 002A first."
+5. **User decides**: Continue (with incomplete work) or switch to dependency
+
+**Never silently proceed** when a dependency blocks current work.
+
+### When User Insists on Violating Dependency Order
+
+If user requests continuing despite forward dependency:
+
+1. **Explain the consequence**: "If we proceed, STAGE-XXX will be incomplete/broken until [dependency] is done"
+2. **Document override**: Add to stage file: "User requested proceeding despite dependency on [future work] - documented [date]"
+3. **Proceed as directed** (user has project authority)
+4. **Log in lessons-learned**: "Sequential dependency violation - user override"
+
+**This is NOT permission to skip the explanation.** Always explain first, then document, then proceed.
 
 ---
 

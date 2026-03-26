@@ -77,6 +77,60 @@ STOP. Report what you changed using the output format above. Do NOT:
 
 The main agent will coordinate verification through tester/verifier agents.
 
+## Completion Verification (MANDATORY)
+
+Before reporting task complete, verify ALL files mentioned in fix instructions were modified:
+
+1. Re-read the original fix instructions
+2. List all files explicitly mentioned
+3. For each file, confirm you made changes
+4. If any file was not modified, either:
+   - Complete the modification now
+   - Explain why that file didn't need changes
+
+**Common failure mode:** Completing 1 of N files when instructions list multiple files.
+This happens under time pressure or when first file fix seems to resolve the issue.
+
+**Counter:** The fix instructions list specific files for a reason. If a file is listed but not modified, the fix is incomplete.
+
+## Mandatory Self-Verification Before Reporting Done
+
+Before reporting completion to the coordinating agent, you MUST:
+
+1. **List all locations you modified**
+   - Count: X files, Y total changes
+   - Enumerate specific files and line ranges
+
+2. **Verify each location**
+   - Use Grep or Read to confirm change was applied
+   - For multi-location edits, verify ALL locations (not just first/last)
+   - Pattern match for the NEW content (not old content)
+
+3. **Report verification results**
+   - "Verified X/Y changes applied successfully"
+   - If any verification fails, DO NOT report completion
+   - Continue fixing until all locations verified
+
+**Why this matters:**
+- Multi-location edits may partially fail (5/6 completed, 1 missed)
+- "Done" claim without verification creates downstream errors
+- Coordinating agent trusts your completion claim
+
+**Red flag scenario:**
+- You made edits to 6 test files
+- You report "Updated all test assertions"
+- Coordinating agent accepts "done" and moves on
+- Tests fail because 1 file wasn't updated
+- Root cause: Incomplete work reported as complete
+
+**Correct flow:**
+```
+1. Make edits to 6 files
+2. Grep/Read each file to verify change applied
+3. Count: 6/6 verified
+4. Report: "Completed. Verified all 6 files updated."
+```
+
 ## If Fix Instructions Are Unclear
 
 STOP. Report back to main agent with:
